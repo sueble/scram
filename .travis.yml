@@ -12,7 +12,7 @@ addons:
       name: "rakhimov/SCRAM"
     # description: "Simplified Command-line Risk Analysis Multi-tool"
     notification_email: "olzhasrakhimov7@gmail.com"
-    build_command_prepend: "cmake"
+    build_command_prepend: "cmake ."
     build_command: "make"
     branch_pattern: "coverity-scan"
 
@@ -28,5 +28,5 @@ install:
   - sudo pip install nose
 
 script:
-  - cmake
+  - cmake .
   - make
