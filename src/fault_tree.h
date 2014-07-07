@@ -8,22 +8,26 @@
 #include <queue>
 
 #include <boost/serialization/map.hpp>
+#include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
 
+#include "error.h"
 #include "event.h"
 #include "risk_analysis.h"
+#include "superset.h"
 
 class FaultTreeTest;
 
-namespace scram {
+typedef boost::shared_ptr<scram::Event> EventPtr;
+typedef boost::shared_ptr<scram::TopEvent> TopEventPtr;
+typedef boost::shared_ptr<scram::InterEvent> InterEventPtr;
+typedef boost::shared_ptr<scram::PrimaryEvent> PrimaryEventPtr;
 
-class Superset;
+namespace scram {
 
 // Fault tree analysis.
 class FaultTree : public RiskAnalysis {
-  // This is a set class to work with sets of intermediate and primary events.
-  // The class is a friend because of performance reasons.
-  friend class Superset;
+
   friend class ::FaultTreeTest;
 
  public:
@@ -79,11 +83,12 @@ class FaultTree : public RiskAnalysis {
   void IncludeTransfers_();
 
   // Graphs one top or intermediate event
-  void GraphNode_(scram::TopEvent* t, std::map<std::string, int>& pr_repeat,
+  void GraphNode_(TopEventPtr t, std::map<std::string, int>& pr_repeat,
                   std::ofstream& out);
 
   // Adds children of top or intermediate event into a specified vector of sets.
-  void ExpandSets_(scram::TopEvent* t, std::vector< Superset* >& sets);
+  void ExpandSets_(TopEventPtr t,
+                   std::vector< boost::shared_ptr<scram::Superset> >& sets);
 
   // Verifies if gates are initialized correctly with right number of children.
   // Returns a warning message string with the list of bad gates and their
@@ -92,7 +97,7 @@ class FaultTree : public RiskAnalysis {
   std::string CheckAllGates_();
 
   // Checks if a gate is initialized correctly.
-  std::string CheckGate_(scram::TopEvent* event);
+  std::string CheckGate_(TopEventPtr event);
 
   // Returns primary events that do not have probabilities assigned.
   std::string PrimariesNoProb_();
@@ -130,7 +135,7 @@ class FaultTree : public RiskAnalysis {
   void AssignIndexes_();
 
   std::set< std::set<int> > imcs_;
-  boost::unordered_map<int, scram::PrimaryEvent*> int_to_prime_;
+  boost::unordered_map<int, PrimaryEventPtr> int_to_prime_;
   boost::unordered_map<std::string, int> prime_to_int_;
   std::vector<double> iprobs_;  // Holds probabilities of basic events.
   // -----------------------------------------------------------------
@@ -189,7 +194,7 @@ class FaultTree : public RiskAnalysis {
   std::string top_event_id_;
 
   // Top event.
-  scram::TopEvent* top_event_;
+  TopEventPtr top_event_;
 
   // Indicator of detection of a top event described by a transfer sub-tree.
   bool top_detected_;
@@ -198,10 +203,10 @@ class FaultTree : public RiskAnalysis {
   bool is_main_;
 
   // Holder for intermediate events.
-  boost::unordered_map<std::string, scram::InterEvent*> inter_events_;
+  boost::unordered_map<std::string, InterEventPtr> inter_events_;
 
   // Container for primary events.
-  boost::unordered_map<std::string, scram::PrimaryEvent*> primary_events_;
+  boost::unordered_map<std::string, PrimaryEventPtr> primary_events_;
 
   // Container for transfer symbols as requested in tree initialization.
   // A queue contains a tuple of the parent and id of transferIn.

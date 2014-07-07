@@ -4,10 +4,10 @@
 #include <set>
 #include <string>
 
+#include <boost/shared_ptr.hpp>
 #include <boost/unordered_set.hpp>
 
 #include "error.h"
-#include "fault_tree.h"
 
 namespace scram {
 
@@ -17,11 +17,14 @@ class Superset {
  public:
   Superset();
 
-  // Add an event into the set.
-  void AddMember(std::string id, FaultTree* ft);
+  // Add a name of a primary event into the set.
+  void AddPrimary(std::string id);
+
+  // Add a name of an intermediate event into the set.
+  void AddInter(std::string id);
 
   // Inserts another superset.
-  void Insert(Superset* st);
+  void Insert(boost::shared_ptr<Superset> st);
 
   // Returns an intermidiate event and deletes it from the set.
   std::string PopInter();
