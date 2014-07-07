@@ -23,4 +23,8 @@ install:
   - sudo apt-get install -qq libboost-all-dev
   - sudo apt-get install -qq libboost-random-dev
 
-script: true
+script:
+    - ./.no_build.sh
+
+after_failure:
+    - cat build-log.txt
