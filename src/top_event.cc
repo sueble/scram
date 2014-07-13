@@ -14,7 +14,6 @@ std::string TopEvent::gate() {
     std::string msg = "Gate is not set for " + this->id() + " event.";
     throw scram::ValueError(msg);
   }
-
   return gate_;
 }
 
@@ -24,7 +23,6 @@ void TopEvent::gate(std::string gate) {
                       " event.";
     throw scram::ValueError(msg);
   }
-
   gate_ = gate;
 }
 
@@ -34,17 +32,15 @@ const std::map<std::string,
     std::string msg = this->id() + " event does not have children.";
     throw scram::ValueError(msg);
   }
-
   return children_;
 }
 
-void TopEvent::AddChild(boost::shared_ptr<scram::Event> child) {
+void TopEvent::AddChild(const boost::shared_ptr<scram::Event>& child) {
   if (children_.count(child->id())) {
     std::string msg = "Trying to re-insert a child for " + this->id() +
                       " event.";
     throw scram::ValueError(msg);
   }
-
   children_.insert(std::make_pair(child->id(), child));
 }
 

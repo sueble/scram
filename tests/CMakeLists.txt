@@ -58,7 +58,15 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/superset_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_input_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/abc_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_abc_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_abbc_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_lift_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_ne574_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_two_train_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_three_levels_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_trans_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_theatre_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_three_motor_tests.cc"
   )
 
 # Make tests to switch and run in build directory

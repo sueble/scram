@@ -20,8 +20,6 @@
 namespace fs = boost::filesystem;
 namespace pt = boost::posix_time;
 
-typedef boost::shared_ptr<scram::Superset> SupersetPtr;
-
 namespace scram {
 
 FaultTree::FaultTree(std::string analysis, bool graph_only, bool rare_event,
@@ -1146,7 +1144,7 @@ void FaultTree::GraphNode_(TopEventPtr t,
   }
 }
 
-void FaultTree::ExpandSets_(TopEventPtr t,
+void FaultTree::ExpandSets_(const TopEventPtr& t,
                             std::vector< SupersetPtr >& sets) {
   // Populate intermediate and primary events of the top.
   std::map<std::string, boost::shared_ptr<scram::Event> >
@@ -1384,17 +1382,10 @@ void FaultTree::MProbOr_(std::set< std::set<int> >& min_cut_sets,
 void FaultTree::MCombineElAndSet_(const std::set<int>& el,
                                   const std::set< std::set<int> >& set,
                                   std::set< std::set<int> >& combo_set) {
-  std::set<int> member_set;
-  std::set< std::set<int> >::iterator it_set;
-  for (it_set = set.begin(); it_set != set.end(); ++it_set) {
-    member_set = *it_set;
-    member_set.insert(el.begin(), el.end());
-    combo_set.insert(member_set);
-  }
+  FaultTree::CombineElAndSet_(el, set, combo_set);  // The same function.
 }
 
-void FaultTree::MSample_() {
-}
+void FaultTree::MSample_() {}
 // ----------------------------------------------------------------------
 
 }  // namespace scram
