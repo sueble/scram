@@ -33,6 +33,7 @@ FaultTree::FaultTree(std::string analysis, bool graph_only, bool rare_event,
       top_event_id_(""),
       top_detected_(false),
       is_main_(true),
+      sub_tree_analysis_(false),
       input_file_(""),
       prob_requested_(false),
       analysis_done_(false),
@@ -244,10 +245,28 @@ void FaultTree::GraphingInstructions() {
     std::string msg = output_path +  " : Cannot write the graphing file.";
     throw(scram::IOError(msg));
   }
+
+  // Check for the special case when only one node TransferIn tree is graphed.
+  if (top_event_id_ == "") {
+    std::string msg = "Cannot graph one node TransferIn tree.";
+    throw(scram::ValidationError(msg));
+  }
+
   boost::to_upper(graph_name);
   out << "digraph " << graph_name << " {\n";
-  // Write top event.
+  // Special case for sub-tree only graphing.
+  if (sub_tree_analysis_) {
+    std::string tr_id =
+        input_file_.substr(input_file_.find_last_of("/") +
+                           1, std::string::npos);
+    out << "\"" << tr_id << "\" -> "
+        << "\"" << orig_ids_[top_event_id_] <<"\";\n";
+    out << "\"" << tr_id << "\" [shape=invtriangle, "
+        << "fontsize=10, fontcolor=black, "
+        << "label=\"" << tr_id << "\"]\n";
+  }
 
+  // Write top event.
   // Keep track of number of repetitions of the primary events.
   std::map<std::string, int> pr_repeat;
   // Populate intermediate and primary events of the top.
@@ -441,6 +460,9 @@ void FaultTree::Analyze() {
 
   // Compute probabilities only if requested.
   if (!prob_requested_) return;
+
+  // Maximum number of sums in the series.
+  if (nsums_ > min_cut_sets_.size()) nsums_ = min_cut_sets_.size();
 
   // Perform Monte Carlo Uncertainty analysis.
   if (analysis_ == "fta-mc") {
@@ -764,18 +786,85 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
           msg << "Line " << nline << " : " << "Missing parent in this"
               << " block.";
           throw scram::ValidationError(msg.str());
-        }
-
-        if (id_ == "") {
+        } else if (id_ == "") {
           msg << "Line " << nline << " : " << "Missing id in this"
               << " block.";
           throw scram::ValidationError(msg.str());
-        }
-
-        if (type_ == "") {
+        } else if (type_ == "") {
           msg << "Line " << nline << " : " << "Missing type in this"
               << " block.";
           throw scram::ValidationError(msg.str());
+        }
+
+        // Special case for sub-tree analysis without a main file.
+        if (is_main_ && type_ == "transferout") {
+          if (sub_tree_analysis_) {
+            msg << "Line " << nline << " : Found a second TransferOut in a"
+                << " in a sub-tree analysis file.";
+            throw scram::ValidationError(msg.str());
+          }
+
+          std::string tr_id =
+              input_file_.substr(input_file_.find_last_of("/") +
+                                 1, std::string::npos);
+          if (top_event_id_ != "") {
+            msg << "Line " << nline << " : TransferOut must be a separate tree"
+                << " in a separate file.";
+            throw scram::ValidationError(msg.str());
+          } else if (parent_ != "any") {
+            msg << "Line " << nline << " : Parent of TransferOut must be "
+                << "'Any'.";
+            throw scram::ValidationError(msg.str());
+          } else if (id_ != tr_id) {
+            msg << "Line " << nline << " : Id of the first node in "
+                << "TransferOut must match the name of the file.";
+            throw scram::ValidationError(msg.str());
+          }
+          sub_tree_analysis_ = true;
+          transfer_first_inter_ = false;
+          // Refresh values.
+          parent_ = "";
+          id_ = "";
+          type_ = "";
+          block_started_ = false;
+          break;
+        }
+
+        if (is_main_ && sub_tree_analysis_) {
+          std::string tr_id =
+              input_file_.substr(input_file_.find_last_of("/") +
+                                 1, std::string::npos);
+          if (!transfer_first_inter_) {
+            // Check the second node's validity.
+            if (parent_ != tr_id) {
+              msg << "Line " << nline << " : Parent of the first intermediate "
+                  << "event must be the name of the file.";
+              throw scram::ValidationError(msg.str());
+            } else if (types_.count(type_)) {
+              msg << "Line " << nline << " : Type of the first intermediate "
+                  << "event in the transfer tree cannot be a primary event.";
+              throw scram::ValidationError(msg.str());
+            }
+            parent_ = "none";  // Making this event a root.
+            // Add a node with the gathered information.
+            FaultTree::AddNode_(parent_, id_, type_);  // No error expected.
+            transfer_first_inter_ = true;
+            // Refresh values.
+            parent_ = "";
+            id_ = "";
+            type_ = "";
+            block_started_ = false;
+            break;
+          } else {
+            // Defensive check if there are other events having the name of
+            // the current transfer file as their parent.
+            if (parent_ == tr_id) {
+              msg << "Line " << nline << " : Found the second event with "
+                  << "a parent as a starting node. Only one intermediate event"
+                  << " can be linked to TransferOut of the transfer tree.";
+              throw scram::ValidationError(msg.str());
+            }
+          }
         }
 
         if (!is_main_) {
@@ -846,7 +935,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
           if (gates_.count(type_)) {
             id_ += suffix;
           }
-        }
+        }  // Transfer tree related name manipulations are done.
 
         try {
           // Add a node with the gathered information.
@@ -891,8 +980,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
         type_ = args[1];
         // Check if gate/event type is valid.
         if (!gates_.count(type_) && !types_.count(type_)
-            && (type_ != "transferin")
-            && (type_ != "transferout")) {
+            && (type_ != "transferin") && (type_ != "transferout")) {
           boost::to_upper(type_);
           msg << "Line " << nline << " : " << "Invalid input arguments."
               << " Do not support this '" << type_
@@ -925,8 +1013,8 @@ void FaultTree::AddNode_(std::string parent, std::string id,
       top_detected_ = true;
     }
     // Register to call later.
-    transfers_.push(std::make_pair(parent, id));
-    trans_calls_.insert(std::make_pair(id, 0));
+    transfers_.push(std::make_pair(parent, id));  // Parent names are unique.
+    trans_calls_.insert(std::make_pair(id, 0));  // Discard if exists already.
     transfer_map_.insert(std::make_pair(parent, id));
     // Check if this is a cyclic inclusion.
     // This line does many things that are tricky and c++ map specific.
@@ -1183,6 +1271,9 @@ void FaultTree::ExpandSets_(const TopEventPtr& t,
 }
 
 std::string FaultTree::CheckAllGates_() {
+  // Handle the special case when only one node TransferIn tree is graphed.
+  if (graph_only_ && top_event_id_ == "") return "";
+
   std::stringstream msg;
   msg << "";  // An empty default message is the indicator of no problems.
 
