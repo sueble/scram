@@ -63,8 +63,8 @@ TEST_F(FaultTreeTest, CheckGate) {
 TEST_F(FaultTreeTest, ExpandSets) {
   InterEventPtr inter(new InterEvent("inter"));  // No gate is defined.
   inter_events().insert(std::make_pair("inter", inter));
-  std::vector< SupersetPtr > sets;
-  std::vector< SupersetPtr >::iterator it_set;
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
   EXPECT_THROW(ExpandSets(inter, sets), ValueError);
   PrimaryEventPtr A(new PrimaryEvent("a"));
   PrimaryEventPtr B(new PrimaryEvent("b"));
@@ -73,6 +73,8 @@ TEST_F(FaultTreeTest, ExpandSets) {
   primary_events().insert(std::make_pair("b", B));
   primary_events().insert(std::make_pair("c", C));
 
+  AssignIndexes();
+
   // Testing for OR gate.
   inter->gate("or");
   inter->AddChild(A);
@@ -80,16 +82,16 @@ TEST_F(FaultTreeTest, ExpandSets) {
   inter->AddChild(C);
   ASSERT_NO_THROW(ExpandSets(inter, sets));
   EXPECT_EQ(3, sets.size());
-  bool a_found = false;
-  bool b_found = false;
-  bool c_found = false;
+  bool a_found = false;  // Index 0
+  bool b_found = false;  // Index 1
+  bool c_found = false;  // Index 2
   for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
-    std::set<std::string> result = (*it_set)->primes();
+    std::set<int> result = (*it_set)->primes();
     EXPECT_EQ(1, result.size());
-    EXPECT_EQ(1, result.count("a") + result.count("b") + result.count("c"));
-    if (!a_found && result.count("a")) a_found = true;
-    else if (!b_found && result.count("b")) b_found = true;
-    else if (!c_found && result.count("c")) c_found = true;
+    EXPECT_EQ(1, result.count(0) + result.count(1) + result.count(2));
+    if (!a_found && result.count(0)) a_found = true;
+    else if (!b_found && result.count(1)) b_found = true;
+    else if (!c_found && result.count(2)) c_found = true;
   }
   EXPECT_EQ(true, a_found && b_found && c_found);
 
@@ -101,11 +103,11 @@ TEST_F(FaultTreeTest, ExpandSets) {
   inter->AddChild(C);
   ASSERT_NO_THROW(ExpandSets(inter, sets));
   EXPECT_EQ(1, sets.size());
-  std::set<std::string> result = (*sets.begin())->primes();
+  std::set<int> result = (*sets.begin())->primes();
   EXPECT_EQ(3, result.size());
-  EXPECT_EQ(1, result.count("a"));
-  EXPECT_EQ(1, result.count("b"));
-  EXPECT_EQ(1, result.count("c"));
+  EXPECT_EQ(1, result.count(0));
+  EXPECT_EQ(1, result.count(1));
+  EXPECT_EQ(1, result.count(2));
 
   // Testing for some UNKNOWN gate.
   inter = InterEventPtr(new InterEvent("inter", "unknown_gate"));
@@ -114,28 +116,6 @@ TEST_F(FaultTreeTest, ExpandSets) {
   inter->AddChild(B);
   inter->AddChild(C);
   ASSERT_THROW(ExpandSets(inter, sets), ValueError);
-}
-
-TEST_F(FaultTreeTest, ProbAndString) {
-  std::set<std::string> min_cut_set;
-  ASSERT_THROW(ProbAnd(min_cut_set), ValueError);  // Error for an empty set.
-
-  PrimaryEventPtr A(new PrimaryEvent("a"));
-  PrimaryEventPtr B(new PrimaryEvent("b"));
-  PrimaryEventPtr C(new PrimaryEvent("c"));
-  A->p(0.1);
-  B->p(0.2);
-  C->p(0.3);
-  primary_events().insert(std::make_pair("a", A));
-  primary_events().insert(std::make_pair("b", B));
-  primary_events().insert(std::make_pair("c", C));
-
-  min_cut_set.insert("a");
-  EXPECT_DOUBLE_EQ(0.1, ProbAnd(min_cut_set));
-  min_cut_set.insert("b");
-  EXPECT_DOUBLE_EQ(0.02, ProbAnd(min_cut_set));
-  min_cut_set.insert("c");
-  EXPECT_DOUBLE_EQ(0.006, ProbAnd(min_cut_set));
 }
 
 TEST_F(FaultTreeTest, ProbAndInt) {

@@ -14,6 +14,11 @@ def main():
             "transfer_correct_sub.scramf",
             ]
 
+    pass_probs = [
+            "correct_prob_input.scramp",
+            "correct_lambda_prob.scramp",
+            ]
+
     # Wrong input files in the current directory
     bad_inputs = [
             "basic_top_event.scramf",
@@ -68,7 +73,9 @@ def main():
 
     # Wrong probability files in the current directory
     bad_probs = [
+            "doubly_defined_block.scramp",
             "doubly_defined_prob.scramp",
+            "doubly_defined_time.scramp",
             "huge_prob.scramp",
             "missing_basic_event.scramp",
             "missing_closing_brace.scramp",
@@ -76,29 +83,41 @@ def main():
             "missing_opening_brace.scramp",
             "missing_opening_brace_at_start.scramp",
             "negative_prob.scramp",
+            "negative_time.scramp",
+            "no_time_given.scramp",
             "nonexistent_file.scramp",
             "one_arg_err.scramp",
             "second_closing_brace.scramp",
             "string_prob.scramp",
+            "string_time.scramp",
             "too_many_args.scramp",
+            "unrecognized_block.scramp",
             ]
 
     input_correct = "correct_tree_input.scramf"
     prob_correct = "correct_prob_input.scramp"
+    lambda_correct = "correct_lambda_prob.scramp"
 
     # Run correct inputs
     print("\nRunning Correct Inputs\n\n")
     for ic in pass_inputs:
-        print("Running : " + ic + "\n")
-        args = ["scram", ic, prob_correct]
+        print("\nRunning : " + ic + "\n")
+        args = ["scram", ic]
+        subprocess.call(args)
+
+    # Run correct probabilities
+    print("\nRunning Correct Probability Inputs\n\n")
+    for p in pass_probs:
+        print("\nRunning : " + p + "\n")
+        args = ["scram", input_correct, p]
         subprocess.call(args)
 
     # Run incorrect inputs
     print("\nRunning Incorrect Inputs\n\n")
     for i in bad_inputs:
-        print("Running : " + i + "\n")
+        print("\nRunning : " + i + "\n")
         msg = ""
-        args = ["scram", i, prob_correct]
+        args = ["scram", i]
         try:
             subprocess.call(args)
         except:
@@ -108,7 +127,7 @@ def main():
     # Run incorrect probabilities
     print("\nRunning Incorrect Probabilities\n\n")
     for p in bad_probs:
-        print("Running : " + p + "\n")
+        print("\nRunning : " + p + "\n")
         msg = ""
         args = ["scram", input_correct, p]
         try:

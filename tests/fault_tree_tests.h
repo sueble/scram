@@ -64,10 +64,6 @@ class FaultTreeTest : public ::testing::Test {
     return fta->ExpandSets_(t, sets);
   }
 
-  double ProbAnd(const std::set<std::string>& min_cut_set) {
-    return fta->ProbAnd_(min_cut_set);
-  }
-
   // ----------- Probability calculation algorithm related part ------------
   double ProbAnd(const std::set<int>& min_cut_set) {
     return fta->ProbAnd_(min_cut_set);
@@ -83,9 +79,8 @@ class FaultTreeTest : public ::testing::Test {
     return fta->CombineElAndSet_(el, set, combo_set);
   }
 
-  void AddPrimeInt(int id_num, PrimaryEvent* event) {
-    fta->int_to_prime_.insert(std::make_pair(id_num, event));
-    return;
+  void AssignIndexes() {
+    fta->AssignIndexes_();
   }
 
   void AddPrimeIntProb(double prob) {

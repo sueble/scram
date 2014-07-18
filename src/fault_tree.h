@@ -77,8 +77,11 @@ class FaultTree : public RiskAnalysis {
   // Adds node and updates databases.
   void AddNode_(std::string parent, std::string id, std::string type);
 
-  // Adds probability to a primary event.
+  // Adds probability to a primary event for p-model.
   void AddProb_(std::string id, double p);
+
+  // Adds probability to a primary event for l-model.
+  void AddProb_(std::string id, double p, double time);
 
   // Includes external transfer in subtrees to this current main tree.
   void IncludeTransfers_();
@@ -102,12 +105,7 @@ class FaultTree : public RiskAnalysis {
   // Returns primary events that do not have probabilities assigned.
   std::string PrimariesNoProb_();
 
-  // Calculates a probability of a minimal cut set, which members are in AND
-  // relationship with each other. This function assumes independence of each
-  // member.
-  double ProbAnd_(const std::set<std::string>& min_cut_set);
-
-  // -------------------- Algorithm Improvement Trial:Integers ---------------
+  // -------------------- Algorithm for Cut Sets and Probabilities -----------
   // Calculates a probability of a set of minimal cut sets, which are in OR
   // relationship with each other. This function is a brute force probability
   // calculation without rare event approximations.
@@ -134,10 +132,18 @@ class FaultTree : public RiskAnalysis {
   // converting maps.
   void AssignIndexes_();
 
+  // Updates minimal cut sets from indexes to strings.
+  void SetsToString_();
+
   std::set< std::set<int> > imcs_;
-  boost::unordered_map<int, PrimaryEventPtr> int_to_prime_;
+  std::map< std::set<int>, std::set<std::string> > imcs_to_smcs_;
+
+  std::vector<PrimaryEventPtr> int_to_prime_;
   boost::unordered_map<std::string, int> prime_to_int_;
   std::vector<double> iprobs_;  // Holds probabilities of basic events.
+
+  boost::unordered_map<int, InterEventPtr> int_to_inter_;
+  boost::unordered_map<std::string, int> inter_to_int_;
   // -----------------------------------------------------------------
   // ---- Algorithm for Equation Construction for Monte Carlo Sim -------
   void MProbOr_(std::set< std::set<int> >& min_cut_sets, int sign = 1,
