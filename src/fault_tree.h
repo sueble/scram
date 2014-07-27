@@ -75,7 +75,8 @@ class FaultTree : public RiskAnalysis {
                       std::string suffix = "");
 
   // Adds node and updates databases.
-  void AddNode_(std::string parent, std::string id, std::string type);
+  void AddNode_(std::string parent, std::string id, std::string type,
+                int vote_number = -1);
 
   // Adds probability to a primary event for p-model.
   void AddProb_(std::string id, double p);
@@ -91,7 +92,7 @@ class FaultTree : public RiskAnalysis {
                   std::ofstream& out);
 
   // Adds children of top or intermediate event into a specified vector of sets.
-  void ExpandSets_(const TopEventPtr& t, std::vector<SupersetPtr>& sets);
+  void ExpandSets_(int inter_index, std::vector<SupersetPtr>& sets);
 
   // Verifies if gates are initialized correctly with right number of children.
   // Returns a warning message string with the list of bad gates and their
@@ -100,12 +101,20 @@ class FaultTree : public RiskAnalysis {
   std::string CheckAllGates_();
 
   // Checks if a gate is initialized correctly.
-  std::string CheckGate_(TopEventPtr event);
+  std::string CheckGate_(const TopEventPtr& event);
 
   // Returns primary events that do not have probabilities assigned.
   std::string PrimariesNoProb_();
 
   // -------------------- Algorithm for Cut Sets and Probabilities -----------
+  // Expands sets for OR operator.
+  void SetOr_(std::vector<int>& events_children,
+              std::vector<SupersetPtr>& sets, int mult = 1);
+
+  // Expands sets for AND operator.
+  void SetAnd_(std::vector<int>& events_children,
+               std::vector<SupersetPtr>& sets, int mult = 1);
+
   // Calculates a probability of a set of minimal cut sets, which are in OR
   // relationship with each other. This function is a brute force probability
   // calculation without rare event approximations.
@@ -142,7 +151,8 @@ class FaultTree : public RiskAnalysis {
   boost::unordered_map<std::string, int> prime_to_int_;
   std::vector<double> iprobs_;  // Holds probabilities of basic events.
 
-  boost::unordered_map<int, InterEventPtr> int_to_inter_;
+  int top_event_index_;
+  boost::unordered_map<int, TopEventPtr> int_to_inter_;
   boost::unordered_map<std::string, int> inter_to_int_;
   // -----------------------------------------------------------------
   // ---- Algorithm for Equation Construction for Monte Carlo Sim -------
@@ -255,6 +265,7 @@ class FaultTree : public RiskAnalysis {
   std::string parent_;
   std::string id_;
   std::string type_;
+  int vote_number_;
   bool block_started_;
 
   // Indicate if TransferOut is initiated correctly.

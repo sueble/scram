@@ -77,7 +77,10 @@ TEST(FaultTreeInputTest, IncorrectFTAInputs) {
   // Other issues.
   incorrect_inputs.push_back("./input/fta/top_event_with_no_child.scramf");
   incorrect_inputs.push_back("./input/fta/basic_top_event.scramf");
+  incorrect_inputs.push_back("./input/fta/conditional_wrong_type_inter.scramf");
+  incorrect_inputs.push_back("./input/fta/conditional_wrong_type_top.scramf");
   incorrect_inputs.push_back("./input/fta/doubly_defined_intermediate.scramf");
+  incorrect_inputs.push_back("./input/fta/doubly_defined_primary_type.scramf");
   incorrect_inputs.push_back("./input/fta/doubly_defined_top.scramf");
   incorrect_inputs.push_back("./input/fta/extra_parameter.scramf");
   incorrect_inputs.push_back("./input/fta/leaf_intermidiate_event.scramf");
@@ -90,6 +93,9 @@ TEST(FaultTreeInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back("./input/fta/non_existent_parent_inter.scramf");
   incorrect_inputs.push_back("./input/fta/unrecognized_parameter.scramf");
   incorrect_inputs.push_back("./input/fta/unrecognized_type.scramf");
+  incorrect_inputs.push_back("./input/fta/vote_no_number.scramf");
+  incorrect_inputs.push_back("./input/fta/vote_not_enough_children.scramf");
+  incorrect_inputs.push_back("./input/fta/vote_string.scramf");
   // Issues with transfer gates.
   incorrect_inputs.push_back("./input/fta/transfer_circular_self_top.scramf");
   incorrect_inputs.push_back("./input/fta/transfer_circular_top.scramf");

@@ -2,6 +2,7 @@
 #include "fault_tree.h"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -42,17 +43,26 @@ FaultTree::FaultTree(std::string analysis, bool graph_only, bool rare_event,
       parent_(""),
       id_(""),
       type_(""),
+      vote_number_(-1),
       block_started_(false),
       transfer_correct_(false),
       transfer_first_inter_(false) {
   // Add valid gates.
   gates_.insert("and");
   gates_.insert("or");
+  gates_.insert("not");
+  gates_.insert("nor");
+  gates_.insert("nand");
+  gates_.insert("xor");
+  gates_.insert("null");
+  gates_.insert("inhibit");
+  gates_.insert("vote");
 
   // Add valid primary event types.
   types_.insert("basic");
   types_.insert("undeveloped");
   types_.insert("house");
+  types_.insert("conditional");
 
   // Pointer to the top event
   TopEventPtr top_event_;
@@ -277,8 +287,7 @@ void FaultTree::GraphingInstructions() {
                                  1, std::string::npos);
   std::ofstream out(output_path.c_str());
   if (!out.good()) {
-    std::string msg = output_path +  " : Cannot write the graphing file.";
-    throw(scram::IOError(msg));
+    throw(scram::IOError(output_path +  " : Cannot write the graphing file."));
   }
 
   // Check for the special case when only one node TransferIn tree is graphed.
@@ -380,7 +389,7 @@ void FaultTree::Analyze() {
 
   FaultTree::AssignIndexes_();
 
-  FaultTree::ExpandSets_(top_event_, inter_sets);
+  FaultTree::ExpandSets_(top_event_index_, inter_sets);
 
   // An iterator for a vector with sets of ids of events.
   std::vector< std::set<int> >::iterator it_vec;
@@ -407,14 +416,13 @@ void FaultTree::Analyze() {
     // To hold sets of children.
     std::vector< SupersetPtr > children_sets;
 
-    FaultTree::ExpandSets_(int_to_inter_[tmp_set->PopInter()], children_sets);
+    FaultTree::ExpandSets_(tmp_set->PopInter(), children_sets);
 
     // Attach the original set into this event's sets of children.
     for (it_sup = children_sets.begin(); it_sup != children_sets.end();
          ++it_sup) {
-      (*it_sup)->Insert(tmp_set);
       // Add this set to the original inter_sets.
-      inter_sets.push_back(*it_sup);
+      if ((*it_sup)->Insert(tmp_set)) inter_sets.push_back(*it_sup);
     }
   }
 
@@ -588,6 +596,36 @@ void FaultTree::Report(std::string output) {
   // Iterator for a map with minimal cut sets and their probabilities.
   std::map< std::set<std::string>, double >::iterator it_pr;
 
+  // Convert MCS into representative strings.
+  std::map< std::set<std::string>, std::string> represent;
+  for (it_min = min_cut_sets_.begin(); it_min != min_cut_sets_.end();
+       ++it_min) {
+    std::stringstream rep;
+    rep << "{ ";
+    int j = 1;
+    int size = it_min->size();
+    for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {
+      std::vector<std::string> names;
+      boost::split(names, *it_set, boost::is_any_of(" "),
+                   boost::token_compress_on);
+      assert(names.size() < 3);
+      assert(names.size() > 0);
+      if (names.size() == 1) {
+        rep << orig_ids_[names[0]];
+      } else if (names.size() == 2) {
+        rep << "NOT " << orig_ids_[names[1]];
+      }
+      if (j < size) {
+        rep << ", ";
+      } else {
+        rep << " ";
+      }
+      ++j;
+    }
+    rep << "}";
+    represent.insert(std::make_pair(*it_min, rep.str()));
+  }
+
   // Print warnings of calculations.
   if (warnings_ != "") {
     out << "\n" << warnings_ << "\n";
@@ -619,12 +657,7 @@ void FaultTree::Report(std::string output) {
       out << "\nOrder " << order << ":\n";
       int i = 1;
       for (it_min = order_sets.begin(); it_min != order_sets.end(); ++it_min) {
-        out << i << ") ";
-        out << "{ ";
-        for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {
-          out << orig_ids_[*it_set] << " ";
-        }
-        out << "}\n";
+        out << i << ") " << represent[*it_min] << "\n";
         out.flush();
         i++;
       }
@@ -672,13 +705,8 @@ void FaultTree::Report(std::string output) {
         out << "\nOrder " << order << ":\n";
         int i = 1;
         for (it_or = order_sets.rbegin(); it_or != order_sets.rend(); ++it_or) {
-          out << i << ") ";
-          out << "{ ";
-          for (it_set = it_or->second.begin(); it_set != it_or->second.end();
-               ++it_set) {
-            out << orig_ids_[*it_set] << " ";
-          }
-          out << "}    ";
+          out << i << ") " << represent[it_or->second];
+          out << "    ";
           out << it_or->first << "\n";
           out.flush();
           i++;
@@ -692,12 +720,8 @@ void FaultTree::Report(std::string output) {
     int i = 1;
     for (it_or = ordered_min_sets_.rbegin(); it_or != ordered_min_sets_.rend();
          ++it_or) {
-      out << i << ") { ";
-      for (it_set = it_or->second.begin(); it_set != it_or->second.end();
-           ++it_set) {
-        out << orig_ids_[*it_set] << " ";
-      }
-      out << "}    ";
+      out << i << ") " << represent[it_or->second];
+      out << "    ";
       out << it_or->first << "\n";
       i++;
       out.flush();
@@ -732,8 +756,20 @@ void FaultTree::Report(std::string output) {
     std::set<int>::iterator it_set;
     for (it_vec = pos_terms_.begin(); it_vec != pos_terms_.end(); ++it_vec) {
       out << "{ ";
+      int j = 1;
+      int size = it_vec->size();
       for (it_set = it_vec->begin(); it_set != it_vec->end(); ++it_set) {
-        out << orig_ids_[int_to_prime_[*it_set]->id()] << " ";
+        if (*it_set > 0) {
+          out << orig_ids_[int_to_prime_[*it_set]->id()];
+        } else {
+          out << "NOT " << orig_ids_[int_to_prime_[std::abs(*it_set)]->id()];
+        }
+        if (j < size) {
+          out << ", ";
+        } else {
+          out << " ";
+        }
+        ++j;
       }
       out << "}\n";
       out.flush();
@@ -742,8 +778,20 @@ void FaultTree::Report(std::string output) {
     out << "\nNegative Terms in the Probability Equation:\n";
     for (it_vec = neg_terms_.begin(); it_vec != neg_terms_.end(); ++it_vec) {
       out << "{ ";
+      int j = 1;
+      int size = it_vec->size();
       for (it_set = it_vec->begin(); it_set != it_vec->end(); ++it_set) {
-        out << orig_ids_[int_to_prime_[*it_set]->id()] << " ";
+        if (*it_set > 0) {
+          out << orig_ids_[int_to_prime_[*it_set]->id()];
+        } else {
+          out << "NOT " << orig_ids_[int_to_prime_[std::abs(*it_set)]->id()];
+        }
+        if (j < size) {
+          out << ", ";
+        } else {
+          out << " ";
+        }
+        ++j;
       }
       out << "}\n";
       out.flush();
@@ -813,7 +861,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
         }
         // End of the block detected.
 
-        // Check if all needed arguments for an event are received..
+        // Check if all needed arguments for an event are received.
         if (parent_ == "") {
           msg << "Line " << nline << " : " << "Missing parent in this"
               << " block.";
@@ -824,6 +872,10 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
           throw scram::ValidationError(msg.str());
         } else if (type_ == "") {
           msg << "Line " << nline << " : " << "Missing type in this"
+              << " block.";
+          throw scram::ValidationError(msg.str());
+        } else if (type_ == "vote" && vote_number_ == -1) {
+          msg << "Line " << nline << " : " << "Missing Vote Number in this"
               << " block.";
           throw scram::ValidationError(msg.str());
         }
@@ -971,7 +1023,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
 
         try {
           // Add a node with the gathered information.
-          FaultTree::AddNode_(parent_, id_, type_);
+          FaultTree::AddNode_(parent_, id_, type_, vote_number_);
         } catch (scram::ValidationError& err) {
           msg << "Line " << nline << " : " << err.msg();
           throw scram::ValidationError(msg.str());
@@ -981,6 +1033,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
         parent_ = "";
         id_ = "";
         type_ = "";
+        vote_number_ = -1;
         block_started_ = false;
 
       } else {
@@ -1019,6 +1072,13 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
               << "' gate/event type.";
           throw scram::ValidationError(msg.str());
         }
+      } else if (args[0] == "votenumber" && vote_number_ == -1) {
+        try {
+          vote_number_ = boost::lexical_cast<int>(args[1]);
+        } catch (boost::bad_lexical_cast err) {
+          msg << "Line " << nline << " : " << "Incorrect vote number input.";
+          throw scram::ValidationError(msg.str());
+        }
       } else {
         // There may go other parameters for FTA.
         // For now, just throw an error.
@@ -1038,7 +1098,7 @@ void FaultTree::InterpretArgs_(int nline, std::stringstream& msg,
 }
 
 void FaultTree::AddNode_(std::string parent, std::string id,
-                         std::string type) {
+                         std::string type, int vote_number) {
   // Check if this is a transfer.
   if (type == "transferin") {
     if (parent == "none") {
@@ -1102,6 +1162,7 @@ void FaultTree::AddNode_(std::string parent, std::string id,
       }
 
       top_event_->gate(type);
+      if (type == "vote") top_event_->vote_number(vote_number);
 
     } else {
       // Another top event is detected.
@@ -1113,17 +1174,36 @@ void FaultTree::AddNode_(std::string parent, std::string id,
 
   } else if (types_.count(type)) {
     // This must be a primary event.
+    // Check if this is a re-initialization with a different type.
+    if (primary_events_.count(id) && primary_events_[id]->type() != type) {
+      std::stringstream msg;
+      msg << "Redefining a primary event " << orig_ids_[id]
+          << " with a different type.";
+      throw scram::ValidationError(msg.str());
+    }
     PrimaryEventPtr p_event(new PrimaryEvent(id, type));
     if (parent == top_event_id_) {
       p_event->AddParent(top_event_);
       top_event_->AddChild(p_event);
       primary_events_.insert(std::make_pair(id, p_event));
-
+      // Check for conditional event.
+      if (type == "conditional" && top_event_->gate() != "inhibit") {
+        std::stringstream msg;
+        msg << "Parent of " << orig_ids_[id] << " conditional event is not "
+            << "an inhibit gate.";
+        throw scram::ValidationError(msg.str());
+      }
     } else if (inter_events_.count(parent)) {
       p_event->AddParent(inter_events_[parent]);
       inter_events_[parent]->AddChild(p_event);
       primary_events_.insert(std::make_pair(id, p_event));
-
+      // Check for conditional event.
+      if (type == "conditional" && inter_events_[parent]->gate() != "inhibit") {
+        std::stringstream msg;
+        msg << "Parent of " << orig_ids_[id] << " conditional event is not "
+            << "an inhibit gate.";
+        throw scram::ValidationError(msg.str());
+      }
     } else {
       // Parent is undefined.
       std::stringstream msg;
@@ -1131,7 +1211,6 @@ void FaultTree::AddNode_(std::string parent, std::string id,
           << " primary event is not defined.";
       throw scram::ValidationError(msg.str());
     }
-
   } else {
     // This must be a new intermediate event.
     if (inter_events_.count(id)) {
@@ -1162,6 +1241,7 @@ void FaultTree::AddNode_(std::string parent, std::string id,
     }
 
     i_event -> gate(type);
+    if (type == "vote") i_event->vote_number(vote_number);
   }
 }
 
@@ -1244,9 +1324,8 @@ void FaultTree::IncludeTransfers_() {
   }
 }
 
-void FaultTree::GraphNode_(TopEventPtr t,
-                           std::map<std::string, int>& pr_repeat,
-                           std::ofstream& out) {
+void FaultTree::GraphNode_(TopEventPtr t, std::map<std::string,
+                           int>& pr_repeat, std::ofstream& out) {
   // Populate intermediate and primary events of the input inter event.
   std::map<std::string, boost::shared_ptr<scram::Event> >
       events_children = t->children();
@@ -1273,42 +1352,190 @@ void FaultTree::GraphNode_(TopEventPtr t,
   }
 }
 
-void FaultTree::ExpandSets_(const TopEventPtr& t,
+void FaultTree::ExpandSets_(int inter_index,
                             std::vector< SupersetPtr >& sets) {
   // Populate intermediate and primary events of the top.
-  std::map<std::string, boost::shared_ptr<scram::Event> >
-      events_children = t->children();
+  std::map<std::string, EventPtr> children =
+      int_to_inter_[std::abs(inter_index)]->children();
+
+  std::string gate = int_to_inter_[std::abs(inter_index)]->gate();
 
   // Iterator for children of top and intermediate events.
-  std::map<std::string, boost::shared_ptr<scram::Event> >::iterator it_child;
+  std::map<std::string, EventPtr>::iterator it_children;
+  std::vector<int> events_children;
+  std::vector<int>::iterator it_child;
+
+  for (it_children = children.begin();
+       it_children != children.end(); ++it_children) {
+    if (inter_events_.count(it_children->first)) {
+      events_children.push_back(inter_to_int_[it_children->first]);
+    } else {
+      events_children.push_back(prime_to_int_[it_children->first]);
+    }
+  }
 
   // Type dependent logic.
-  if (t->gate() == "or") {
-    for (it_child = events_children.begin();
-         it_child != events_children.end(); ++it_child) {
+  if (gate == "or") {
+    assert(events_children.size() > 1);
+    if (inter_index > 0) {
+      FaultTree::SetOr_(events_children, sets);
+    } else {
+      FaultTree::SetAnd_(events_children, sets, -1);
+    }
+  } else if (gate == "and") {
+    assert(events_children.size() > 1);
+    if (inter_index > 0) {
+      FaultTree::SetAnd_(events_children, sets);
+    } else {
+      FaultTree::SetOr_(events_children, sets, -1);
+    }
+  } else if (gate == "not") {
+    int mult = 1;
+    if (inter_index < 0) mult = -1;
+    // Only one child is expected.
+    assert(events_children.size() == 1);
+    FaultTree::SetAnd_(events_children, sets, -1 * mult);
+  } else if (gate == "nor") {
+    assert(events_children.size() > 1);
+    if (inter_index > 0) {
+      FaultTree::SetAnd_(events_children, sets, -1);
+    } else {
+      FaultTree::SetOr_(events_children, sets);
+    }
+  } else if (gate == "nand") {
+    assert(events_children.size() > 1);
+    if (inter_index > 0) {
+      FaultTree::SetOr_(events_children, sets, -1);
+    } else {
+      FaultTree::SetAnd_(events_children, sets);
+    }
+  } else if (gate == "xor") {
+    assert(events_children.size() == 2);
+    SupersetPtr tmp_set_one(new scram::Superset());
+    SupersetPtr tmp_set_two(new scram::Superset());
+    if (inter_index > 0) {
+      int j = 1;
+      for (it_child = events_children.begin();
+           it_child != events_children.end(); ++it_child) {
+        if (*it_child > top_event_index_) {
+          tmp_set_one->AddInter(j * (*it_child));
+          tmp_set_two->AddInter(-1 * j * (*it_child));
+        } else {
+          tmp_set_one->AddPrimary(j * (*it_child));
+          tmp_set_two->AddPrimary(-1 * j * (*it_child));
+        }
+        j = -1;
+      }
+    } else {
+      for (it_child = events_children.begin();
+           it_child != events_children.end(); ++it_child) {
+        if (*it_child > top_event_index_) {
+          tmp_set_one->AddInter(*it_child);
+          tmp_set_two->AddInter(-1 * (*it_child));
+        } else {
+          tmp_set_one->AddPrimary(*it_child);
+          tmp_set_two->AddPrimary(-1 * (*it_child));
+        }
+      }
+    }
+    sets.push_back(tmp_set_one);
+    sets.push_back(tmp_set_two);
+  } else if (gate == "null") {
+    int mult = 1;
+    if (inter_index < 0) mult = -1;
+    // Only one child is expected.
+    assert(events_children.size() == 1);
+    FaultTree::SetAnd_(events_children, sets, mult);
+  } else if (gate == "inhibit") {
+    assert(events_children.size() == 2);
+    if (inter_index > 0) {
+      FaultTree::SetAnd_(events_children, sets);
+    } else {
+      FaultTree::SetOr_(events_children, sets, -1);
+    }
+  } else if (gate == "vote") {
+    int vote_number = int_to_inter_[std::abs(inter_index)]->vote_number();
+    assert(vote_number > 1);
+    assert(events_children.size() >= vote_number);
+    std::set< std::set<int> > all_sets;
+    int size = events_children.size();
+
+    for (int j = 0; j < size; ++j) {
+      std::set<int> set;
+      set.insert(events_children[j]);
+      all_sets.insert(set);
+    }
+
+    int mult = 1;
+    if (inter_index < 0) {
+      mult = -1;
+      vote_number = size - vote_number + 1;
+    }
+
+    for (int i = 1; i < vote_number; ++i) {
+      std::set< std::set<int> > tmp_sets;
+      std::set< std::set<int> >::iterator it_sets;
+      for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
+        for (int j = 0; j < size; ++j) {
+          std::set<int> set = *it_sets;
+          set.insert(events_children[j]);
+          if (set.size() > i) {
+            tmp_sets.insert(set);
+          }
+        }
+      }
+      all_sets = tmp_sets;
+    }
+
+    std::set< std::set<int> >::iterator it_sets;
+    for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
       SupersetPtr tmp_set_c(new scram::Superset());
-      if (inter_events_.count(it_child->first)) {
-        tmp_set_c->AddInter(inter_to_int_[it_child->first]);
-      } else {
-        tmp_set_c->AddPrimary(prime_to_int_[it_child->first]);
+      std::set<int>::iterator it;
+      for (it = it_sets->begin(); it != it_sets->end(); ++it) {
+        if (*it > top_event_index_) {
+          tmp_set_c->AddInter(*it * mult);
+        } else {
+          tmp_set_c->AddPrimary(*it * mult);
+        }
       }
       sets.push_back(tmp_set_c);
     }
-  } else if (t->gate() == "and") {
-    SupersetPtr tmp_set_c(new scram::Superset());
-    for (it_child = events_children.begin();
-         it_child != events_children.end(); ++it_child) {
-      if (inter_events_.count(it_child->first)) {
-        tmp_set_c->AddInter(inter_to_int_[it_child->first]);
-      } else {
-        tmp_set_c->AddPrimary(prime_to_int_[it_child->first]);
-      }
-    }
-    sets.push_back(tmp_set_c);
+
   } else {
-    std::string msg = "No algorithm defined for" + t->gate();
+    boost::to_upper(gate);
+    std::string msg = "No algorithm defined for " + gate;
     throw scram::ValueError(msg);
   }
+}
+
+void FaultTree::SetOr_(std::vector<int>& events_children,
+                       std::vector<SupersetPtr>& sets, int mult) {
+  std::vector<int>::iterator it_child;
+  for (it_child = events_children.begin();
+       it_child != events_children.end(); ++it_child) {
+    SupersetPtr tmp_set_c(new scram::Superset());
+    if (*it_child > top_event_index_) {
+      tmp_set_c->AddInter(*it_child * mult);
+    } else {
+      tmp_set_c->AddPrimary(*it_child * mult);
+    }
+    sets.push_back(tmp_set_c);
+  }
+}
+
+void FaultTree::SetAnd_(std::vector<int>& events_children,
+                        std::vector<SupersetPtr>& sets, int mult) {
+  SupersetPtr tmp_set_c(new scram::Superset());
+  std::vector<int>::iterator it_child;
+  for (it_child = events_children.begin();
+       it_child != events_children.end(); ++it_child) {
+    if (*it_child > top_event_index_) {
+      tmp_set_c->AddInter(*it_child * mult);
+    } else {
+      tmp_set_c->AddPrimary(*it_child * mult);
+    }
+  }
+  sets.push_back(tmp_set_c);
 }
 
 std::string FaultTree::CheckAllGates_() {
@@ -1330,23 +1557,71 @@ std::string FaultTree::CheckAllGates_() {
   return msg.str();
 }
 
-std::string FaultTree::CheckGate_(TopEventPtr event) {
+std::string FaultTree::CheckGate_(const TopEventPtr& event) {
   std::stringstream msg;
   msg << "";  // An empty default message is the indicator of no problems.
   try {
     std::string gate = event->gate();
-    // This line throws error if there are no children.
+    // This line throws an error if there are no children.
     int size = event->children().size();
     // Add transfer gates if needed for graphing.
     size += transfer_map_.count(event->id());
 
     // Gate dependent logic.
-    if (gate == "and" || gate == "or") {
+    if (gate == "and" || gate == "or" || gate == "nor" || gate == "nand") {
       if (size < 2) {
         boost::to_upper(gate);
         msg << orig_ids_[event->id()] << " : " << gate
             << " gate must have 2 or more "
             << "children.\n";
+      }
+    } else if (gate == "xor") {
+      if (size != 2) {
+        boost::to_upper(gate);
+        msg << orig_ids_[event->id()] << " : " << gate
+            << " gate must have exactly 2 children.\n";
+      }
+    } else if (gate == "inhibit") {
+      if (size != 2) {
+        boost::to_upper(gate);
+        msg << orig_ids_[event->id()] << " : " << gate
+            << " gate must have exactly 2 children.\n";
+      } else {
+        bool conditional_found = false;
+        std::map<std::string, EventPtr> children = event->children();
+        std::map<std::string, EventPtr>::iterator it;
+        for (it = children.begin(); it != children.end(); ++it) {
+          if (primary_events_.count(it->first)) {
+            std::string type = primary_events_[it->first]->type();
+            if (type == "conditional") {
+              if (!conditional_found) {
+                conditional_found = true;
+              } else {
+                boost::to_upper(gate);
+                msg << orig_ids_[event->id()] << " : " << gate
+                    << " gate must have exactly one conditional event.\n";
+              }
+            }
+          }
+        }
+        if (!conditional_found) {
+          boost::to_upper(gate);
+          msg << orig_ids_[event->id()] << " : " << gate
+              << " gate is missing a conditional event.\n";
+        }
+      }
+    } else if (gate == "not" || gate == "null") {
+      if (size != 1) {
+        boost::to_upper(gate);
+        msg << orig_ids_[event->id()] << " : " << gate
+            << " gate must have exactly one child.";
+      }
+    } else if (gate == "vote") {
+      if (size <= event->vote_number()) {
+        boost::to_upper(gate);
+        msg << orig_ids_[event->id()] << " : " << gate
+            << " gate must have more children that its vote number "
+            << event->vote_number() << ".";
       }
     } else {
       boost::to_upper(gate);
@@ -1359,7 +1634,6 @@ std::string FaultTree::CheckGate_(TopEventPtr event) {
 
   return msg.str();
 }
-
 
 std::string FaultTree::PrimariesNoProb_() {
   std::string uninit_primaries = "";
@@ -1379,13 +1653,9 @@ std::string FaultTree::PrimariesNoProb_() {
 // -------------------- Algorithm for Cut Sets and Probabilities -----------
 double FaultTree::ProbOr_(std::set< std::set<int> >& min_cut_sets, int nsums) {
   // Recursive implementation.
-  if (min_cut_sets.empty()) {
-    throw scram::ValueError("Do not pass empty set to prob_or_ function.");
-  }
+  if (min_cut_sets.empty()) return 0;
 
-  if (nsums == 0) {
-    return 0;
-  }
+  if (nsums == 0) return 0;
 
   // Base case.
   if (min_cut_sets.size() == 1) {
@@ -1409,14 +1679,16 @@ double FaultTree::ProbOr_(std::set< std::set<int> >& min_cut_sets, int nsums) {
 
 double FaultTree::ProbAnd_(const std::set<int>& min_cut_set) {
   // Test just in case the min cut set is empty.
-  if (min_cut_set.empty()) {
-    throw scram::ValueError("The set is empty for probability calculations.");
-  }
+  if (min_cut_set.empty()) return 0;
 
   double p_sub_set = 1;  // 1 is for multiplication.
   std::set<int>::iterator it_set;
   for (it_set = min_cut_set.begin(); it_set != min_cut_set.end(); ++it_set) {
-    p_sub_set *= iprobs_[*it_set];
+    if (*it_set > 0) {
+      p_sub_set *= iprobs_[*it_set];
+    } else {
+      p_sub_set *= 1 - iprobs_[std::abs(*it_set)];
+    }
   }
   return p_sub_set;
 }
@@ -1425,19 +1697,30 @@ void FaultTree::CombineElAndSet_(const std::set<int>& el,
                                  const std::set< std::set<int> >& set,
                                  std::set< std::set<int> >& combo_set) {
   std::set<int> member_set;
+  std::set<int>::iterator it;
   std::set< std::set<int> >::iterator it_set;
   for (it_set = set.begin(); it_set != set.end(); ++it_set) {
     member_set = *it_set;
-    member_set.insert(el.begin(), el.end());
-    combo_set.insert(member_set);
+    bool include = true;
+    for (it = el.begin(); it != el.end(); ++it) {
+      if (it_set->count(-1 * (*it))) {
+        include = false;
+        break;
+      }
+      member_set.insert(*it);
+    }
+    if (include) combo_set.insert(member_set);
   }
 }
 
 void FaultTree::AssignIndexes_() {
   // Assign an index to each primary event, and populate relevant
   // databases.
-  int j = 0;
+  int j = 1;
   boost::unordered_map<std::string, PrimaryEventPtr>::iterator itp;
+  // Dummy primary event at index 0.
+  int_to_prime_.push_back(PrimaryEventPtr(new PrimaryEvent("dummy")));
+  iprobs_.push_back(0);
   for (itp = primary_events_.begin(); itp != primary_events_.end(); ++itp) {
     int_to_prime_.push_back(itp->second);
     prime_to_int_.insert(std::make_pair(itp->second->id(), j));
@@ -1447,6 +1730,10 @@ void FaultTree::AssignIndexes_() {
 
   // Assign an index to each top and intermediate event and populate
   // relevant databases.
+  top_event_index_ = j;
+  int_to_inter_.insert(std::make_pair(j, top_event_));
+  inter_to_int_.insert(std::make_pair(top_event_id_, j));
+  ++j;
   boost::unordered_map<std::string, InterEventPtr>::iterator iti;
   for (iti = inter_events_.begin(); iti != inter_events_.end(); ++iti) {
     int_to_inter_.insert(std::make_pair(j, iti->second));
@@ -1461,7 +1748,11 @@ void FaultTree::SetsToString_() {
     std::set<std::string> pr_set;
     std::set<int>::iterator it_set;
     for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {
-      pr_set.insert(int_to_prime_[*it_set]->id());
+      if (*it_set < 0) {  // NOT logic.
+        pr_set.insert("not " + int_to_prime_[std::abs(*it_set)]->id());
+      } else {
+        pr_set.insert(int_to_prime_[*it_set]->id());
+      }
     }
     imcs_to_smcs_.insert(std::make_pair(*it_min, pr_set));
     min_cut_sets_.insert(pr_set);
@@ -1474,13 +1765,9 @@ void FaultTree::SetsToString_() {
 void FaultTree::MProbOr_(std::set< std::set<int> >& min_cut_sets,
                          int sign, int nsums) {
   // Recursive implementation.
-  if (min_cut_sets.empty()) {
-    throw scram::ValueError("Do not pass empty set to prob_or_ function.");
-  }
+  if (min_cut_sets.empty()) return;
 
-  if (nsums == 0) {
-    return;
-  }
+  if (nsums == 0) return;
 
   // Get one element.
   std::set< std::set<int> >::iterator it = min_cut_sets.begin();
@@ -1497,9 +1784,6 @@ void FaultTree::MProbOr_(std::set< std::set<int> >& min_cut_sets,
     // This must be a negative member.
     neg_terms_.push_back(element_one);
   }
-
-  // Base case.
-  if (min_cut_sets.empty()) return;
 
   std::set< std::set<int> > combo_sets;
   FaultTree::MCombineElAndSet_(element_one, min_cut_sets, combo_sets);

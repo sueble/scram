@@ -22,7 +22,10 @@ def main():
     # Wrong input files in the current directory
     bad_inputs = [
             "basic_top_event.scramf",
+            "conditional_wrong_type_inter.scramf",
+            "conditional_wrong_type_top.scramf",
             "doubly_defined_intermediate.scramf",
+            "doubly_defined_primary_type.scramf",
             "doubly_defined_top.scramf",
             "extra_parameter.scramf",
             "leaf_intermidiate_event.scramf",
@@ -69,6 +72,9 @@ def main():
             "transfer_second_transferout_sub.scramf",
             "transfer_extra_second_node_sub.scramf",
             "transfer_illegal_reference_sub.scramf",
+            "vote_no_number.scramf",
+            "vote_not_enough_children.scramf",
+            "vote_string.scramf",
             ]
 
     # Wrong probability files in the current directory

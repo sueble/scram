@@ -31,7 +31,9 @@ TEST_F(FaultTreeTest, ThreeMotor) {
   // Check the tree with the transfer gate.
   ASSERT_NO_THROW(fta->ProcessInput(tree_input));
   ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
+  nsums(3);
   ASSERT_NO_THROW(fta->Analyze());
+  ASSERT_NO_THROW(fta->Report("/dev/null"));
   double delta_sqr = std::abs(p_total() - 0.0211538);
   EXPECT_TRUE(delta_sqr < 1e-5);
   // Minimal cut set check.
@@ -446,7 +448,7 @@ TEST_F(FaultTreeTest, ThreeMotor) {
   cut_set.clear();
 
   cut_set.insert(KT1);
-  cut_set.insert( KT1inc);
+  cut_set.insert(KT1inc);
   cut_set.insert(KT3);
   cut_set.insert(KT3inc);
   cut_set.insert(T2);
@@ -456,7 +458,7 @@ TEST_F(FaultTreeTest, ThreeMotor) {
   cut_set.clear();
 
   cut_set.insert(KT1);
-  cut_set.insert( KT1inc);
+  cut_set.insert(KT1inc);
   cut_set.insert(KT2inc);
   cut_set.insert(KT3);
   cut_set.insert(T2);
@@ -466,7 +468,7 @@ TEST_F(FaultTreeTest, ThreeMotor) {
   cut_set.clear();
 
   cut_set.insert(KT1);
-  cut_set.insert( KT1inc);
+  cut_set.insert(KT1inc);
   cut_set.insert(KT2inc);
   cut_set.insert(KT3);
   cut_set.insert(KT3inc);

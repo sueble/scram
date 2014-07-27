@@ -60,8 +60,8 @@ class FaultTreeTest : public ::testing::Test {
     return (fta->CheckGate_(event) == "") ? true : false;
   }
 
-  void ExpandSets(TopEventPtr t, std::vector< SupersetPtr >& sets) {
-    return fta->ExpandSets_(t, sets);
+  void ExpandSets(int inter_index, std::vector< SupersetPtr >& sets) {
+    return fta->ExpandSets_(inter_index, sets);
   }
 
   // ----------- Probability calculation algorithm related part ------------
@@ -83,20 +83,26 @@ class FaultTreeTest : public ::testing::Test {
     fta->AssignIndexes_();
   }
 
+  int GetIndex(std::string id) {
+    if (fta->prime_to_int_.count(id)) {
+      return fta->prime_to_int_[id];
+    } else {
+      return fta->inter_to_int_[id];
+    }
+  }
+
   void AddPrimeIntProb(double prob) {
     fta->iprobs_.push_back(prob);
+  }
+
+  void nsums(int n) {
+    fta->nsums_ = n;
   }
   // -----------------------------------------------------------------------
   // -------------- Monte Carlo simulation algorithms ----------------------
   void MProbOr(std::set< std::set<int> >& min_cut_sets, int sign = 1,
                int nsums = 1000000) {
     return fta->MProbOr_(min_cut_sets, sign, nsums);
-  }
-
-  void MCombineElAndSet(const std::set<int>& el,
-                        const std::set< std::set<int> >& set,
-                        std::set< std::set<int> >& combo_set) {
-    return fta->MCombineElAndSet_(el, set, combo_set);
   }
 
   std::vector< std::set<int> >& pos_terms() {
@@ -107,9 +113,39 @@ class FaultTreeTest : public ::testing::Test {
     return fta->neg_terms_;
   }
   // -----------------------------------------------------------------------
+
+  // SetUp for Gate Testing.
+  void SetUpGate(std::string gate) {
+    inter = InterEventPtr(new InterEvent("inter", gate));
+    A = PrimaryEventPtr(new PrimaryEvent("a"));
+    B = PrimaryEventPtr(new PrimaryEvent("b"));
+    C = PrimaryEventPtr(new PrimaryEvent("c"));
+    D = InterEventPtr(new InterEvent("d"));
+    primary_events().insert(std::make_pair("a", A));
+    primary_events().insert(std::make_pair("b", B));
+    primary_events().insert(std::make_pair("c", C));
+    inter_events().insert(std::make_pair("d", D));
+    inter_events().insert(std::make_pair("inter", inter));
+    AssignIndexes();
+    a_id = GetIndex("a");
+    b_id = GetIndex("b");
+    c_id = GetIndex("c");
+    inter_id = GetIndex("inter");
+    d_id = GetIndex("d");
+  }
   // Members
 
   FaultTree* fta;
+  InterEventPtr inter;  // No gate is defined.
+  PrimaryEventPtr A;
+  PrimaryEventPtr B;
+  PrimaryEventPtr C;
+  InterEventPtr D;
+  int a_id;
+  int b_id;
+  int c_id;
+  int inter_id;
+  int d_id;
 };
 
 #endif  // SCRAM_TESTS_FAULT_TREE_TESTS_H_

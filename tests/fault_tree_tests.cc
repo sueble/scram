@@ -51,6 +51,77 @@ TEST_F(FaultTreeTest, CheckGate) {
   top->AddChild(C);
   EXPECT_TRUE(CheckGate(top));  // More children are OK.
 
+  // NOT Gate tests.
+  top = TopEventPtr(new TopEvent("top", "not"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  top->AddChild(A);
+  EXPECT_TRUE(CheckGate(top));  // Exactly one child is required.
+  top->AddChild(B);
+  EXPECT_FALSE(CheckGate(top));  // Two children are too much.
+
+  // NULL Gate tests.
+  top = TopEventPtr(new TopEvent("top", "null"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  top->AddChild(A);
+  EXPECT_TRUE(CheckGate(top));  // Exactly one child is required.
+  top->AddChild(B);
+  EXPECT_FALSE(CheckGate(top));  // Two children are too much.
+
+  // NOR Gate tests.
+  top = TopEventPtr(new TopEvent("top", "nor"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  top->AddChild(A);
+  EXPECT_FALSE(CheckGate(top));  // One child is not enough.
+  top->AddChild(B);
+  EXPECT_TRUE(CheckGate(top));  // Two children are enough.
+  top->AddChild(C);
+  EXPECT_TRUE(CheckGate(top));  // More children are OK.
+
+  // NAND Gate tests.
+  top = TopEventPtr(new TopEvent("top", "nand"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  top->AddChild(A);
+  EXPECT_FALSE(CheckGate(top));  // One child is not enough.
+  top->AddChild(B);
+  EXPECT_TRUE(CheckGate(top));  // Two children are enough.
+  top->AddChild(C);
+  EXPECT_TRUE(CheckGate(top));  // More children are OK.
+
+  // XOR Gate tests.
+  top = TopEventPtr(new TopEvent("top", "xor"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  top->AddChild(A);
+  EXPECT_FALSE(CheckGate(top));  // One child is not enough.
+  top->AddChild(B);
+  EXPECT_TRUE(CheckGate(top));  // Two children are enough.
+  top->AddChild(C);
+  EXPECT_FALSE(CheckGate(top));  // More than 2 is not allowed.
+
+  // INHIBIT Gate tests.
+  top = TopEventPtr(new TopEvent("top", "inhibit"));
+  EXPECT_FALSE(CheckGate(top));  // No child.
+  A->type("basic");
+  primary_events().insert(std::make_pair("a", A));
+  top->AddChild(A);
+  EXPECT_FALSE(CheckGate(top));  // One child is not enough.
+  B->type("basic");
+  primary_events().insert(std::make_pair("b", B));
+  top->AddChild(B);
+  EXPECT_FALSE(CheckGate(top));  // Events must be conditional.
+  top->AddChild(C);
+  EXPECT_FALSE(CheckGate(top));  // More than 2 is not allowed.
+  top = TopEventPtr(new TopEvent("top", "inhibit"));  // Re-initialize.
+  C->type("conditional");
+  primary_events().insert(std::make_pair("c", C));
+  top->AddChild(A);  // Basic event.
+  top->AddChild(C);  // Conditional event.
+  EXPECT_TRUE(CheckGate(top));  // Two children with exact combination.
+  A = PrimaryEventPtr(new PrimaryEvent("a", "conditional"));
+  primary_events().clear();
+  primary_events().insert(std::make_pair("a", A));
+  primary_events().insert(std::make_pair("c", C));
+  EXPECT_FALSE(CheckGate(top));  // Wrong combination.
+
   // Some UNKNOWN gate tests.
   top = TopEventPtr(new TopEvent("top", "unknown_gate"));
   EXPECT_FALSE(CheckGate(top));  // No child.
@@ -60,77 +131,486 @@ TEST_F(FaultTreeTest, CheckGate) {
   EXPECT_FALSE(CheckGate(top));
 }
 
-TEST_F(FaultTreeTest, ExpandSets) {
-  InterEventPtr inter(new InterEvent("inter"));  // No gate is defined.
-  inter_events().insert(std::make_pair("inter", inter));
+TEST_F(FaultTreeTest, NO_GATE) {
   std::vector<SupersetPtr> sets;
-  std::vector<SupersetPtr>::iterator it_set;
-  EXPECT_THROW(ExpandSets(inter, sets), ValueError);
-  PrimaryEventPtr A(new PrimaryEvent("a"));
-  PrimaryEventPtr B(new PrimaryEvent("b"));
-  PrimaryEventPtr C(new PrimaryEvent("c"));
-  primary_events().insert(std::make_pair("a", A));
-  primary_events().insert(std::make_pair("b", B));
-  primary_events().insert(std::make_pair("c", C));
-
-  AssignIndexes();
-
-  // Testing for OR gate.
-  inter->gate("or");
-  inter->AddChild(A);
-  inter->AddChild(B);
-  inter->AddChild(C);
-  ASSERT_NO_THROW(ExpandSets(inter, sets));
-  EXPECT_EQ(3, sets.size());
-  bool a_found = false;  // Index 0
-  bool b_found = false;  // Index 1
-  bool c_found = false;  // Index 2
-  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
-    std::set<int> result = (*it_set)->primes();
-    EXPECT_EQ(1, result.size());
-    EXPECT_EQ(1, result.count(0) + result.count(1) + result.count(2));
-    if (!a_found && result.count(0)) a_found = true;
-    else if (!b_found && result.count(1)) b_found = true;
-    else if (!c_found && result.count(2)) c_found = true;
-  }
-  EXPECT_EQ(true, a_found && b_found && c_found);
-
-  // Testing for AND gate.
-  inter = InterEventPtr(new InterEvent("inter", "and"));
-  sets.clear();
-  inter->AddChild(A);
-  inter->AddChild(B);
-  inter->AddChild(C);
-  ASSERT_NO_THROW(ExpandSets(inter, sets));
-  EXPECT_EQ(1, sets.size());
-  std::set<int> result = (*sets.begin())->primes();
-  EXPECT_EQ(3, result.size());
-  EXPECT_EQ(1, result.count(0));
-  EXPECT_EQ(1, result.count(1));
-  EXPECT_EQ(1, result.count(2));
 
   // Testing for some UNKNOWN gate.
-  inter = InterEventPtr(new InterEvent("inter", "unknown_gate"));
-  sets.clear();
+  SetUpGate("unknown_gate");
   inter->AddChild(A);
   inter->AddChild(B);
   inter->AddChild(C);
-  ASSERT_THROW(ExpandSets(inter, sets), ValueError);
+  EXPECT_THROW(ExpandSets(inter_id, sets), ValueError);
+}
+
+TEST_F(FaultTreeTest, OR_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // Testing for OR gate.
+  SetUpGate("or");
+  inter->AddChild(A);
+  inter->AddChild(B);
+  inter->AddChild(C);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(4, sets.size());
+  bool a_found = false;
+  bool b_found = false;
+  bool c_found = false;
+  bool d_found = false;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    if (!(*it_set)->primes().empty()) {
+      std::set<int> result = (*it_set)->primes();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(a_id) + result.count(b_id)
+                + result.count(c_id));
+      if (!a_found && result.count(a_id)) a_found = true;
+      else if (!b_found && result.count(b_id)) b_found = true;
+      else if (!c_found && result.count(c_id)) c_found = true;
+    } else {
+      std::set<int> result = (*it_set)->inters();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(d_id));
+      d_found = true;
+    }
+  }
+  EXPECT_EQ(true, a_found && b_found && c_found && d_found);
+  // Negative OR gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  EXPECT_EQ(1, sets.size());
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(3, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * a_id));
+  EXPECT_EQ(1, result_set.count(-1 * b_id));
+  EXPECT_EQ(1, result_set.count(-1 * c_id));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * d_id));
+}
+
+TEST_F(FaultTreeTest, AND_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // Testing for AND gate.
+  SetUpGate("and");
+  inter->AddChild(A);
+  inter->AddChild(B);
+  inter->AddChild(C);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(1, sets.size());
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(3, result_set.size());
+  EXPECT_EQ(1, result_set.count(a_id));
+  EXPECT_EQ(1, result_set.count(b_id));
+  EXPECT_EQ(1, result_set.count(c_id));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(d_id));
+  // Negative AND gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  EXPECT_EQ(4, sets.size());
+  bool a_found = false;
+  bool b_found = false;
+  bool c_found = false;
+  bool d_found = false;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    if (!(*it_set)->primes().empty()) {
+      std::set<int> result = (*it_set)->primes();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * a_id) + result.count(-1 * b_id)
+                + result.count(-1 * c_id));
+      if (!a_found && result.count(-1 * a_id)) a_found = true;
+      else if (!b_found && result.count(-1 * b_id)) b_found = true;
+      else if (!c_found && result.count(-1 * c_id)) c_found = true;
+    } else {
+      std::set<int> result = (*it_set)->inters();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * d_id));
+      d_found = true;
+    }
+  }
+  EXPECT_EQ(true, a_found && b_found && c_found && d_found);
+}
+
+TEST_F(FaultTreeTest, NOT_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::set<int> result_set;
+
+  // Testing for NOT gate with a primary event child.
+  SetUpGate("not");
+  inter->AddChild(A);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * a_id));
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));  // Negative InterEvent.
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(a_id));
+
+  // Testing for NOT gate with a intermediate event child.
+  delete fta;
+  fta = new FaultTree("fta-default", false);
+  SetUpGate("not");
+  inter->AddChild(D);
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * d_id));
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));  // Negative InterEvent.
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(d_id));
+}
+
+TEST_F(FaultTreeTest, NOR_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // Testing for NOR gate.
+  SetUpGate("nor");
+  inter->AddChild(A);
+  inter->AddChild(B);
+  inter->AddChild(C);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(1, sets.size());
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(3, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * a_id));
+  EXPECT_EQ(1, result_set.count(-1 * b_id));
+  EXPECT_EQ(1, result_set.count(-1 * c_id));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * d_id));
+  // Negative NOR gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));  // Negative InterEvent.
+  EXPECT_EQ(4, sets.size());
+  bool a_found = false;
+  bool b_found = false;
+  bool c_found = false;
+  bool d_found = false;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    if (!(*it_set)->primes().empty()) {
+      std::set<int> result = (*it_set)->primes();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(a_id) + result.count(b_id)
+                + result.count(c_id));
+      if (!a_found && result.count(a_id)) a_found = true;
+      else if (!b_found && result.count(b_id)) b_found = true;
+      else if (!c_found && result.count(c_id)) c_found = true;
+    } else {
+      std::set<int> result = (*it_set)->inters();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(d_id));
+      d_found = true;
+    }
+  }
+  EXPECT_EQ(true, a_found && b_found && c_found && d_found);
+}
+
+TEST_F(FaultTreeTest, NAND_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // Testing for NAND gate.
+  SetUpGate("nand");
+  inter->AddChild(A);
+  inter->AddChild(B);
+  inter->AddChild(C);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(4, sets.size());
+  bool a_found = false;
+  bool b_found = false;
+  bool c_found = false;
+  bool d_found = false;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    if (!(*it_set)->primes().empty()) {
+      std::set<int> result = (*it_set)->primes();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * a_id) + result.count(-1 * b_id)
+                + result.count(-1 * c_id));
+      if (!a_found && result.count(-1 * a_id)) a_found = true;
+      else if (!b_found && result.count(-1 * b_id)) b_found = true;
+      else if (!c_found && result.count(-1 * c_id)) c_found = true;
+    } else {
+      std::set<int> result = (*it_set)->inters();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * d_id));
+      d_found = true;
+    }
+  }
+  EXPECT_EQ(true, a_found && b_found && c_found && d_found);
+  // Negative NAND gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  EXPECT_EQ(1, sets.size());
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(3, result_set.size());
+  EXPECT_EQ(1, result_set.count(a_id));
+  EXPECT_EQ(1, result_set.count(b_id));
+  EXPECT_EQ(1, result_set.count(c_id));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(d_id));
+}
+
+TEST_F(FaultTreeTest, XOR_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // Testing for XOR gate.
+  SetUpGate("xor");
+  inter->AddChild(A);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(2, sets.size());
+  std::set<int> set_one;
+  std::set<int> set_two;
+  std::set<int> result_one;
+  std::set<int> result_two;
+  set_one.insert(*(*sets.begin())->primes().begin());
+  set_one.insert(*(*sets.begin())->inters().begin());
+  set_two.insert(*(*++sets.begin())->primes().begin());
+  set_two.insert(*(*++sets.begin())->inters().begin());
+  result_one.insert(a_id);
+  result_one.insert(-1 * d_id);
+  result_two.insert(-1 * a_id);
+  result_two.insert(d_id);
+  ASSERT_TRUE(set_one.count(a_id) || set_one.count(-1 * a_id));
+  if (set_one.count(a_id)) {
+    ASSERT_EQ(result_one, set_one);
+    ASSERT_EQ(result_two, set_two);
+  } else {
+    ASSERT_EQ(result_two, set_one);
+    ASSERT_EQ(result_one, set_two);
+  }
+  // Negative XOR gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  set_one.clear();
+  set_two.clear();
+  result_one.clear();
+  result_two.clear();
+  set_one.insert(*(*sets.begin())->primes().begin());
+  set_one.insert(*(*sets.begin())->inters().begin());
+  set_two.insert(*(*++sets.begin())->primes().begin());
+  set_two.insert(*(*++sets.begin())->inters().begin());
+  result_one.insert(a_id);
+  result_one.insert(d_id);
+  result_two.insert(-1 * a_id);
+  result_two.insert(-1 * d_id);
+  ASSERT_TRUE(set_one.count(a_id) || set_one.count(-1 * a_id));
+  if (set_one.count(a_id)) {
+    EXPECT_EQ(result_one, set_one);
+    EXPECT_EQ(result_two, set_two);
+  } else {
+    EXPECT_EQ(result_two, set_one);
+    EXPECT_EQ(result_one, set_two);
+  }
+}
+
+TEST_F(FaultTreeTest, NULL_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::set<int> result_set;
+
+  // Testing for NULL gate with a primary event child.
+  SetUpGate("null");
+  inter->AddChild(A);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(a_id));
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));  // Negative InterEvent.
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * a_id));
+
+  // Testing for NULL gate with a intermediate event child.
+  delete fta;
+  fta = new FaultTree("fta-default", false);
+  SetUpGate("null");
+  inter->AddChild(D);
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(d_id));
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));  // Negative InterEvent.
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(-1 * d_id));
+}
+
+TEST_F(FaultTreeTest, INHIBIT_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+  std::set<int> result_set;
+
+  // INHIBIT GATE.
+  SetUpGate("inhibit");
+  inter->AddChild(A);
+  inter->AddChild(D);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(1, sets.size());
+  result_set = (*sets.begin())->primes();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(a_id));
+  result_set = (*sets.begin())->inters();
+  EXPECT_EQ(1, result_set.size());
+  EXPECT_EQ(1, result_set.count(d_id));
+  // Negative AND gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  EXPECT_EQ(2, sets.size());
+  bool a_found = false;
+  bool d_found = false;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    if (!(*it_set)->primes().empty()) {
+      std::set<int> result = (*it_set)->primes();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * a_id));
+      a_found = true;
+    } else {
+      std::set<int> result = (*it_set)->inters();
+      EXPECT_EQ(1, result.size());
+      EXPECT_EQ(1, result.count(-1 * d_id));
+      d_found = true;
+    }
+  }
+  EXPECT_EQ(true, a_found && d_found);
+}
+
+TEST_F(FaultTreeTest, VOTE_GATE) {
+  std::vector<SupersetPtr> sets;
+  std::vector<SupersetPtr>::iterator it_set;
+
+  // Testing for VOTE gate.
+  SetUpGate("vote");
+  inter->AddChild(A);
+  inter->AddChild(B);
+  inter->AddChild(C);
+  inter->AddChild(D);
+  inter->vote_number(3);
+  ASSERT_NO_THROW(ExpandSets(inter_id, sets));
+  EXPECT_EQ(4, sets.size());
+  std::set< std::set<int> > output;
+  std::set<int> mcs;
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    mcs.insert((*it_set)->primes().begin(), (*it_set)->primes().end());
+    mcs.insert((*it_set)->inters().begin(), (*it_set)->inters().end());
+    output.insert(mcs);
+    mcs.clear();
+  }
+  std::set< std::set<int> > exp;
+  mcs.clear();
+  mcs.insert(a_id);
+  mcs.insert(b_id);
+  mcs.insert(c_id);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(a_id);
+  mcs.insert(b_id);
+  mcs.insert(d_id);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(a_id);
+  mcs.insert(c_id);
+  mcs.insert(d_id);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(b_id);
+  mcs.insert(c_id);
+  mcs.insert(d_id);
+  exp.insert(mcs);
+  mcs.clear();
+
+  EXPECT_EQ(exp, output);
+
+  // Negative VOTE gate.
+  sets.clear();
+  ASSERT_NO_THROW(ExpandSets(-1 * inter_id, sets));
+  EXPECT_EQ(6, sets.size());
+  output.clear();
+  mcs.clear();
+  for (it_set = sets.begin(); it_set != sets.end(); ++it_set) {
+    mcs.insert((*it_set)->primes().begin(), (*it_set)->primes().end());
+    mcs.insert((*it_set)->inters().begin(), (*it_set)->inters().end());
+    output.insert(mcs);
+    mcs.clear();
+  }
+  exp.clear();
+  mcs.clear();
+  mcs.insert(a_id * -1);
+  mcs.insert(b_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(a_id * -1);
+  mcs.insert(d_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(a_id * -1);
+  mcs.insert(c_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(b_id * -1);
+  mcs.insert(d_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(b_id * -1);
+  mcs.insert(c_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+  mcs.insert(c_id * -1);
+  mcs.insert(d_id * -1);
+  exp.insert(mcs);
+  mcs.clear();
+
+  EXPECT_EQ(exp, output);
 }
 
 TEST_F(FaultTreeTest, ProbAndInt) {
   std::set<int> min_cut_set;
-  ASSERT_THROW(ProbAnd(min_cut_set), ValueError);  // Error for an empty set.
 
-  min_cut_set.insert(0);
+  // 0 probability for an empty set.
+  EXPECT_DOUBLE_EQ(0, ProbAnd(min_cut_set));
+
+  AddPrimeIntProb(0.0);  // Dummy element.
+
+  min_cut_set.insert(1);
   AddPrimeIntProb(0.1);
   EXPECT_DOUBLE_EQ(0.1, ProbAnd(min_cut_set));
-  min_cut_set.insert(1);
+  min_cut_set.insert(2);
   AddPrimeIntProb(0.2);
   EXPECT_DOUBLE_EQ(0.02, ProbAnd(min_cut_set));
-  min_cut_set.insert(2);
+  min_cut_set.insert(3);
   AddPrimeIntProb(0.3);
   EXPECT_DOUBLE_EQ(0.006, ProbAnd(min_cut_set));
+
+  // Test for negative event calculations.
+  min_cut_set.clear();
+  min_cut_set.insert(-1);
+  EXPECT_DOUBLE_EQ(0.9, ProbAnd(min_cut_set));
+  min_cut_set.insert(-2);
+  EXPECT_DOUBLE_EQ(0.72, ProbAnd(min_cut_set));
+  min_cut_set.insert(3);
+  EXPECT_DOUBLE_EQ(0.216, ProbAnd(min_cut_set));
 }
 
 TEST_F(FaultTreeTest, CombineElAndSet) {
@@ -185,124 +665,91 @@ TEST_F(FaultTreeTest, CombineElAndSet) {
   el_one.insert(3);
   set_one.insert(el_one);
   EXPECT_EQ(set_one, combo_set);
+
+  // Testing for operations with negative elements.
+  el_one.clear();
+  el_two.clear();
+  set_one.clear();
+  set_two.clear();
+  combo_set.clear();
+
+  el_one.insert(-1);
+  set_one.insert(el_one);
+  ASSERT_NO_THROW(CombineElAndSet(el_one, set_one, combo_set));
+  EXPECT_EQ(set_one, combo_set);
+
+  el_two.insert(1);
+  combo_set.clear();
+  ASSERT_NO_THROW(CombineElAndSet(el_two, set_one, combo_set));
+  EXPECT_TRUE(combo_set.empty());
 }
 
 TEST_F(FaultTreeTest, ProbOrInt) {
   std::set<int> mcs;  // Minimal cut set.
   std::set<std::set<int> > min_cut_sets;  // A set of minimal cut sets.
-  ASSERT_THROW(ProbOr(min_cut_sets), ValueError);  // Error for an empty set.
+  AddPrimeIntProb(0.0);  // Dummy element.
   AddPrimeIntProb(0.1);  // A is element 0.
   AddPrimeIntProb(0.2);  // B is element 1.
   AddPrimeIntProb(0.3);  // C is element 2.
 
+  // 0 probability for an empty set.
+  EXPECT_DOUBLE_EQ(0, ProbOr(min_cut_sets));
+
   // Check for one element calculation for A.
-  mcs.insert(0);
+  mcs.insert(1);
   min_cut_sets.insert(mcs);
   EXPECT_DOUBLE_EQ(0.1, ProbOr(min_cut_sets));
 
   // Check that recursive nsums=0 returns without changing anything.
-  mcs.insert(0);
+  mcs.insert(1);
   min_cut_sets.insert(mcs);
   EXPECT_EQ(0, ProbOr(min_cut_sets, 0));
 
   // Check for [A or B]
   min_cut_sets.clear();
   mcs.clear();
-  mcs.insert(0);
+  mcs.insert(1);
   min_cut_sets.insert(mcs);
   mcs.clear();
-  mcs.insert(1);
+  mcs.insert(2);
   min_cut_sets.insert(mcs);
   EXPECT_DOUBLE_EQ(0.28, ProbOr(min_cut_sets));
 
   // Check for [A or B or C]
   min_cut_sets.clear();
   mcs.clear();
-  mcs.insert(0);
-  min_cut_sets.insert(mcs);
-  mcs.clear();
   mcs.insert(1);
   min_cut_sets.insert(mcs);
   mcs.clear();
   mcs.insert(2);
+  min_cut_sets.insert(mcs);
+  mcs.clear();
+  mcs.insert(3);
   min_cut_sets.insert(mcs);
   EXPECT_DOUBLE_EQ(0.496, ProbOr(min_cut_sets));
 
   // Check for [(A,B) or (B,C)]
   mcs.clear();
   min_cut_sets.clear();
-  mcs.insert(0);
-  mcs.insert(1);
-  min_cut_sets.insert(mcs);
-  mcs.clear();
   mcs.insert(1);
   mcs.insert(2);
+  min_cut_sets.insert(mcs);
+  mcs.clear();
+  mcs.insert(2);
+  mcs.insert(3);
   min_cut_sets.insert(mcs);
   EXPECT_DOUBLE_EQ(0.074, ProbOr(min_cut_sets));
 }
 
 // ------------------------ Monte Carlo -----------------------------
-TEST_F(FaultTreeTest, MCombineElAndSet) {
-  std::set<int> el_one;
-  std::set<int> el_two;
-  std::set< std::set<int> > set_one;
-  std::set< std::set<int> > set_two;
-  std::set< std::set<int> > combo_set;
-
-  // One element checks.
-  el_one.insert(1);
-  set_one.insert(el_one);  // Insert (1)
-  ASSERT_NO_THROW(MCombineElAndSet(el_one, set_one, combo_set));
-  EXPECT_EQ(set_one, combo_set);  // Must be only (1)
-  combo_set.clear();
-
-  el_two.insert(3);
-  ASSERT_NO_THROW(MCombineElAndSet(el_two, set_one, combo_set));
-
-  set_one.insert(el_two);  // Insert (3)
-
-  EXPECT_EQ(1, combo_set.size());
-  el_two.insert(1);
-  set_two.insert(el_two);  // set_two is (1,3)
-  EXPECT_EQ(set_two, combo_set);  // Must be only (1,3)
-  combo_set.clear();
-
-  // Two element checks.
-  el_one.insert(2);  // el_one is (1, 2)
-  ASSERT_NO_THROW(MCombineElAndSet(el_one, set_two, combo_set));
-
-  set_one.insert(el_two);  // Insert (1, 3)
-
-  el_two.insert(2);
-  set_two.clear();
-  set_two.insert(el_two);
-  EXPECT_EQ(set_two, combo_set);  // Expected (1,2,3)
-  combo_set.clear();
-
-  // Multi element checks
-  set_one.insert(el_one);  // Insert (1, 2)
-
-  // After the above intantiation the set_one is [(1), (3), (1,2), (1,3)].
-  // The result of [ el_one AND set_one ] is [(1,2), (1,2,3)].
-  EXPECT_EQ(4, set_one.size());
-  EXPECT_EQ(2, el_one.size());
-  EXPECT_EQ(0, combo_set.size());
-  ASSERT_NO_THROW(MCombineElAndSet(el_one, set_one, combo_set));
-  EXPECT_EQ(2, combo_set.size());
-  set_one.clear();  // To construct the expected output set_one.
-  set_one.insert(el_one);
-  el_one.insert(3);
-  set_one.insert(el_one);
-  EXPECT_EQ(set_one, combo_set);
-}
-
 TEST_F(FaultTreeTest, MProbOr) {
   std::set<int> mcs;  // Minimal cut set.
   std::set< std::set<int> > p_terms;  // Positive terms of the equation.
   std::set< std::set<int> > n_terms;  // Negative terms of the equation.
   std::set< std::set<int> > temp_set;  // Temp set for dumping the output.
   std::set< std::set<int> > min_cut_sets;  // A set of minimal cut sets.
-  ASSERT_THROW(MProbOr(min_cut_sets), ValueError);  // Error for an empty set.
+  ASSERT_NO_THROW(MProbOr(min_cut_sets));  // Empty sets.
+  ASSERT_TRUE(pos_terms().empty() && neg_terms().empty());
 
   // Check for one element calculation for A.
   mcs.insert(0);
@@ -481,6 +928,10 @@ TEST_F(FaultTreeTest, AnalyzeDefault) {
   EXPECT_EQ(1, min_cut_sets().count(mcs_3));
   EXPECT_EQ(1, min_cut_sets().count(mcs_4));
 
+  // Probability calculations.
+  delete fta;  // Re-initializing.
+  fta = new FaultTree("fta-default", false);
+  ASSERT_NO_THROW(fta->ProcessInput(tree_input));
   ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
   ASSERT_NO_THROW(fta->Analyze());
   EXPECT_DOUBLE_EQ(0.646, p_total());
