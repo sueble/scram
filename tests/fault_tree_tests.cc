@@ -1,4 +1,7 @@
 #include "fault_tree_tests.h"
+
+#include <cmath>
+
 #include "superset.h"
 
 using namespace scram;
@@ -257,7 +260,7 @@ TEST_F(FaultTreeTest, NOT_GATE) {
 
   // Testing for NOT gate with a intermediate event child.
   delete fta;
-  fta = new FaultTree("fta-default", false);
+  fta = new FaultTree("default", false);
   SetUpGate("not");
   inter->AddChild(D);
   sets.clear();
@@ -443,7 +446,7 @@ TEST_F(FaultTreeTest, NULL_GATE) {
 
   // Testing for NULL gate with a intermediate event child.
   delete fta;
-  fta = new FaultTree("fta-default", false);
+  fta = new FaultTree("default", false);
   SetUpGate("null");
   inter->AddChild(D);
   sets.clear();
@@ -820,6 +823,18 @@ TEST_F(FaultTreeTest, MProbOr) {
 }
 // ----------------------------------------------------------------------
 // ---------------------- Test Public Functions --------------------------
+// Invalid options for the constructor.
+TEST_F(FaultTreeTest, Constructor) {
+  // Incorrect analysis type.
+  ASSERT_THROW(new FaultTree("analysis", false), ValueError);
+  // Incorrect approximation argument.
+  ASSERT_THROW(new FaultTree("default", false, "approx"), ValueError);
+  // Incorrect limit order for minmal cut sets.
+  ASSERT_THROW(new FaultTree("default", false, "no", -1), ValueError);
+  // Incorrect number of series in the probability equation.
+  ASSERT_THROW(new FaultTree("default", false, "no", 1, -1), ValueError);
+}
+
 // Test Input Processing
 // Note that there are tests specificly for correct and incorrect inputs
 // in fault_tree_input_tests.cc, so this test only concerned with actual changes
@@ -890,7 +905,7 @@ TEST_F(FaultTreeTest, GraphingInstructions) {
   std::vector<std::string>::iterator it;
   for (it = tree_input.begin(); it != tree_input.end(); ++it) {
     delete fta;
-    fta = new FaultTree("fta-default", true);
+    fta = new FaultTree("default", true);
     ASSERT_THROW(fta->GraphingInstructions(), Error);
     ASSERT_NO_THROW(fta->ProcessInput(*it));
     ASSERT_NO_THROW(fta->GraphingInstructions());
@@ -898,7 +913,7 @@ TEST_F(FaultTreeTest, GraphingInstructions) {
 
   // Handle an exception graphing case with one TransferIn only.
   std::string special_case = "./input/fta/transfer_graphing_exception.scramf";
-  fta = new FaultTree("fta-default", true);
+  fta = new FaultTree("default", true);
   ASSERT_NO_THROW(fta->ProcessInput(special_case));
   ASSERT_THROW(fta->GraphingInstructions(), ValidationError);
 }
@@ -930,7 +945,7 @@ TEST_F(FaultTreeTest, AnalyzeDefault) {
 
   // Probability calculations.
   delete fta;  // Re-initializing.
-  fta = new FaultTree("fta-default", false);
+  fta = new FaultTree("default", false);
   ASSERT_NO_THROW(fta->ProcessInput(tree_input));
   ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
   ASSERT_NO_THROW(fta->Analyze());
@@ -947,17 +962,25 @@ TEST_F(FaultTreeTest, AnalyzeDefault) {
 
   // Probability calculations with the rare event approximation.
   delete fta;  // Re-initializing.
-  fta = new FaultTree("fta-default", false, true);
+  fta = new FaultTree("default", false, "rare");
   ASSERT_NO_THROW(fta->ProcessInput(tree_input));
   ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
   ASSERT_NO_THROW(fta->Analyze());
   EXPECT_DOUBLE_EQ(1.2, p_total());
+
+  // Probability calculations with the MCUB approximation.
+  delete fta;  // Re-initializing.
+  fta = new FaultTree("default", false, "mcub");
+  ASSERT_NO_THROW(fta->ProcessInput(tree_input));
+  ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
+  ASSERT_NO_THROW(fta->Analyze());
+  EXPECT_DOUBLE_EQ(0.766144, p_total());
 }
 
 // Test Monte Carlo Analysis
 TEST_F(FaultTreeTest, AnalyzeMC) {
   delete fta;  // Re-initializing.
-  fta = new FaultTree("fta-mc", false);
+  fta = new FaultTree("mc", false);
   std::string tree_input = "./input/fta/correct_tree_input.scramf";
   ASSERT_THROW(fta->Analyze(), Error);  // Calling without a tree initialized.
   ASSERT_NO_THROW(fta->ProcessInput(tree_input));
@@ -976,7 +999,7 @@ TEST_F(FaultTreeTest, Report) {
 
   // Generate warning due to rare event approximation.
   delete fta;
-  fta = new FaultTree(tree_input, false, true);
+  fta = new FaultTree("default", false, "rare");
   ASSERT_NO_THROW(fta->ProcessInput(tree_input));
   ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
   ASSERT_THROW(fta->Report("/dev/null"), Error);  // Calling before analysis.
