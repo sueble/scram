@@ -367,29 +367,57 @@ void FaultTree::GraphingInstructions() {
   }
 
   // Format events.
+  std::map<std::string, std::string> gate_colors;
+  gate_colors.insert(std::make_pair("or", "blue"));
+  gate_colors.insert(std::make_pair("and", "green"));
+  gate_colors.insert(std::make_pair("not", "red"));
+  gate_colors.insert(std::make_pair("xor", "brown"));
+  gate_colors.insert(std::make_pair("inhibit", "yellow"));
+  gate_colors.insert(std::make_pair("vote", "cyan"));
+  gate_colors.insert(std::make_pair("null", "gray"));
+  gate_colors.insert(std::make_pair("nor", "magenta"));
+  gate_colors.insert(std::make_pair("nand", "orange"));
   std::string gate = top_event_->gate();
   boost::to_upper(gate);
   out << "\"" <<  orig_ids_[top_event_id_] << "\" [shape=ellipse, "
       << "fontsize=12, fontcolor=black, fontname=\"times-bold\", "
+      << "color=" << gate_colors[top_event_->gate()] << ", "
       << "label=\"" << orig_ids_[top_event_id_] << "\\n"
-      << "{ " << gate <<" }\"]\n";
+      << "{ " << gate;
+  if (gate == "VOTE") {
+    out << " " << top_event_->vote_number() << "/"
+        << top_event_->children().size();
+  }
+  out << " }\"]\n";
   for (it_inter = inter_events_.begin(); it_inter != inter_events_.end();
        ++it_inter) {
     gate = it_inter->second->gate();
     boost::to_upper(gate);
     out << "\"" <<  orig_ids_[it_inter->first] << "\" [shape=box, "
-        << "fontsize=11, fontcolor=blue, "
+        << "fontsize=11, fontcolor=black, "
+        << "color=" << gate_colors[it_inter->second->gate()] << ", "
         << "label=\"" << orig_ids_[it_inter->first] << "\\n"
-        << "{ " << gate <<" }\"]\n";
+        << "{ " << gate;
+    if (gate == "VOTE") {
+      out << " " << it_inter->second->vote_number() << "/"
+          << it_inter->second->children().size();
+    }
+    out << " }\"]\n";
   }
   out.flush();
 
+  std::map<std::string, std::string> event_colors;
+  event_colors.insert(std::make_pair("basic", "black"));
+  event_colors.insert(std::make_pair("undeveloped", "blue"));
+  event_colors.insert(std::make_pair("house", "green"));
+  event_colors.insert(std::make_pair("conditional", "red"));
   std::map<std::string, int>::iterator it;
   for (it = pr_repeat.begin(); it != pr_repeat.end(); ++it) {
     for (int i = 0; i < it->second + 1; ++i) {
       out << "\"" << orig_ids_[it->first] << "_R" << i << "\" [shape=circle, "
-          << "height=1, fontsize=10, fixedsize=true, fontcolor=black, "
-          << "label=\"" << orig_ids_[it->first] << "\\n["
+          << "height=1, fontsize=10, fixedsize=true, "
+          << "fontcolor=" << event_colors[primary_events_[it->first]->type()]
+          << ", " << "label=\"" << orig_ids_[it->first] << "\\n["
           << primary_events_[it->first]->type() << "]";
       if (prob_requested_) { out << "\\n" << primary_events_[it->first]->p(); }
       out << "\"]\n";
@@ -592,16 +620,25 @@ void FaultTree::Analyze() {
   boost::unordered_map<std::string, PrimaryEventPtr>::iterator it_prime;
   for (it_prime = primary_events_.begin(); it_prime != primary_events_.end();
        ++it_prime) {
-    double contrib = 0;  // Total contribution of this event.
+    double contrib_pos = 0;  // Total positive contribution of this event.
+    double contrib_neg = 0;  // Negative event contribution.
     std::map< std::set<std::string>, double >::iterator it_pr;
     for (it_pr = prob_of_min_sets_.begin();
          it_pr != prob_of_min_sets_.end(); ++it_pr) {
       if (it_pr->first.count(it_prime->first)) {
-        contrib += it_pr->second;
+        contrib_pos += it_pr->second;
+      } else if (it_pr->first.count("not " + it_prime->first)) {
+        contrib_neg += it_pr->second;
       }
     }
-    imp_of_primaries_.insert(std::make_pair(it_prime->first, contrib));
-    ordered_primaries_.insert(std::make_pair(contrib, it_prime->first));
+    imp_of_primaries_.insert(std::make_pair(it_prime->first, contrib_pos));
+    ordered_primaries_.insert(std::make_pair(contrib_pos, it_prime->first));
+    if (contrib_neg > 0) {
+      imp_of_primaries_.insert(std::make_pair("not " + it_prime->first,
+                                              contrib_neg));
+      ordered_primaries_.insert(std::make_pair(contrib_neg,
+                                               "not " + it_prime->first));
+    }
   }
 }
 
@@ -634,10 +671,13 @@ void FaultTree::Report(std::string output) {
 
   // Convert MCS into representative strings.
   std::map< std::set<std::string>, std::string> represent;
+  std::map< std::set<std::string>, std::vector<std::string> > lines;
   for (it_min = min_cut_sets_.begin(); it_min != min_cut_sets_.end();
        ++it_min) {
     std::stringstream rep;
     rep << "{ ";
+    std::string line = "{ ";
+    std::vector<std::string> vec_line;
     int j = 1;
     int size = it_min->size();
     for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {
@@ -646,22 +686,35 @@ void FaultTree::Report(std::string output) {
                    boost::token_compress_on);
       assert(names.size() < 3);
       assert(names.size() > 0);
+      std::string name = "";
       if (names.size() == 1) {
-        rep << orig_ids_[names[0]];
-
+        name = orig_ids_[names[0]];
       } else if (names.size() == 2) {
-        rep << "NOT " << orig_ids_[names[1]];
+        name = "NOT " + orig_ids_[names[1]];
+      }
+      rep << name;
+
+      if (line.length() + name.length() + 2 > 60) {
+        vec_line.push_back(line);
+        line = name;
+      } else {
+        line += name;
       }
 
       if (j < size) {
         rep << ", ";
+        line += ", ";
       } else {
         rep << " ";
+        line += " ";
       }
       ++j;
     }
     rep << "}";
+    line += "}";
+    vec_line.push_back(line);
     represent.insert(std::make_pair(*it_min, rep.str()));
+    lines.insert(std::make_pair(*it_min, vec_line));
   }
 
   // Print warnings of calculations.
@@ -672,12 +725,12 @@ void FaultTree::Report(std::string output) {
   // Print minimal cut sets by their order.
   out << "\n" << "Minimal Cut Sets" << "\n";
   out << "================\n\n";
-  out << "Fault Tree: " << input_file_ << "\n";
-  out << "Time: " << pt::second_clock::local_time() << "\n\n";
-  out << "Analysis algorithm: " << analysis_ << "\n";
-  out << "Limit on order of cut sets: " << limit_order_ << "\n";
-  out << "Number of Primary Events: " << primary_events_.size() << "\n";
-  out << "Minimal Cut Set Maximum Order: " << max_order_ << "\n";
+  out << std::setw(40) << std::left << "Fault Tree: " << input_file_ << "\n";
+  out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
+  out << std::setw(40) << "Analysis algorithm: " << analysis_ << "\n";
+  out << std::setw(40) << "Limit on order of cut sets: " << limit_order_ << "\n";
+  out << std::setw(40) << "Number of Primary Events: " << primary_events_.size() << "\n";
+  out << std::setw(40) << "Minimal Cut Set Maximum Order: " << max_order_ << "\n";
   out.flush();
 
   int order = 1;  // Order of minimal cut sets.
@@ -695,7 +748,20 @@ void FaultTree::Report(std::string output) {
       out << "\nOrder " << order << ":\n";
       int i = 1;
       for (it_min = order_sets.begin(); it_min != order_sets.end(); ++it_min) {
-        out << i << ") " << represent[*it_min] << "\n";
+        std::stringstream number;
+        number << i << ") ";
+        out << std::left;
+        std::vector<std::string>::iterator it;
+        int j = 0;
+        for (it = lines[*it_min].begin(); it != lines[*it_min].end(); ++it) {
+          if (j == 0) {
+            out << number.str() <<  *it << "\n";
+          } else {
+            out << "  " << std::setw(number.str().length()) << " "
+                << *it << "\n";
+          }
+          ++j;
+        }
         out.flush();
         i++;
       }
@@ -703,13 +769,15 @@ void FaultTree::Report(std::string output) {
     order++;
   }
 
-  out << "\nQualitative Importance Analysis:" << "\n\n";
-  out << "Order        Number\n";
-  out << "-----        ------\n";
+  out << "\nQualitative Importance Analysis:" << "\n";
+  out << "--------------------------------\n";
+  out << std::left;
+  out << std::setw(20) << "Order" << "Number\n";
+  out << std::setw(20) << "-----" << "------\n";
   for (int i = 1; i < max_order_ + 1; ++i) {
-    out << "  " << i << "            " << order_numbers[i-1] << "\n";
+    out << "  " << std::setw(18) << i << order_numbers[i-1] << "\n";
   }
-  out << "  ALL          " << min_cut_sets_.size() << "\n";
+  out << "  " << std::setw(18) << "ALL" << min_cut_sets_.size() << "\n";
   out.flush();
 
   // Print probabilities of minimal cut sets only if requested.
@@ -717,16 +785,19 @@ void FaultTree::Report(std::string output) {
 
   out << "\n" << "Probability Analysis" << "\n";
   out << "====================\n\n";
-  out << "Fault Tree: " << input_file_ << "\n";
-  out << "Time: " << pt::second_clock::local_time() << "\n\n";
-  out << "Analysis type: " << analysis_ << "\n";
-  out << "Limit on series: " << nsums_ << "\n";
-  out << "Number of Primary Events: " << primary_events_.size() << "\n";
-  out << "Number of Minimal Cut Sets: " << min_cut_sets_.size() << "\n\n";
+  out << std::setw(40) << std::left << "Fault Tree: " << input_file_ << "\n";
+  out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
+  out << std::setw(40) << "Analysis type:" << analysis_ << "\n";
+  out << std::setw(40) << "Limit on series: " << nsums_ << "\n";
+  out << std::setw(40) << "Number of Primary Events: "
+      << primary_events_.size() << "\n";
+  out << std::setw(40) << "Number of Minimal Cut Sets: "
+      << min_cut_sets_.size() << "\n\n";
   out.flush();
 
   if (analysis_ == "default") {
     out << "Minimal Cut Set Probabilities Sorted by Order:\n";
+    out << "----------------------------------------------\n";
     out.flush();
     order = 1;  // Order of minimal cut sets.
     std::multimap < double, std::set<std::string> >::reverse_iterator it_or;
@@ -743,9 +814,22 @@ void FaultTree::Report(std::string output) {
         out << "\nOrder " << order << ":\n";
         int i = 1;
         for (it_or = order_sets.rbegin(); it_or != order_sets.rend(); ++it_or) {
-          out << i << ") " << represent[it_or->second];
-          out << "    ";
-          out << it_or->first << "\n";
+          std::stringstream number;
+          number << i << ") ";
+          out << std::left;
+          std::vector<std::string>::iterator it;
+          int j = 0;
+          for (it = lines[it_or->second].begin();
+               it != lines[it_or->second].end(); ++it) {
+            if (j == 0) {
+              out << number.str() << std::setw(70 - number.str().length())
+                  << *it << std::setprecision(7) << it_or->first << "\n";
+            } else {
+              out << "  " << std::setw(number.str().length()) << " "
+                  << *it << "\n";
+            }
+            ++j;
+          }
           out.flush();
           i++;
         }
@@ -753,35 +837,64 @@ void FaultTree::Report(std::string output) {
       order++;
     }
 
-    out << "\nMinimal Cut Set Probabilities Sorted by Probability:\n\n";
+    out << "\nMinimal Cut Set Probabilities Sorted by Probability:\n";
+    out << "----------------------------------------------------\n";
     out.flush();
     int i = 1;
     for (it_or = ordered_min_sets_.rbegin(); it_or != ordered_min_sets_.rend();
          ++it_or) {
-      out << i << ") " << represent[it_or->second];
-      out << "    ";
-      out << it_or->first << "\n";
+      std::stringstream number;
+      number << i << ") ";
+      out << std::left;
+      std::vector<std::string>::iterator it;
+      int j = 0;
+      for (it = lines[it_or->second].begin();
+           it != lines[it_or->second].end(); ++it) {
+        if (j == 0) {
+          out << number.str() << std::setw(70 - number.str().length())
+              << *it << std::setprecision(7) << it_or->first << "\n";
+        } else {
+          out << "  " << std::setw(number.str().length()) << " "
+              << *it << "\n";
+        }
+        ++j;
+      }
       i++;
       out.flush();
     }
 
     // Print total probability.
-    out << "\n" << "=============================\n";
-    out <<  "Total Probability: " << p_total_ << "\n";
-    out << "=============================\n\n";
+    out << "\n" << "================================\n";
+    out <<  "Total Probability: " << std::setprecision(7) << p_total_ << "\n";
+    out << "================================\n\n";
 
     if (p_total_ > 1) out << "WARNING: Total Probability is invalid.\n\n";
 
     out.flush();
 
     // Primary event analysis.
-    out << "Primary Event Analysis:\n\n";
-    out << "Event        Failure Contrib.        Importance\n\n";
+    out << "Primary Event Analysis:\n";
+    out << "-----------------------\n";
+    out << std::left;
+    out << std::setw(20) << "Event" << std::setw(20) << "Failure Contrib."
+        << "Importance\n\n";
     std::multimap < double, std::string >::reverse_iterator it_contr;
     for (it_contr = ordered_primaries_.rbegin();
          it_contr != ordered_primaries_.rend(); ++it_contr) {
-      out << orig_ids_[it_contr->second] << "          " << it_contr->first
-          << "          " << 100 * it_contr->first / p_total_ << "%\n";
+      out << std::left;
+      std::vector<std::string> names;
+      boost::split(names, it_contr->second, boost::is_any_of(" "),
+                   boost::token_compress_on);
+      assert(names.size() < 3);
+      assert(names.size() > 0);
+      if (names.size() == 1) {
+        out << std::setw(20) << orig_ids_[names[0]] << std::setw(20)
+            << it_contr->first << 100 * it_contr->first / p_total_ << "%\n";
+
+      } else if (names.size() == 2) {
+        out << "NOT " << std::setw(16) << orig_ids_[names[1]] << std::setw(20)
+            << it_contr->first << 100 * it_contr->first / p_total_ << "%\n";
+      }
       out.flush();
     }
 
@@ -790,6 +903,7 @@ void FaultTree::Report(std::string output) {
     // Show the terms of the equation.
     // Positive terms.
     out << "\nPositive Terms in the Probability Equation:\n";
+    out << "--------------------------------------------\n";
     std::vector< std::set<int> >::iterator it_vec;
     std::set<int>::iterator it_set;
     for (it_vec = pos_terms_.begin(); it_vec != pos_terms_.end(); ++it_vec) {
@@ -814,6 +928,7 @@ void FaultTree::Report(std::string output) {
     }
     // Negative terms.
     out << "\nNegative Terms in the Probability Equation:\n";
+    out << "-------------------------------------------\n";
     for (it_vec = neg_terms_.begin(); it_vec != neg_terms_.end(); ++it_vec) {
       out << "{ ";
       int j = 1;
@@ -1377,14 +1492,14 @@ void FaultTree::IncludeTransfers_() {
   }
 }
 
-void FaultTree::GraphNode_(TopEventPtr t, std::map<std::string,
-                           int>& pr_repeat, std::ofstream& out) {
+void FaultTree::GraphNode_(TopEventPtr t,
+                           std::map<std::string, int>& pr_repeat,
+                           std::ofstream& out) {
   // Populate intermediate and primary events of the input inter event.
-  std::map<std::string, boost::shared_ptr<scram::Event> >
-      events_children = t->children();
-  std::map<std::string, boost::shared_ptr<scram::Event> >::iterator it_child;
-  for (it_child = events_children.begin();
-       it_child != events_children.end(); ++it_child) {
+  std::map<std::string, EventPtr> events_children = t->children();
+  std::map<std::string, EventPtr>::iterator it_child;
+  for (it_child = events_children.begin(); it_child != events_children.end();
+       ++it_child) {
     // Deal with repeated primary events.
     if (primary_events_.count(it_child->first)) {
       if (pr_repeat.count(it_child->first)) {
