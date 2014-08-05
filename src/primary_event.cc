@@ -1,7 +1,8 @@
-// Implementation of primary event class.
+/// @file primary_event.cc
+/// Implementation of primary event class.
 #include "event.h"
 
-#include <math.h>
+#include <cmath>
 
 #include "error.h"
 
@@ -12,7 +13,7 @@ PrimaryEvent::PrimaryEvent(std::string id, std::string type, double p)
       type_(type),
       p_(p) {}
 
-std::string PrimaryEvent::type() {
+const std::string& PrimaryEvent::type() {
   if (type_ == "") {
     std::string msg = this->id() + " type has not been set.";
     throw scram::ValueError(msg);
@@ -57,13 +58,13 @@ void PrimaryEvent::p(double p) {
   p_ = p;
 }
 
-void PrimaryEvent::p(double p, double time) {
+void PrimaryEvent::p(double freq, double time) {
   if (p_ != -1) {
     std::string msg = "Trying to re-assign probability for " + this->id();
     throw scram::ValueError(msg);
   }
 
-  if (p < 0) {
+  if (freq < 0) {
     std::string msg = "The value for a failure rate is not valid for " +
         this->id();
     throw scram::ValueError(msg);
@@ -81,7 +82,7 @@ void PrimaryEvent::p(double p, double time) {
     throw scram::ValueError(msg);
   }
 
-  p_ = 1 - exp(p * time);
+  p_ = 1 - std::exp(freq * time);
 }
 
 void PrimaryEvent::AddParent(const boost::shared_ptr<scram::TopEvent>& parent) {
