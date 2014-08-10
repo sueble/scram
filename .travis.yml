@@ -12,11 +12,13 @@ addons:
       name: "rakhimov/SCRAM"
     # description: "Simplified Command-line Risk Analysis Multi-tool"
     notification_email: "olzhasrakhimov7@gmail.com"
-    build_command_prepend: "cmake ."
+    build_command_prepend: "cmake .."
     build_command: "make"
     branch_pattern: "coverity-scan"
 
 before_install:
+  - mkdir build
+  - cd build
   - sudo apt-get update -qq
 
 install:
@@ -24,7 +26,7 @@ install:
   - sudo apt-get install -qq libboost-random-dev
 
 script:
-    - ./.no_build.sh
+    - ../.no_build.sh
 
 after_failure:
     - cat build-log.txt
