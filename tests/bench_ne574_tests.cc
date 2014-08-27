@@ -1,13 +1,12 @@
 #include <gtest/gtest.h>
 
-#include "fault_tree_tests.h"
+#include "fault_tree_analysis_tests.h"
 
 // Benchmark Tests for an example fault tree given in NE574 Risk Analysis
 // class at UW-Madison.
 // Test Minimal cut sets and total probabilty.
-TEST_F(FaultTreeTest, ne574) {
-  std::string tree_input = "./input/benchmark/ne574.scramf";
-  std::string prob_input = "./input/benchmark/ne574.scramp";
+TEST_F(FaultTreeAnalysisTest, ne574) {
+  std::string tree_input = "./share/scram/input/benchmark/ne574.xml";
   std::string B = "b";  // 0.1
   std::string C = "c";  // 0.3
   std::string D = "d";  // 0.5
@@ -18,10 +17,9 @@ TEST_F(FaultTreeTest, ne574) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
-  ASSERT_NO_THROW(fta->ProcessInput(tree_input));
-  ASSERT_NO_THROW(fta->PopulateProbabilities(prob_input));
-  ASSERT_NO_THROW(fta->Analyze());
-  ASSERT_NO_THROW(fta->Report("/dev/null"));
+  ASSERT_NO_THROW(ran->ProcessInput(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0.662208, p_total());  // Total prob check.
   // Minimal cut set check.
   cut_set.insert(C);

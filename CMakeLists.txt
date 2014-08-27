@@ -17,7 +17,6 @@ project(SCRAM)
 # set project directories
 set(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SCRAM_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src")
-set(SCRAM_SHARE_DIR "${PROJECT_SOURCE_DIR}/share")
 set(SCRAM_TEST_DIR "${PROJECT_SOURCE_DIR}/tests")
 
 # This makes all the libraries build as SHARED
@@ -117,5 +116,4 @@ include_directories(${Glibmm_INCLUDE_DIRS})
 include_directories("${SCRAM_SOURCE_DIR}")
 
 add_subdirectory("${SCRAM_SOURCE_DIR}")
-add_subdirectory("${SCRAM_SHARE_DIR}")
 add_subdirectory("${SCRAM_TEST_DIR}")

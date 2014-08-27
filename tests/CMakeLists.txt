@@ -56,8 +56,8 @@ include_directories(${SCRAM_CORE_INCLUDE_DIRS})
 set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/event_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/superset_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_input_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_analysis_input_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_analysis_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_abc_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_abbc_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_not_gate_tests.cc"
@@ -65,10 +65,9 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_lift_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_ne574_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_two_train_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_three_levels_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_trans_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_theatre_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_three_motor_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/xml_parser_tests.cc"
   )
 
 # Make tests to switch and run in build directory
@@ -88,10 +87,10 @@ target_link_libraries(scram_unit_tests dl
   gtest
   )
 
-# install(TARGETS scram_unit_tests
-#   RUNTIME DESTINATION bin
-#   COMPONENT testing
-#   )
+install(TARGETS scram_unit_tests
+  RUNTIME DESTINATION bin
+  COMPONENT testing
+  )
 
 file(GLOB header_files "${CMAKE_CURRENT_SOURCE_DIR}/*.h")
 install(FILES ${header_files}
@@ -112,12 +111,8 @@ add_custom_command(TARGET ${tgt}
   )
 
 # copy input files into build directory for testing
-add_custom_command(TARGET ${tgt}
-  POST_BUILD
-  COMMAND cp "-r"
-  "${CMAKE_CURRENT_SOURCE_DIR}/input"
-  "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
-  COMMENT "copying input files for unit testing"
-  DEPENDS
-  VERBATIM
-  )
+install(DIRECTORY
+    "${CMAKE_CURRENT_SOURCE_DIR}/input"
+    DESTINATION share/scram
+    COMPONENT testing
+    )

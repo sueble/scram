@@ -6,7 +6,7 @@
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 
-#include "fault_tree.h"
+#include "fault_tree_analysis.h"
 #include "risk_analysis.h"
 
 namespace po = boost::program_options;
@@ -17,13 +17,12 @@ using namespace scram;
 /// Currently for Command line interactions.
 int main(int argc, char* argv[]) {
   // Parse command line options.
-  std::string usage = "Usage:    scram [input-file] [prob-file] [opts]";
+  std::string usage = "Usage:    scram [input-file] [opts]";
   po::options_description desc("Allowed options");
   desc.add_options()
       ("help,h", "produce help message")
       ("input-file", po::value<std::string>(),
-       "input file with tree description")
-      ("prob-file", po::value<std::string>(), "file with probabilities")
+       "xml input file with analysis entities")
       ("validate,v", "only validate input files")
       ("graph-only,g", "produce graph without analysis")
       ("analysis,a", po::value<std::string>()->default_value("fta-default"),
@@ -49,7 +48,6 @@ int main(int argc, char* argv[]) {
 
   po::positional_options_description p;
   p.add("input-file", 1);
-  p.add("prob-file", 2);
 
   po::store(po::command_line_parser(argc, argv).options(desc).positional(p).
             run(), vm);
@@ -85,8 +83,14 @@ int main(int argc, char* argv[]) {
   std::string input_file = vm["input-file"].as<std::string>();
 
   // Initiate risk analysis.
-  RiskAnalysis* ran;
+  RiskAnalysis* ran = new RiskAnalysis();
 
+  /// @todo New sequence and architecture of analysis
+  /// Read configurations.
+  /// Initializer from input files.
+  /// Run analysis.
+
+  FaultTreeAnalysis* fta;
   if (analysis == "fta-default" || analysis == "fta-mc") {
     if (vm["limit-order"].as<int>() < 1) {
       std::string msg = "Upper limit for cut sets can't be less than 1\n";
@@ -108,8 +112,8 @@ int main(int argc, char* argv[]) {
     if (rare_event) approx = "rare";
     if (mcub) approx = "mcub";
 
-    ran = new FaultTree(fta_analysis, graph_only, approx,
-                        vm["limit-order"].as<int>(), vm["nsums"].as<int>());
+    fta = new FaultTreeAnalysis(fta_analysis, approx,
+                         vm["limit-order"].as<int>(), vm["nsums"].as<int>());
   } else {
     std::string msg = analysis + ": this analysis is not recognized.\n";
     std::cout << msg << std::endl;
@@ -117,14 +121,11 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  // Set the fault tree analysis type.
+  ran->fta(fta);
+
   // Process input and validate it.
   ran->ProcessInput(input_file);
-
-  if (vm.count("prob-file")) {
-    std::string prob_file = vm["prob-file"].as<std::string>();
-    // Populate probabilities.
-    ran->PopulateProbabilities(prob_file);
-  }
 
   // Stop if only validation is requested.
   if (vm.count("validate")) {
