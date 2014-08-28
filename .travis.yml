@@ -13,7 +13,7 @@ addons:
     # description: "Simplified Command-line Risk Analysis Multi-tool"
     notification_email: "olzhasrakhimov7@gmail.com"
     build_command_prepend: "cmake .."
-    build_command: "make"
+    build_command: "make -j 2"
     branch_pattern: "coverity-scan"
 
 before_install:
