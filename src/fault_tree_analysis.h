@@ -17,7 +17,7 @@
 #include "event.h"
 #include "superset.h"
 
-class FaultTreeAnalysisTest;
+class RiskAnalysisTest;
 
 typedef boost::shared_ptr<scram::Event> EventPtr;
 typedef boost::shared_ptr<scram::Gate> GatePtr;
@@ -35,7 +35,7 @@ class Reporter;
 /// @class FaultTreeAnalysis
 /// Fault tree analysis functionality.
 class FaultTreeAnalysis {
-  friend class ::FaultTreeAnalysisTest;
+  friend class ::RiskAnalysisTest;
   friend class RiskAnalysis;
   friend class Reporter;
 
@@ -45,9 +45,11 @@ class FaultTreeAnalysis {
   /// @param[in] approx The kind of approximation for probability calculations.
   /// @param[in] limit_order The maximum limit on minimal cut sets' order.
   /// @param[in] nsums The number of sums in the probability series.
+  /// @param[in] cut_off The cut-off probability for cut sets.
   /// @throws ValueError if any of the parameters are invalid.
   FaultTreeAnalysis(std::string analysis, std::string approx = "no",
-                    int limit_order = 20, int nsums = 1000000);
+                    int limit_order = 20, int nsums = 1000000,
+                    double cut_off = 1e-8);
 
   /// Analyzes the fault tree and performs computations.
   /// This function must be called only after initilizing the tree with or
@@ -59,6 +61,10 @@ class FaultTreeAnalysis {
   virtual ~FaultTreeAnalysis() {}
 
  private:
+  /// Traverses the fault tree and expands it into sets of gates and events.
+  void ExpandTree(SupersetPtr& set_with_gates,
+                  std::vector< SupersetPtr >& cut_sets);
+
   /// Expands the children of a top or intermediate event to Supersets.
   /// @param[in] inter_index The index number of the parent node.
   /// @param[out] sets The final Supersets from the children.
@@ -89,7 +95,7 @@ class FaultTreeAnalysis {
   /// @param[in] mcs_lower_order Reference minimal cut sets of some order.
   /// @param[in] min_order The order of sets to become minimal.
   /// @note T_avg(N^3 + N^2*logN + N*logN) = O_avg(N^3)
-  void FindMcs(const std::set< std::set<int> >& cut_sets,
+  void FindMcs(const std::vector< const std::set<int>* >& cut_sets,
                const std::set< std::set<int> >& mcs_lower_order,
                int min_order);
 
@@ -206,8 +212,11 @@ class FaultTreeAnalysis {
   /// Container for primary events ordered by their contribution.
   std::multimap< double, std::string > ordered_primaries_;
 
-  /// Maximum order of the minimal cut sets.
+  /// Maximum order for minimal cut sets.
   int max_order_;
+
+  /// Cut-off probability for minimal cut sets.
+  double cut_off_;
 
   /// Limit on the size of the minimal cut sets for performance reasons.
   int limit_order_;
