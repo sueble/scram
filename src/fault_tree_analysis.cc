@@ -431,13 +431,14 @@ void FaultTreeAnalysis::ExpandSets(int inter_index,
   }
 
   // Save the expanded sets in case this gate gets repeated.
-  std::vector<SupersetPtr>* repeat_set = &repeat_exp_[inter_index];
+  std::vector<SupersetPtr> repeat_set;
   std::vector<SupersetPtr>::iterator it;
   for (it = sets.begin(); it != sets.end(); ++it) {
     SupersetPtr temp_set(new Superset);
     temp_set->InsertSet(*it);
-    repeat_set->push_back(temp_set);
+    repeat_set.push_back(temp_set);
   }
+  repeat_exp_.insert(std::make_pair(inter_index, repeat_set));
 }
 
 void FaultTreeAnalysis::SetOr(std::vector<int>& events_children,
@@ -523,9 +524,13 @@ void FaultTreeAnalysis::AssignIndices(const FaultTreePtr& fault_tree) {
   // Getting events from the fault tree object.
   /// @todo May need to clear containers if there several trees to analyze.
   /// @note Direct assignment of the containers leads to very bad performance.
+  /// @todo Very strange performance issue. Conflict between Expansion and
+  /// Probability calculations.
   top_event_ = fault_tree->top_event();
-  inter_events_.insert(fault_tree->inter_events().begin(), fault_tree->inter_events().end());
+  // inter_events_.insert(fault_tree->inter_events().begin(), fault_tree->inter_events().end());
   primary_events_.insert(fault_tree->primary_events().begin(), fault_tree->primary_events().end());
+  // primary_events_ = fault_tree->primary_events();
+  inter_events_ = fault_tree->inter_events();
 
   int j = 1;
   boost::unordered_map<std::string, PrimaryEventPtr>::iterator itp;
