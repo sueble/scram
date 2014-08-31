@@ -71,24 +71,24 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  // Determine required analysis.
-  // FTA naive is assumed if no arguments are given.
-  std::string analysis = vm["analysis"].as<std::string>();
-  bool graph_only = false;
-  bool rare_event = false;
-  bool mcub = false;
-
-  // Determin if only graphing instructions are requested.
-  if (vm.count("graph-only")) graph_only = true;
-  // Determine if the rare event approximation is requested.
-  if (vm.count("rare-event-approx")) rare_event = true;
-  // Determine if the MCUB approximation is requested.
-  if (vm.count("mcub")) mcub = true;
-
-  // Read input files and setup.
-  std::string input_file = vm["input-file"].as<std::string>();
-
   try {
+    // Determine required analysis.
+    // FTA naive is assumed if no arguments are given.
+    std::string analysis = vm["analysis"].as<std::string>();
+    bool graph_only = false;
+    bool rare_event = false;
+    bool mcub = false;
+
+    // Determin if only graphing instructions are requested.
+    if (vm.count("graph-only")) graph_only = true;
+    // Determine if the rare event approximation is requested.
+    if (vm.count("rare-event-approx")) rare_event = true;
+    // Determine if the MCUB approximation is requested.
+    if (vm.count("mcub")) mcub = true;
+
+    // Read input files and setup.
+    std::string input_file = vm["input-file"].as<std::string>();
+
     // Initiate risk analysis.
     RiskAnalysis* ran = new RiskAnalysis();
 
