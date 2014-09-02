@@ -33,6 +33,7 @@ class FaultTree {
   /// Adds a gate into this tree.
   /// The first gate is assumed to be a top event.
   /// @param[in] gate The gate to be added to this tree.
+  /// @throws ValidationError for readded gates and out-of-order addition.
   void AddGate(const GatePtr& gate);
 
   /// Validates this tree's structure and events.
@@ -66,13 +67,20 @@ class FaultTree {
   /// Traverses the tree to find any cyclicity.
   /// While traversing, this function observes implicitly defined gates, and
   /// those gates are added into the gate containers.
-  /// In addition, picks primary events of this tree.
-  /// Populates the container of primary events.
   /// @param[in] parent The gate to start with.
   /// @param[in] path The current path from the start gate.
   /// @param[in] visited The gates that are already visited in the path.
   void CheckCyclicity(const GatePtr& parent, std::vector<std::string> path,
                       std::set<std::string> visited);
+
+  /// Picks primary events of this tree.
+  /// Populates the container of primary events.
+  void GatherPrimaryEvents();
+
+  /// Picks primary events of the specified gate.
+  /// The primary events are put into the approriate container.
+  /// @param[in] gate The gate to get primary events from.
+  void GetPrimaryEvents(const GatePtr& gate);
 
   /// The name of this fault tree.
   std::string name_;
