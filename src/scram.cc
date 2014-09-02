@@ -71,9 +71,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-#ifdef NDEBUG
   try {  // Catch exceptions only for non-debug builds.
-#endif
     // Determine required analysis.
     // FTA naive is assumed if no arguments are given.
     std::string analysis = vm["analysis"].as<std::string>();
@@ -169,7 +167,6 @@ int main(int argc, char* argv[]) {
 
     delete ran;
 
-#ifdef NDEBUG
   } catch (IOError& io_err) {
     std::cerr << "SCRAM I/O Error\n" << std::endl;
     std::cerr << io_err.what() << std::endl;
@@ -191,7 +188,6 @@ int main(int argc, char* argv[]) {
     std::cerr << std_err.what() << std::endl;
     return 1;
   }
-#endif
 
   return 0;
 }  // End of main.
