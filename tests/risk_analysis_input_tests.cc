@@ -9,6 +9,15 @@
 
 using namespace scram;
 
+// Test if the xml is well formed.
+TEST(RiskAnalysisInputTest, XMLFormatting) {
+  std::string input_incorrect= "./share/scram/input/xml_formatting_error.xml";
+  RiskAnalysis* ran;
+  ran = new RiskAnalysis();
+  EXPECT_THROW(ran->ProcessInput(input_incorrect), ValidationError);
+  delete ran;
+}
+
 // Test if the schema catches errors.
 // This is trusted to XML libraries and the correctness of the RelaxNG schema,
 // so the test is very basic calls.
@@ -20,11 +29,30 @@ TEST(RiskAnalysisInputTest, FailSchemaValidation) {
   delete ran;
 }
 
+// Unsupported operations.
+TEST(RiskAnalysisInputTest, UnsupportedFeature) {
+  std::vector<std::string> incorrect_inputs;
+
+  std::string dir = "./share/scram/input/fta/";
+  incorrect_inputs.push_back(dir + "../unsupported_feature.xml");
+  incorrect_inputs.push_back(dir + "unsupported_gate.xml");
+  RiskAnalysis* ran;
+  std::vector<std::string>::iterator it;
+  for (it = incorrect_inputs.begin(); it != incorrect_inputs.end(); ++it) {
+    ran = new RiskAnalysis();
+    EXPECT_THROW(ran->ProcessInput(*it), ValidationError)
+        << " Filename:  " << *it;
+    delete ran;
+  }
+}
+
 // Test correct tree inputs
 TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   std::vector<std::string> correct_inputs;
-  correct_inputs.push_back("./share/scram/input/fta/correct_tree_input.xml");
-  // correct_inputs.push_back("./share/scram/input/fta/doubly_defined_basic.xml");
+  std::string dir = "./share/scram/input/fta/";
+  correct_inputs.push_back(dir + "correct_tree_input.xml");
+  correct_inputs.push_back(dir + "mixed_definitions.xml");
+  correct_inputs.push_back(dir + "trailing_spaces.xml");
 
   RiskAnalysis* ran;
 
@@ -58,21 +86,30 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   ioerror_inputs.push_back(dir + "nonexistent_file.xml");
 
   // Other issues.
-  // incorrect_inputs.push_back("./share/scram/input/fta/basic_top_event.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_gate.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_house.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_basic.xml");
+  incorrect_inputs.push_back(dir + "missing_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_basic_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_house_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_gate_definition.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/name_clash_inter.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/name_clash_primary.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/name_clash_top.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/non_existent_parent_primary.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/non_existent_parent_inter.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/unrecognized_parameter.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/unrecognized_type.xml");
-  // incorrect_inputs.push_back("./share/scram/input/fta/vote_not_enough_children.xml");
+  incorrect_inputs.push_back(dir + "name_clash_basic_gate.xml");
+  incorrect_inputs.push_back(dir + "name_clash_house_gate.xml");
+  incorrect_inputs.push_back(dir + "name_clash_gate_primary.xml");
+  incorrect_inputs.push_back(dir + "name_clash_basic_house.xml");
+  incorrect_inputs.push_back(dir + "name_clash_house_basic.xml");
+  incorrect_inputs.push_back(dir + "def_clash_basic_gate.xml");
+  incorrect_inputs.push_back(dir + "def_clash_house_gate.xml");
+  incorrect_inputs.push_back(dir + "def_clash_gate_primary.xml");
+  incorrect_inputs.push_back(dir + "def_clash_basic_house.xml");
+  incorrect_inputs.push_back(dir + "def_clash_house_basic.xml");
+  incorrect_inputs.push_back(dir + "def_name_house_basic.xml");
+  incorrect_inputs.push_back(dir + "def_name_basic_house.xml");
+  incorrect_inputs.push_back(dir + "atleast_gate.xml");
+  incorrect_inputs.push_back(dir + "unordered_structure.xml");
+  incorrect_inputs.push_back(dir + "dangling_gate.xml");
+  incorrect_inputs.push_back(dir + "non_top_gate.xml");
+  incorrect_inputs.push_back(dir + "cyclic_tree.xml");
   RiskAnalysis* ran;
   std::vector<std::string>::iterator it;
   for (it = ioerror_inputs.begin(); it != ioerror_inputs.end(); ++it) {

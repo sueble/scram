@@ -16,8 +16,8 @@ namespace fs = boost::filesystem;
 using namespace scram;
 
 /// Command line SCRAM entrance.
-/// @retuns 0 for success.
-/// @retuns 1 for errored state.
+/// @returns 0 for success.
+/// @returns 1 for errored state.
 int main(int argc, char* argv[]) {
   // Parse command line options.
   std::string usage = "Usage:    scram [input-file] [opts]";
@@ -71,7 +71,9 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  try {
+#ifdef NDEBUG
+  try {  // Catch exceptions only for non-debug builds.
+#endif
     // Determine required analysis.
     // FTA naive is assumed if no arguments are given.
     std::string analysis = vm["analysis"].as<std::string>();
@@ -167,6 +169,7 @@ int main(int argc, char* argv[]) {
 
     delete ran;
 
+#ifdef NDEBUG
   } catch (IOError& io_err) {
     std::cerr << "SCRAM I/O Error\n" << std::endl;
     std::cerr << io_err.what() << std::endl;
@@ -188,6 +191,7 @@ int main(int argc, char* argv[]) {
     std::cerr << std_err.what() << std::endl;
     return 1;
   }
+#endif
 
   return 0;
 }  // End of main.

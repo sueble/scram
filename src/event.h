@@ -23,7 +23,7 @@ class Event {
   explicit Event(std::string id);
 
   /// @returns The id that is set upon the construction of this event.
-  const std::string& id() { return id_; }
+  inline const std::string& id() { return id_; }
 
   /// Adds a parent into the parent map.
   /// @param[in] parent One of the gate parents of this event.
@@ -59,7 +59,7 @@ class Gate : public scram::Event {
   const std::string& type();
 
   /// Sets the gate type.
-  /// @param[in] gate The gate type for this event.
+  /// @param[in] type The gate type for this event.
   /// @throws ValueError if the gate type is being re-assigned.
   void type(std::string type);
 

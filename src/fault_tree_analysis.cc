@@ -45,6 +45,7 @@ FaultTreeAnalysis::FaultTreeAnalysis(std::string analysis, std::string approx,
   }
   nsums_ = nsums;
 
+  // Check for valid cut-off probability.
   if (cut_off < 0 || cut_off > 1) {
     std::string msg = "The cut-off probability cannot be negative or"
                       " more than 1.";
@@ -66,10 +67,13 @@ FaultTreeAnalysis::FaultTreeAnalysis(std::string analysis, std::string approx,
   FaultTreePtr fault_tree_;
 }
 
-/// Set pointer comparison.
+/// @class SetPtrComp
+/// Functor for set pointer comparison efficiency.
 struct SetPtrComp
     : public std::binary_function<const std::set<int>*,
                                   const std::set<int>*, bool> {
+  /// Operator overload.
+  /// Compares sets for sorting.
   bool operator()(const std::set<int>* lhs, const std::set<int>* rhs) const {
     return *lhs < *rhs;
   }
@@ -114,16 +118,17 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
   SetPtrComp comp;
   std::set< const std::set<int>*, SetPtrComp > unique_cut_sets(comp);
   for (it_vec = cut_sets.begin(); it_vec != cut_sets.end(); ++it_vec) {
-    if ((*it_vec)->NumOfPrimeEvents() == 1) {
+    if ((*it_vec)->NumOfPrimaryEvents() == 1) {
       // Minimal cut set is detected.
-      imcs_.insert((*it_vec)->primes());
+      imcs_.insert((*it_vec)->p_events());
       continue;
     }
-    unique_cut_sets.insert(&(*it_vec)->primes());
+    unique_cut_sets.insert(&(*it_vec)->p_events());
   }
   std::vector<const std::set<int>* > sets_unique;
   std::set< const std::set<int>*, SetPtrComp >::iterator it_un;
-  for (it_un = unique_cut_sets.begin(); it_un != unique_cut_sets.end(); ++it_un) {
+  for (it_un = unique_cut_sets.begin(); it_un != unique_cut_sets.end();
+       ++it_un) {
     sets_unique.push_back(*it_un);
   }
 
@@ -150,9 +155,8 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
   // Iterator for minimal cut sets.
   std::set< std::set<int> >::iterator it_min;
 
-  // Cut sets with higher that cut-off probability.
+  /// Minimal cut sets with higher than cut-off probability.
   std::set< std::set<int> > mcs_for_prob;
-
   // Iterate minimal cut sets and find probabilities for each set.
   for (it_min = imcs_.begin(); it_min != imcs_.end(); ++it_min) {
     // Calculate a probability of a set with AND relationship.
@@ -200,36 +204,35 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
   }
 
   // Calculate failure contributions of each primary event.
-  boost::unordered_map<std::string, PrimaryEventPtr>::iterator it_prime;
-  for (it_prime = primary_events_.begin(); it_prime != primary_events_.end();
-       ++it_prime) {
+  boost::unordered_map<std::string, PrimaryEventPtr>::iterator it_p;
+  for (it_p = primary_events_.begin(); it_p != primary_events_.end();
+       ++it_p) {
     double contrib_pos = 0;  // Total positive contribution of this event.
     double contrib_neg = 0;  // Negative event contribution.
     std::map< std::set<std::string>, double >::iterator it_pr;
     for (it_pr = prob_of_min_sets_.begin();
          it_pr != prob_of_min_sets_.end(); ++it_pr) {
-      if (it_pr->first.count(it_prime->first)) {
+      if (it_pr->first.count(it_p->first)) {
         contrib_pos += it_pr->second;
-      } else if (it_pr->first.count("not " + it_prime->first)) {
+      } else if (it_pr->first.count("not " + it_p->first)) {
         contrib_neg += it_pr->second;
       }
     }
-    imp_of_primaries_.insert(std::make_pair(it_prime->first, contrib_pos));
-    ordered_primaries_.insert(std::make_pair(contrib_pos, it_prime->first));
+    imp_of_primaries_.insert(std::make_pair(it_p->first, contrib_pos));
+    ordered_primaries_.insert(std::make_pair(contrib_pos, it_p->first));
     if (contrib_neg > 0) {
-      imp_of_primaries_.insert(std::make_pair("not " + it_prime->first,
+      imp_of_primaries_.insert(std::make_pair("not " + it_p->first,
                                               contrib_neg));
       ordered_primaries_.insert(std::make_pair(contrib_neg,
-                                               "not " + it_prime->first));
+                                               "not " + it_p->first));
     }
   }
   // Duration of probability related operations.
   p_time_ = (std::clock() - start_time) / static_cast<double>(CLOCKS_PER_SEC);
 }
 
-void FaultTreeAnalysis::ExpandTree(
-    SupersetPtr& set_with_gates,
-    std::vector< SupersetPtr >& cut_sets) {
+void FaultTreeAnalysis::ExpandTree(SupersetPtr& set_with_gates,
+                                   std::vector< SupersetPtr >& cut_sets) {
   // To hold sets of children.
   std::vector< SupersetPtr > children_sets;
 
@@ -244,7 +247,7 @@ void FaultTreeAnalysis::ExpandTree(
     // Add this set to the original inter_sets.
     if ((*it_sup)->InsertSet(set_with_gates)) {
       // Discard this tmp set if it is larger than the limit.
-      if ((*it_sup)->NumOfPrimeEvents() > limit_order_) continue;
+      if ((*it_sup)->NumOfPrimaryEvents() > limit_order_) continue;
 
       if ((*it_sup)->gates().empty()) {
         // This is a set with primary events only.
@@ -261,7 +264,9 @@ void FaultTreeAnalysis::ExpandSets(int inter_index,
   // Assumes sets are empty.
   assert(sets.empty());
   if (repeat_exp_.count(inter_index)) {
-    std::vector<SupersetPtr>* repeat_set = &repeat_exp_.find(inter_index)->second;
+    std::vector<SupersetPtr>* repeat_set =
+        &repeat_exp_.find(inter_index)->second;
+
     std::vector<SupersetPtr>::iterator it;
     for (it = repeat_set->begin(); it != repeat_set->end(); ++it) {
       SupersetPtr temp_set(new Superset);
@@ -287,7 +292,7 @@ void FaultTreeAnalysis::ExpandSets(int inter_index,
     if (inter_events_.count(it_children->first)) {
       events_children.push_back(inter_to_int_.find(it_children->first)->second);
     } else {
-      events_children.push_back(prime_to_int_.find(it_children->first)->second);
+      events_children.push_back(primary_to_int_.find(it_children->first)->second);
     }
   }
 
@@ -371,7 +376,9 @@ void FaultTreeAnalysis::ExpandSets(int inter_index,
       FaultTreeAnalysis::SetOr(events_children, sets, -1);
     }
   } else if (gate == "vote" || gate == "atleast") {
-    int vote_number = int_to_inter_.find(std::abs(inter_index))->second->vote_number();
+    int vote_number =
+        int_to_inter_.find(std::abs(inter_index))->second->vote_number();
+
     assert(vote_number > 1);
     assert(events_children.size() >= vote_number);
     std::set< std::set<int> > all_sets;
@@ -465,9 +472,10 @@ void FaultTreeAnalysis::SetAnd(std::vector<int>& events_children,
   sets.push_back(tmp_set_c);
 }
 
-void FaultTreeAnalysis::FindMcs(const std::vector< const std::set<int>* >& cut_sets,
-                                const std::set< std::set<int> >& mcs_lower_order,
-                                int min_order) {
+void FaultTreeAnalysis::FindMcs(
+    const std::vector< const std::set<int>* >& cut_sets,
+    const std::set< std::set<int> >& mcs_lower_order,
+    int min_order) {
   if (cut_sets.empty()) return;
 
   // Iterator for cut_sets.
@@ -521,26 +529,27 @@ void FaultTreeAnalysis::AssignIndices(const FaultTreePtr& fault_tree) {
   /// @todo Very strange performance issue. Conflict between Expansion and
   /// Probability calculations.
   top_event_ = fault_tree->top_event();
-  // inter_events_.insert(fault_tree->inter_events().begin(), fault_tree->inter_events().end());
-  primary_events_.insert(fault_tree->primary_events().begin(), fault_tree->primary_events().end());
+  // inter_events_.insert(fault_tree->inter_events().begin(),
+  //                      fault_tree->inter_events().end());
+  primary_events_.insert(fault_tree->primary_events().begin(),
+                         fault_tree->primary_events().end());
   // primary_events_ = fault_tree->primary_events();
   inter_events_ = fault_tree->inter_events();
 
   int j = 1;
   boost::unordered_map<std::string, PrimaryEventPtr>::iterator itp;
   // Dummy primary event at index 0.
-  int_to_prime_.push_back(PrimaryEventPtr(new PrimaryEvent("dummy")));
+  int_to_primary_.push_back(PrimaryEventPtr(new PrimaryEvent("dummy")));
   iprobs_.push_back(0);
   for (itp = primary_events_.begin(); itp != primary_events_.end(); ++itp) {
-    int_to_prime_.push_back(itp->second);
-    prime_to_int_.insert(std::make_pair(itp->second->id(), j));
+    int_to_primary_.push_back(itp->second);
+    primary_to_int_.insert(std::make_pair(itp->second->id(), j));
     if (prob_requested_) iprobs_.push_back(itp->second->p());
     ++j;
   }
 
   // Assign an index to each top and intermediate event and populate
   // relevant databases.
-  /// @todo Rename to gate_to_inter
   top_event_index_ = j;
   int_to_inter_.insert(std::make_pair(j, top_event_));
   inter_to_int_.insert(std::make_pair(top_event_->id(), j));
@@ -560,9 +569,9 @@ void FaultTreeAnalysis::SetsToString() {
     std::set<int>::iterator it_set;
     for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {
       if (*it_set < 0) {  // NOT logic.
-        pr_set.insert("not " + int_to_prime_[std::abs(*it_set)]->id());
+        pr_set.insert("not " + int_to_primary_[std::abs(*it_set)]->id());
       } else {
-        pr_set.insert(int_to_prime_[*it_set]->id());
+        pr_set.insert(int_to_primary_[*it_set]->id());
       }
     }
     imcs_to_smcs_.insert(std::make_pair(*it_min, pr_set));
