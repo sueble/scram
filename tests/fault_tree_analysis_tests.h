@@ -1,6 +1,10 @@
 #ifndef SCRAM_TESTS_FAULT_TREE_ANALYSIS_TESTS_H_
 #define SCRAM_TESTS_FAULT_TREE_ANALYSIS_TESTS_H_
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 #include "error.h"
@@ -38,7 +42,11 @@ class FaultTreeAnalysisTest : public ::testing::Test {
     return fta->ProbAnd(min_cut_set);
   }
 
-  double ProbOr(std::set< std::set<int> >& min_cut_sets, int nsums = 1000000) {
+  double ProbOr(std::set< std::set<int> >& min_cut_sets) {
+    return fta->ProbOr(min_cut_sets, 10000);
+  }
+
+  double ProbOr(std::set< std::set<int> >& min_cut_sets, int nsums) {
     return fta->ProbOr(min_cut_sets, nsums);
   }
 
@@ -66,8 +74,11 @@ class FaultTreeAnalysisTest : public ::testing::Test {
   }
   // -----------------------------------------------------------------------
   // -------------- Monte Carlo simulation algorithms ----------------------
-  void MProbOr(std::set< std::set<int> >& min_cut_sets, int sign = 1,
-               int nsums = 1000000) {
+  void MProbOr(std::set< std::set<int> >& min_cut_sets) {
+    return fta->MProbOr(min_cut_sets, 1, 10000);
+  }
+
+  void MProbOr(std::set< std::set<int> >& min_cut_sets, int sign, int nsums) {
     return fta->MProbOr(min_cut_sets, sign, nsums);
   }
 

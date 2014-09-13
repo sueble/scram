@@ -1,6 +1,10 @@
 #ifndef SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 #define SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 
+#include <map>
+#include <set>
+#include <string>
+
 #include <gtest/gtest.h>
 
 #include "error.h"
@@ -27,8 +31,6 @@ class RiskAnalysisTest : public ::testing::Test {
     ran = new RiskAnalysis();
     ran->fta_ = f;
   }
-
-  std::map<std::string, std::string>& orig_ids() { return ran->orig_ids_; }
 
   boost::unordered_map<std::string, GatePtr>& gates() {
     return ran->gates_;
