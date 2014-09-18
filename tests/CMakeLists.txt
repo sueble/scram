@@ -5,11 +5,10 @@ set(GENERATED_TEST_SOURCE_LIST "" CACHE INTERNAL "")
 
 # The gtest include file directories.
 set(GTEST_INCLUDE_DIRS
-  "${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest"
+  "${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest/include"
   )
 
-# The gtest library directories.
-set(GTEST_LIBRARY_DIRS "${CMAKE_CURRENT_BINARY_DIR}/lib")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest")
 
 # Alerts CMake to any tests we need to worry about
 include_directories(${GTEST_INCLUDE_DIRS})
@@ -19,35 +18,7 @@ if(CMAKE_USE_PTHREADS_INIT)  # The pthreads library is available.
   set(cxx_base_flags "${cxx_base_flags} -DGTEST_HAS_PTHREAD=1")
 endif()
 
-# Build libgtest
-set(GTest
-  "${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest/gtest/gtest-all.cc"
-  )
-
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
-
-add_library(gtest ${GTest})
-
-if(CMAKE_USE_PTHREADS_INIT)
-  target_link_libraries(gtest ${CMAKE_THREAD_LIBS_INIT})
-endif()
-
-set_target_properties(gtest
-  PROPERTIES INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib"
-  INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
-  )
-
-install(TARGETS gtest
-  LIBRARY DESTINATION lib
-  ARCHIVE DESTINATION lib
-  COMPONENT testing
-  )
-
-install(FILES GoogleTest/gtest/gtest.h
-  DESTINATION include/gtest
-  COMPONENT testing
-  )
-
 
 include_directories(${SCRAM_CORE_INCLUDE_DIRS})
 
@@ -57,6 +28,7 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/event_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/superset_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/xml_parser_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/random_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_analysis_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis_input_tests.cc"
@@ -70,6 +42,7 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_two_train_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_theatre_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_three_motor_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_200_event_tests.cc"
   )
 
 # Make tests to switch and run in build directory
