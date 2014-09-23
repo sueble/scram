@@ -20,10 +20,18 @@ set(SCRAM_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src")
 set(SCRAM_TEST_DIR "${PROJECT_SOURCE_DIR}/tests")
 
 # This makes all the libraries build as SHARED for Linux/Unix only
+set(BUILD_SHARED_LIBS TRUE)  # Change this for static building.
 if(CYGWIN)
-  set(BUILD_SHARED_LIBS false)
-else()
-  set(BUILD_SHARED_LIBS true)
+  set(BUILD_SHARED_LIBS FALSE)
+endif()
+
+# Linking of external libraries, such as BOOST.
+set(USE_STATIC_LIBS OFF)  # Change this for static building
+
+# Pre-uploading the schema for static distribution.
+# The tests will need to be run in the test directory.
+if(USE_STATIC_LIBS)
+  add_definitions(-DEMBED_SCHEMA)
 endif()
 
 # Setup build locations.
@@ -91,12 +99,22 @@ message(${LIBS})
 # Include the boost header files and the program_options library
 # Please be sure to use Boost rather than BOOST.
 # Capitalization matters on some platforms
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_STATIC_RUNTIME OFF)
-# SET(Boost_USE_MULTITHREADED OFF)
-find_package(Boost COMPONENTS
+set(BOOST_MIN_VERSION "1.47.0")
+set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
+set(Boost_USE_STATIC_RUNTIME ${USE_STATIC_LIBS})
+# set(Boost_USE_MULTITHREADED OFF)
+unset(Boost_INCLUDE_DIR CACHE)
+unset(Boost_LIBRARY_DIRS CACHE)
+find_package(Boost ${BOOST_MIN_VERSION} COMPONENTS
   program_options filesystem system random
   REQUIRED)
+
+if(USE_STATIC_LIBS)
+   message(STATUS "Linking against boost static libraries")
+else()
+   message(STATUS "Linking against boost dynamic libraries")
+endif()
+
 message("--    Boost Root: ${Boost_ROOT}")
 message("--    Boost Include directory: ${Boost_INCLUDE_DIR}")
 message("--    Boost Library directories: ${Boost_LIBRARY_DIRS}")
