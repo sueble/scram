@@ -162,7 +162,8 @@ TEST_F(RiskAnalysisTest, ProcessInput) {
 // Test Probability Assignment
 TEST_F(RiskAnalysisTest, PopulateProbabilities) {
   // Input with probabilities
-  std::string tree_input = "./share/scram/input/fta/correct_tree_input_with_probs.xml";
+  std::string tree_input =
+      "./share/scram/input/fta/correct_tree_input_with_probs.xml";
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_EQ(4, primary_events().size());
   ASSERT_EQ(1, primary_events().count("pumpone"));
@@ -191,12 +192,17 @@ TEST_F(RiskAnalysisTest, GraphingInstructions) {
     ASSERT_NO_THROW(ran->ProcessInput(*it));
     ASSERT_NO_THROW(ran->GraphingInstructions());
   }
+
+  // Messing up the input file.
+  input_file() = "abracadabra.cadabraabra/share/scram/input/graphing.xml";
+  EXPECT_THROW(ran->GraphingInstructions(), IOError);
 }
 
 // Test Analysis
 TEST_F(RiskAnalysisTest, AnalyzeDefault) {
   std::string tree_input = "./share/scram/input/fta/correct_tree_input.xml";
-  std::string with_prob = "./share/scram/input/fta/correct_tree_input_with_probs.xml";
+  std::string with_prob =
+      "./share/scram/input/fta/correct_tree_input_with_probs.xml";
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
   std::set<std::string> mcs_1;

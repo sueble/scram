@@ -56,6 +56,7 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   correct_inputs.push_back(dir + "trailing_spaces.xml");
   correct_inputs.push_back(dir + "two_trees.xml");
   correct_inputs.push_back(dir + "labels_and_attributes.xml");
+  correct_inputs.push_back(dir + "orphan_primary_event.xml");
 
   RiskAnalysis* ran;
 
@@ -63,6 +64,7 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   for (it = correct_inputs.begin(); it != correct_inputs.end(); ++it) {
     ran = new RiskAnalysis();
     EXPECT_NO_THROW(ran->ProcessInput(*it)) << " Filename: " << *it;
+    EXPECT_NO_THROW(ran->Report("cli")) << " Filename: " << *it;
     delete ran;
   }
   /// @todo Create include tests.
@@ -70,7 +72,8 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
 
 // Test correct probability inputs
 TEST(RiskAnalysisInputTest, CorrectFTAProbability) {
-  std::string input_correct = "./share/scram/input/fta/correct_tree_input_with_probs.xml";
+  std::string input_correct =
+      "./share/scram/input/fta/correct_tree_input_with_probs.xml";
 
   RiskAnalysis* ran;
   ran = new RiskAnalysis();
