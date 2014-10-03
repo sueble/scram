@@ -4,7 +4,7 @@ compiler: gcc
 
 env:
   global:
-    secure: "QP8EHhfrCmsLOM7EA/UnMrQF2Ob0LV3WD19egTZp/rGA8tJ5ceXw10ksWgQHmq37uYoRYrCr2YYhozz9Bj5HBiVYUIDMr1XLOqQsBShf81pTEm0L81xLSTwYuzOCj5AdUNTZvARbNgW0+sFwqStPbuPccp3zm7BudGa5MxJYmjQ="
+    secure: "C4tE5UQtoItWxd+sSfj9vULLd0EjY5Ek/BentI/m1xz6tAOi+65RTjMEgz9OQZh1rlsExV4y9YEfV/JzZ3peLNypw3b2BaCum6LECkaEDob2aPR03u/DruTkGkXITUIFFh2hg0iQH2TZP9/0ZtQBRXqNbU+DnH8Rs1Q+kNcWoFU="
 
 addons:
   coverity_scan:
