@@ -1,7 +1,7 @@
 /// @file fault_tree_analysis.h
 /// Fault Tree Analysis.
-#ifndef SCRAM_FAULT_TREE_ANALYSIS_H_
-#define SCRAM_FAULT_TREE_ANALYSIS_H_
+#ifndef SCRAM_SRC_FAULT_TREE_ANALYSIS_H_
+#define SCRAM_SRC_FAULT_TREE_ANALYSIS_H_
 
 #include <map>
 #include <set>
@@ -17,6 +17,7 @@
 #include "superset.h"
 
 class FaultTreeAnalysisTest;
+class PerformanceTest;
 
 typedef boost::shared_ptr<scram::Event> EventPtr;
 typedef boost::shared_ptr<scram::Gate> GatePtr;
@@ -34,6 +35,7 @@ class Reporter;
 /// Fault tree analysis functionality.
 class FaultTreeAnalysis {
   friend class ::FaultTreeAnalysisTest;
+  friend class ::PerformanceTest;
   friend class Reporter;
 
  public:
@@ -193,8 +195,8 @@ class FaultTreeAnalysis {
   /// @param[in] min_cut_sets Sets of indices of primary events.
   void MProbOr(int sign, int nsums, std::set< std::set<int> >* min_cut_sets);
 
-  /// Performs Monte Carlo Simulation.
-  /// @todo Implement the simulation.
+  /// Performs Monte Carlo Simulation by sampling the probability distributions
+  /// and providing the final sampled values of the final probability.
   void MSample();
 
   std::vector< std::set<int> > pos_terms_;  ///< Plus terms of the equation.
@@ -269,4 +271,4 @@ class FaultTreeAnalysis {
 
 }  // namespace scram
 
-#endif  // SCRAM_FAULT_TREE_ANALYSIS_H_
+#endif  // SCRAM_SRC_FAULT_TREE_ANALYSIS_H_

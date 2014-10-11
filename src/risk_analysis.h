@@ -1,6 +1,7 @@
 /// @file risk_analysis.h
-#ifndef SCRAM_RISK_ANALYISIS_H_
-#define SCRAM_RISK_ANALYISIS_H_
+/// Contains the main system for performing analysis.
+#ifndef SCRAM_SRC_RISK_ANALYISIS_H_
+#define SCRAM_SRC_RISK_ANALYISIS_H_
 
 #include <map>
 #include <set>
@@ -21,6 +22,7 @@
 #include "xml_parser.h"
 
 class RiskAnalysisTest;
+class PerformanceTest;
 
 typedef boost::shared_ptr<scram::Element> ElementPtr;
 
@@ -39,6 +41,7 @@ namespace scram {
 /// Main system that performs analyses.
 class RiskAnalysis {
   friend class ::RiskAnalysisTest;
+  friend class ::PerformanceTest;
 
  public:
   /// This constructor with configurations with the analysis.
@@ -182,4 +185,4 @@ class RiskAnalysis {
 
 }  // namespace scram
 
-#endif  // SCRAM_RISK_ANALYSIS_H_
+#endif  // SCRAM_SRC_RISK_ANALYSIS_H_

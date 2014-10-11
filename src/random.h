@@ -1,7 +1,7 @@
 /// @file random.h
 /// Contains helpers for randomness simulations.
-#ifndef SCRAM_RANDOM_H_
-#define SCRAM_RANDOM_H_
+#ifndef SCRAM_SRC_RANDOM_H_
+#define SCRAM_SRC_RANDOM_H_
 
 #include <vector>
 
@@ -13,7 +13,7 @@ namespace scram {
 /// This class contains generators for various random distributions.
 /// The values passed to the member functions are asserted to be in the
 /// correct form. In other words, the user should make sure that the passed
-/// parameters are valid. For example, variance cannot be negative.
+/// parameters are valid. For example, standard deviation cannot be negative.
 class Random {
  public:
   /// The constructor for Random distibutions.
@@ -73,13 +73,13 @@ class Random {
 
   /// Rng from a normal distribution.
   /// @param[in] mean The mean of the distribution.
-  /// @param[in] sigma The variance of the distribution.
+  /// @param[in] sigma The standard deviation of the distribution.
   /// @returns A sampled value.
   double NormalGenerator(double mean, double sigma);
 
   /// Rng from lognormal distribution.
   /// @param[in] mean The mean of the distribution.
-  /// @param[in] sigma The variance of the distribution.
+  /// @param[in] sigma The standard deviation of the distribution.
   /// @returns A sampled value.
   double LogNormalGenerator(double mean, double sigma);
 
@@ -139,4 +139,4 @@ class Random {
 
 }  // namespace scram
 
-#endif  // SCRAM_RANDOM_H_
+#endif  // SCRAM_SRC_RANDOM_H_
