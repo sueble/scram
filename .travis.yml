@@ -9,7 +9,7 @@ env:
 addons:
   coverity_scan:
     project:
-      name: "rakhimov/SCRAM"
+      name: "rakhimov/scram"
     # description: "Simplified Command-line Risk Analysis Multi-tool"
     notification_email: "olzhasrakhimov7@gmail.com"
     build_command_prepend: "cmake .."
