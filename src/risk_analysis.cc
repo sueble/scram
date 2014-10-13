@@ -18,6 +18,8 @@
 #endif
 
 #include "env.h"
+#include "error.h"
+#include "reporter.h"
 
 namespace scram {
 
@@ -135,13 +137,25 @@ void RiskAnalysis::Analyze() {
   std::map<std::string, FaultTreePtr>::iterator it;
   for (it = fault_trees_.begin(); it != fault_trees_.end(); ++it) {
     std::string output_file_name = input_file_ + "_" + it->second->name();
-    FaultTreeAnalysisPtr fta(new FaultTreeAnalysis(settings_.fta_type_,
-                                                   settings_.approx_,
-                                                   settings_.limit_order_,
-                                                   settings_.num_sums_,
-                                                   settings_.cut_off_));
-    fta->Analyze(it->second, prob_requested_);
+    FaultTreeAnalysisPtr fta(new FaultTreeAnalysis(settings_.limit_order_));
+    fta->Analyze(it->second);
     ftas_.push_back(fta);
+
+    if (prob_requested_) {
+      if (settings_.fta_type_ == "default") {
+        ProbabilityAnalysisPtr pa(
+            new ProbabilityAnalysis(settings_.approx_, settings_.num_sums_,
+                                    settings_.cut_off_));
+        pa->UpdateDatabase(it->second->primary_events());
+        pa->Analyze(fta->min_cut_sets());
+        prob_analyses_.push_back(pa);
+      } else if (settings_.fta_type_ == "mc"){
+        UncertaintyAnalysisPtr ua(new UncertaintyAnalysis(settings_.num_sums_));
+        ua->UpdateDatabase(it->second->primary_events());
+        ua->Analyze(fta->min_cut_sets());
+        uncertainty_analyses_.push_back(ua);
+      }
+    }
   }
 }
 
@@ -154,6 +168,13 @@ void RiskAnalysis::Report(std::string output) {
   std::vector<FaultTreeAnalysisPtr>::iterator it;
   for (it = ftas_.begin(); it != ftas_.end(); ++it) {
     rp.ReportFta(*it, output);
+  }
+
+  if (prob_requested_) {
+    std::vector<ProbabilityAnalysisPtr>::iterator it_p;
+    for (it_p = prob_analyses_.begin(); it_p != prob_analyses_.end(); ++it_p) {
+      rp.ReportProbability(*it_p, output);
+    }
   }
 }
 

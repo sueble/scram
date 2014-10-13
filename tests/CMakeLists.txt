@@ -33,6 +33,8 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/random_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_analysis_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/probability_analysis_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/uncertainty_analysis_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis_input_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_abc_tests.cc"
@@ -54,18 +56,18 @@ configure_file(scram_unit_test_driver.cc.in
   @ONLY
   )
 
-add_executable(scram_unit_tests
+add_executable(scram_tests
   scram_unit_test_driver.cc
   ${SCRAM_CORE_TEST_SOURCE}
   )
 
-target_link_libraries(scram_unit_tests dl
+target_link_libraries(scram_tests dl
   ${LIBS}
   scramcore
   gtest
   )
 
-install(TARGETS scram_unit_tests
+install(TARGETS scram_tests
   RUNTIME DESTINATION bin
   COMPONENT testing
   )
@@ -77,7 +79,7 @@ install(FILES ${header_files}
   )
 
 # read tests after building the driver, and add them to ctest
-set(tgt "scram_unit_tests")
+set(tgt "scram_tests")
 add_custom_command(TARGET ${tgt}
   POST_BUILD
   COMMAND python "${CMAKE_CURRENT_SOURCE_DIR}/generate_gtest_macros.py"

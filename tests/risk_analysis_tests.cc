@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "error.h"
+
 using namespace scram;
 
 // ---------------------- Test Private Functions -------------------------
@@ -262,7 +264,6 @@ TEST_F(RiskAnalysisTest, MCUB) {
   ASSERT_NO_THROW(ran->Analyze());
   EXPECT_DOUBLE_EQ(0.766144, p_total());
 }
-
 
 // Test Monte Carlo Analysis
 TEST_F(RiskAnalysisTest, AnalyzeMC) {

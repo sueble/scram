@@ -11,27 +11,16 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/pointer_cast.hpp>
 
+#include "error.h"
+
 namespace scram {
 
-FaultTreeAnalysis::FaultTreeAnalysis(std::string analysis, std::string approx,
-                                     int limit_order, int nsums,
-                                     double cut_off)
+FaultTreeAnalysis::FaultTreeAnalysis(int limit_order)
     : warnings_(""),
       top_event_index_(-1),
-      prob_requested_(false),
       max_order_(1),
-      num_prob_mcs_(0),
-      p_total_(0),
       exp_time_(0),
-      mcs_time_(0),
-      p_time_(0) {
-  // Check for valid analysis type.
-  if (analysis != "default" && analysis != "mc") {
-    std::string msg = "The analysis type is not recognized.";
-    throw scram::ValueError(msg);
-  }
-  analysis_ = analysis;
-
+      mcs_time_(0) {
   // Check for right limit order.
   if (limit_order < 1) {
     std::string msg = "The limit on the order of minimal cut sets "
@@ -39,29 +28,6 @@ FaultTreeAnalysis::FaultTreeAnalysis(std::string analysis, std::string approx,
     throw scram::ValueError(msg);
   }
   limit_order_ = limit_order;
-
-  // Check for right number of sums.
-  if (nsums < 1) {
-    std::string msg = "The number of sums in the probability calculation "
-                      "cannot be less than one";
-    throw scram::ValueError(msg);
-  }
-  nsums_ = nsums;
-
-  // Check for valid cut-off probability.
-  if (cut_off < 0 || cut_off > 1) {
-    std::string msg = "The cut-off probability cannot be negative or"
-                      " more than 1.";
-    throw scram::ValueError(msg);
-  }
-  cut_off_ = cut_off;
-
-  // Check the right approximation for probability calculations.
-  if (approx != "no" && approx != "rare" && approx != "mcub") {
-    std::string msg = "The probability approximation is not recognized.";
-    throw scram::ValueError(msg);
-  }
-  approx_ = approx;
 
   // Pointer to the top event.
   GatePtr top_event_;
@@ -82,8 +48,7 @@ struct SetPtrComp
   }
 };
 
-void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
-                                bool prob_requested) {
+void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree) {
   // Timing Initialization
   std::clock_t start_time;
   start_time = std::clock();
@@ -94,8 +59,6 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
 
   // Container for cut sets with primary events only.
   std::vector<SupersetPtr> cut_sets;
-
-  prob_requested_ = prob_requested;
 
   FaultTreeAnalysis::AssignIndices(fault_tree);
 
@@ -144,100 +107,6 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree,
   // Duration of MCS generation.
   mcs_time_ = (std::clock() - start_time) / static_cast<double>(CLOCKS_PER_SEC);
   FaultTreeAnalysis::SetsToString();  // MCS with event ids.
-
-  // Compute probabilities only if requested.
-  if (!prob_requested_) return;
-
-  // Maximum number of sums in the series.
-  if (nsums_ > imcs_.size()) nsums_ = imcs_.size();
-
-  // Perform Monte Carlo Uncertainty analysis.
-  if (analysis_ == "mc") {
-    std::set<std::set<int> > iset(imcs_.begin(), imcs_.end());
-    // Generate the equation.
-    FaultTreeAnalysis::MProbOr(1, nsums_, &iset);
-    // Sample probabilities and generate data.
-    FaultTreeAnalysis::MSample();
-    return;
-  }
-
-  // Iterator for minimal cut sets.
-  std::vector< std::set<int> >::iterator it_min;
-
-  /// Minimal cut sets with higher than cut-off probability.
-  std::set< std::set<int> > mcs_for_prob;
-  // Iterate minimal cut sets and find probabilities for each set.
-  for (it_min = imcs_.begin(); it_min != imcs_.end(); ++it_min) {
-    // Calculate a probability of a set with AND relationship.
-    double p_sub_set = FaultTreeAnalysis::ProbAnd(*it_min);
-    if (p_sub_set > cut_off_) mcs_for_prob.insert(*it_min);
-
-    // Update a container with minimal cut sets and probabilities.
-    prob_of_min_sets_.insert(
-        std::make_pair(imcs_to_smcs_.find(*it_min)->second, p_sub_set));
-    ordered_min_sets_.insert(
-        std::make_pair(p_sub_set, imcs_to_smcs_.find(*it_min)->second));
-  }
-
-  // Check if the rare event approximation is requested.
-  if (approx_ == "rare") {
-    warnings_ += "Using the rare event approximation\n";
-    bool rare_event_legit = true;
-    std::map< std::set<std::string>, double >::iterator it_pr;
-    for (it_pr = prob_of_min_sets_.begin();
-         it_pr != prob_of_min_sets_.end(); ++it_pr) {
-      // Check if a probability of a set does not exceed 0.1,
-      // which is required for the rare event approximation to hold.
-      if (rare_event_legit && (it_pr->second > 0.1)) {
-        rare_event_legit = false;
-        warnings_ += "The rare event approximation may be inaccurate for this"
-            "\nfault tree analysis because one of minimal cut sets'"
-            "\nprobability exceeded 0.1 threshold requirement.\n\n";
-      }
-      p_total_ += it_pr->second;
-    }
-
-  } else if (approx_ == "mcub") {
-    warnings_ += "Using the MCUB approximation\n";
-    double m = 1;
-    std::map< std::set<std::string>, double >::iterator it;
-    for (it = prob_of_min_sets_.begin(); it != prob_of_min_sets_.end();
-         ++it) {
-      m *= 1 - it->second;
-    }
-    p_total_ = 1 - m;
-
-  } else {  // The default calculations.
-    // Choose cut sets with high enough probabilities.
-    p_total_ = FaultTreeAnalysis::ProbOr(nsums_, &mcs_for_prob);
-  }
-
-  // Calculate failure contributions of each primary event.
-  boost::unordered_map<std::string, PrimaryEventPtr>::iterator it_p;
-  for (it_p = primary_events_.begin(); it_p != primary_events_.end();
-       ++it_p) {
-    double contrib_pos = 0;  // Total positive contribution of this event.
-    double contrib_neg = 0;  // Negative event contribution.
-    std::map< std::set<std::string>, double >::iterator it_pr;
-    for (it_pr = prob_of_min_sets_.begin();
-         it_pr != prob_of_min_sets_.end(); ++it_pr) {
-      if (it_pr->first.count(it_p->first)) {
-        contrib_pos += it_pr->second;
-      } else if (it_pr->first.count("not " + it_p->first)) {
-        contrib_neg += it_pr->second;
-      }
-    }
-    imp_of_primaries_.insert(std::make_pair(it_p->first, contrib_pos));
-    ordered_primaries_.insert(std::make_pair(contrib_pos, it_p->first));
-    if (contrib_neg > 0) {
-      imp_of_primaries_.insert(std::make_pair("not " + it_p->first,
-                                              contrib_neg));
-      ordered_primaries_.insert(std::make_pair(contrib_neg,
-                                               "not " + it_p->first));
-    }
-  }
-  // Duration of probability related operations.
-  p_time_ = (std::clock() - start_time) / static_cast<double>(CLOCKS_PER_SEC);
 }
 
 void FaultTreeAnalysis::PreprocessTree(const GatePtr& gate) {
@@ -551,11 +420,8 @@ void FaultTreeAnalysis::FindMcs(
   FaultTreeAnalysis::FindMcs(temp_sets, temp_min_sets, min_order);
 }
 
-// -------------------- Algorithm for Cut Sets and Probabilities -----------
+// -------------------- Algorithm for Cut Set Indexation -----------
 void FaultTreeAnalysis::AssignIndices(const FaultTreePtr& fault_tree) {
-  // Assign an index to each primary event, and populate relevant
-  // databases.
-
   // Getting events from the fault tree object.
   /// @note Direct assignment of the containers leads to very bad performance.
   /// @todo Very strange performance issue. Conflict between Expansion and
@@ -568,15 +434,15 @@ void FaultTreeAnalysis::AssignIndices(const FaultTreePtr& fault_tree) {
   // primary_events_ = fault_tree->primary_events();
   inter_events_ = fault_tree->inter_events();
 
+  // Assign an index to each primary event, and populate relevant
+  // databases.
   int j = 1;
   boost::unordered_map<std::string, PrimaryEventPtr>::iterator itp;
   // Dummy primary event at index 0.
   int_to_primary_.push_back(PrimaryEventPtr(new PrimaryEvent("dummy")));
-  iprobs_.push_back(0);
   for (itp = primary_events_.begin(); itp != primary_events_.end(); ++itp) {
     int_to_primary_.push_back(itp->second);
     primary_to_int_.insert(std::make_pair(itp->second->id(), j));
-    if (prob_requested_) iprobs_.push_back(itp->second->p());
     ++j;
   }
 
@@ -606,113 +472,8 @@ void FaultTreeAnalysis::SetsToString() {
         pr_set.insert(int_to_primary_[*it_set]->id());
       }
     }
-    imcs_to_smcs_.insert(std::make_pair(*it_min, pr_set));
     min_cut_sets_.insert(pr_set);
   }
 }
-
-double FaultTreeAnalysis::ProbOr(int nsums,
-                                 std::set< std::set<int> >* min_cut_sets) {
-  assert(nsums >= 0);
-
-  // Recursive implementation.
-  if (min_cut_sets->empty()) return 0;
-
-  if (nsums == 0) return 0;
-
-  // Base case.
-  if (min_cut_sets->size() == 1) {
-    // Get only element in this set.
-    return FaultTreeAnalysis::ProbAnd(*min_cut_sets->begin());
-  }
-
-  // Get one element.
-  std::set< std::set<int> >::iterator it = min_cut_sets->begin();
-  std::set<int> element_one(*it);
-
-  // Delete element from the original set. WARNING: the iterator is invalidated.
-  min_cut_sets->erase(it);
-  std::set< std::set<int> > combo_sets;
-  FaultTreeAnalysis::CombineElAndSet(element_one, *min_cut_sets, &combo_sets);
-
-  return FaultTreeAnalysis::ProbAnd(element_one) +
-         FaultTreeAnalysis::ProbOr(nsums, min_cut_sets) -
-         FaultTreeAnalysis::ProbOr(nsums - 1, &combo_sets);
-}
-
-double FaultTreeAnalysis::ProbAnd(const std::set<int>& min_cut_set) {
-  // Test just in case the min cut set is empty.
-  if (min_cut_set.empty()) return 0;
-
-  double p_sub_set = 1;  // 1 is for multiplication.
-  std::set<int>::iterator it_set;
-  for (it_set = min_cut_set.begin(); it_set != min_cut_set.end(); ++it_set) {
-    if (*it_set > 0) {
-      p_sub_set *= iprobs_[*it_set];
-    } else {
-      p_sub_set *= 1 - iprobs_[std::abs(*it_set)];  // Never zero.
-    }
-  }
-  return p_sub_set;
-}
-
-void FaultTreeAnalysis::CombineElAndSet(const std::set<int>& el,
-                                        const std::set< std::set<int> >& set,
-                                        std::set< std::set<int> >* combo_set) {
-  std::set< std::set<int> >::iterator it_set;
-  for (it_set = set.begin(); it_set != set.end(); ++it_set) {
-    bool include = true;  // Indicates that the resultant set is not null.
-    std::set<int>::iterator it;
-    for (it = el.begin(); it != el.end(); ++it) {
-      if (it_set->count(-*it)) {
-        include = false;
-        break;  // A complement is found; the set is null.
-      }
-    }
-    if (include) {
-      std::set<int> member_set(*it_set);
-      member_set.insert(el.begin(), el.end());
-      combo_set->insert(combo_set->end(), member_set);
-    }
-  }
-}
-
-// ----------------------------------------------------------------------
-// ----- Algorithm for Total Equation for Monte Carlo Simulation --------
-// Generation of the representation of the original equation.
-void FaultTreeAnalysis::MProbOr(int sign, int nsums,
-                                std::set< std::set<int> >* min_cut_sets) {
-  assert(sign != 0);
-  assert(nsums >= 0);
-
-  // Recursive implementation.
-  if (min_cut_sets->empty()) return;
-
-  if (nsums == 0) return;
-
-  // Get one element.
-  std::set< std::set<int> >::iterator it = min_cut_sets->begin();
-  std::set<int> element_one = *it;
-
-  // Delete element from the original set. WARNING: the iterator is invalidated.
-  min_cut_sets->erase(it);
-
-  // Put this element into the equation.
-  if (sign > 0) {
-    // This is a positive member.
-    pos_terms_.push_back(element_one);
-  } else {
-    // This must be a negative member.
-    neg_terms_.push_back(element_one);
-  }
-
-  std::set< std::set<int> > combo_sets;
-  FaultTreeAnalysis::CombineElAndSet(element_one, *min_cut_sets, &combo_sets);
-  FaultTreeAnalysis::MProbOr(sign, nsums, min_cut_sets);
-  FaultTreeAnalysis::MProbOr(-sign, nsums - 1, &combo_sets);
-}
-
-void FaultTreeAnalysis::MSample() {}
-// ----------------------------------------------------------------------
 
 }  // namespace scram

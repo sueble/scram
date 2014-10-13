@@ -12,13 +12,13 @@
 #include <boost/unordered_map.hpp>
 
 #include "element.h"
-#include "error.h"
 #include "event.h"
 #include "fault_tree.h"
 #include "fault_tree_analysis.h"
 #include "grapher.h"
-#include "reporter.h"
+#include "probability_analysis.h"
 #include "settings.h"
+#include "uncertainty_analysis.h"
 #include "xml_parser.h"
 
 class RiskAnalysisTest;
@@ -34,6 +34,8 @@ typedef boost::shared_ptr<scram::HouseEvent> HouseEventPtr;
 
 typedef boost::shared_ptr<scram::FaultTree> FaultTreePtr;
 typedef boost::shared_ptr<scram::FaultTreeAnalysis> FaultTreeAnalysisPtr;
+typedef boost::shared_ptr<scram::ProbabilityAnalysis> ProbabilityAnalysisPtr;
+typedef boost::shared_ptr<scram::UncertaintyAnalysis> UncertaintyAnalysisPtr;
 
 namespace scram {
 
@@ -170,8 +172,14 @@ class RiskAnalysis {
   /// A collection of fault trees for analysis.
   std::map<std::string, FaultTreePtr> fault_trees_;
 
-  /// A fault tree analyses that are performed.
+  /// Fault tree analyses that are performed.
   std::vector<FaultTreeAnalysisPtr> ftas_;
+
+  /// Probability analyses that are performed.
+  std::vector<ProbabilityAnalysisPtr> prob_analyses_;
+
+  /// Uncertainty analyses that are performed.
+  std::vector<UncertaintyAnalysisPtr> uncertainty_analyses_;
 
   /// Input file path.
   std::string input_file_;
