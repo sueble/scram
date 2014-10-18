@@ -36,6 +36,7 @@ TEST(RiskAnalysisInputTest, UnsupportedFeature) {
   std::string dir = "./share/scram/input/fta/";
   incorrect_inputs.push_back(dir + "../unsupported_feature.xml");
   incorrect_inputs.push_back(dir + "unsupported_gate.xml");
+  incorrect_inputs.push_back(dir + "unsupported_expression.xml");
   RiskAnalysis* ran;
   std::vector<std::string>::iterator it;
   for (it = incorrect_inputs.begin(); it != incorrect_inputs.end(); ++it) {
@@ -57,6 +58,8 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   correct_inputs.push_back(dir + "two_trees.xml");
   correct_inputs.push_back(dir + "labels_and_attributes.xml");
   correct_inputs.push_back(dir + "orphan_primary_event.xml");
+  correct_inputs.push_back(dir + "correct_expressions.xml");
+  correct_inputs.push_back(dir + "flavored_types.xml");
 
   RiskAnalysis* ran;
 
@@ -95,9 +98,13 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "doubly_defined_gate.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_house.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_basic.xml");
+  incorrect_inputs.push_back(dir + "doubly_defined_parameter.xml");
   incorrect_inputs.push_back(dir + "missing_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_basic_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_house_event_definition.xml");
+  incorrect_inputs.push_back(dir + "missing_expression.xml");
+  incorrect_inputs.push_back(dir + "missing_bool_constant.xml");
+  incorrect_inputs.push_back(dir + "missing_parameter.xml");
   incorrect_inputs.push_back(dir + "missing_gate_definition.xml");
   incorrect_inputs.push_back(dir + "name_clash_basic_gate.xml");
   incorrect_inputs.push_back(dir + "name_clash_house_gate.xml");
@@ -117,6 +124,9 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "dangling_gate.xml");
   incorrect_inputs.push_back(dir + "non_top_gate.xml");
   incorrect_inputs.push_back(dir + "cyclic_tree.xml");
+  incorrect_inputs.push_back(dir + "cyclic_parameter.xml");
+  incorrect_inputs.push_back(dir + "invalid_probability.xml");
+  incorrect_inputs.push_back(dir + "invalid_expression.xml");
   RiskAnalysis* ran;
   std::vector<std::string>::iterator it;
   for (it = ioerror_inputs.begin(); it != ioerror_inputs.end(); ++it) {

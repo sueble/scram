@@ -25,7 +25,7 @@ FaultTreeAnalysis::FaultTreeAnalysis(int limit_order)
   if (limit_order < 1) {
     std::string msg = "The limit on the order of minimal cut sets "
                       "cannot be less than one.";
-    throw scram::ValueError(msg);
+    throw ValueError(msg);
   }
   limit_order_ = limit_order;
 
@@ -64,7 +64,8 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree) {
 
   SupersetPtr top_set(new Superset());
   top_set->InsertGate(top_event_index_);
-  ExpandTree(top_set, &cut_sets);
+
+  ExpandTree(top_set, &cut_sets);  // Cut set generation.
 
   // Duration of the expansion.
   exp_time_ = (std::clock() - start_time) / static_cast<double>(CLOCKS_PER_SEC);
@@ -90,30 +91,31 @@ void FaultTreeAnalysis::Analyze(const FaultTreePtr& fault_tree) {
     unique_cut_sets.insert(&(*it_vec)->p_events());
   }
 
-  imcs_.reserve(unique_cut_sets.size());
+  std::vector< std::set<int> > imcs;  // Min cut sets with indexed events.
+  imcs.reserve(unique_cut_sets.size());
   std::vector<const std::set<int>* > sets_unique;
   std::set< const std::set<int>*, SetPtrComp >::iterator it_un;
   for (it_un = unique_cut_sets.begin(); it_un != unique_cut_sets.end();
        ++it_un) {
     if ((*it_un)->size() == 1) {
       // Minimal cut set is detected.
-      imcs_.push_back(**it_un);
+      imcs.push_back(**it_un);
       continue;
     }
     sets_unique.push_back(*it_un);
   }
 
-  FaultTreeAnalysis::FindMcs(sets_unique, imcs_, 2);
+  FaultTreeAnalysis::FindMcs(sets_unique, imcs, 2, &imcs);
   // Duration of MCS generation.
   mcs_time_ = (std::clock() - start_time) / static_cast<double>(CLOCKS_PER_SEC);
-  FaultTreeAnalysis::SetsToString();  // MCS with event ids.
+  FaultTreeAnalysis::SetsToString(imcs);  // MCS with event ids.
 }
 
 void FaultTreeAnalysis::PreprocessTree(const GatePtr& gate) {
   std::string parent = gate->type();
   std::map<std::string, EventPtr>::const_iterator it;
   for (it = gate->children().begin(); it != gate->children().end(); ++it) {
-    GatePtr child_gate = boost::dynamic_pointer_cast<scram::Gate>(it->second);
+    GatePtr child_gate = boost::dynamic_pointer_cast<Gate>(it->second);
     if (!child_gate) continue;
     std::string child = child_gate->type();
     if (((parent == "and" || parent == "or") && parent == child) ||
@@ -158,7 +160,135 @@ void FaultTreeAnalysis::ExpandTree(const SupersetPtr& set_with_gates,
 
 void FaultTreeAnalysis::ExpandSets(int inter_index,
                                    std::vector< SupersetPtr >* sets) {
-  // Assumes sets are empty.
+  assert(sets->empty());
+  assert(inter_index != 0);
+
+  if (FaultTreeAnalysis::GetExpandedSets(inter_index, sets)) return;
+
+  // Populate intermediate and primary events of the top.
+  std::vector<int> events_children;
+  FaultTreeAnalysis::ConvertChildrenToVector(
+      int_to_inter_.find(std::abs(inter_index))->second->children(),
+      &events_children);
+
+  if (inter_index > 0) {
+    FaultTreeAnalysis::ExpandPositiveGate(inter_index, events_children, sets);
+  } else {
+    FaultTreeAnalysis::ExpandNegativeGate(-inter_index, events_children, sets);
+  }
+
+  SaveExpandedSets(inter_index, *sets);
+}
+
+void FaultTreeAnalysis::ExpandPositiveGate(
+    int inter_index,
+    const std::vector<int>& events_children,
+    std::vector<SupersetPtr>* sets) {
+  assert(inter_index > 0);
+  std::string gate = int_to_inter_.find(inter_index)->second->type();
+  // Type dependent logic.
+  if (gate == "or") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetOr(1, events_children, sets);
+
+  } else if (gate == "and") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetAnd(1, events_children, sets);
+
+  } else if (gate == "atleast") {
+    FaultTreeAnalysis::SetAtleast(inter_index, events_children, sets);
+
+  } else if (gate == "xor") {
+    assert(events_children.size() == 2);
+    FaultTreeAnalysis::SetXor(inter_index, events_children, sets);
+
+  } else if (gate == "not") {
+    assert(events_children.size() == 1);
+    FaultTreeAnalysis::SetAnd(-1, events_children, sets);
+
+  } else if (gate == "nor") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetAnd(-1, events_children, sets);
+
+  } else if (gate == "nand") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetOr(-1, events_children, sets);
+
+  } else if (gate == "null") {
+    assert(events_children.size() == 1);
+    FaultTreeAnalysis::SetAnd(1, events_children, sets);
+
+  } else {
+    boost::to_upper(gate);
+    std::string msg = "No algorithm defined for " + gate;
+    throw ValueError(msg);
+  }
+}
+
+void FaultTreeAnalysis::ExpandNegativeGate(
+    int inter_index,
+    const std::vector<int>& events_children,
+    std::vector<SupersetPtr>* sets) {
+  assert(inter_index > 0);
+  std::string gate = int_to_inter_.find(inter_index)->second->type();
+  // Type dependent logic.
+  if (gate == "or") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetAnd(-1, events_children, sets);
+
+  } else if (gate == "and") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetOr(-1, events_children, sets);
+
+  } else if (gate == "atleast") {
+    FaultTreeAnalysis::SetAtleast(-inter_index, events_children, sets);
+
+  } else if (gate == "xor") {
+    assert(events_children.size() == 2);
+    FaultTreeAnalysis::SetXor(-inter_index, events_children, sets);
+
+  } else if (gate == "not") {
+    assert(events_children.size() == 1);
+    FaultTreeAnalysis::SetAnd(1, events_children, sets);
+
+  } else if (gate == "nor") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetOr(1, events_children, sets);
+
+  } else if (gate == "nand") {
+    assert(events_children.size() > 1);
+    FaultTreeAnalysis::SetAnd(1, events_children, sets);
+
+  } else if (gate == "null") {
+    assert(events_children.size() == 1);
+    FaultTreeAnalysis::SetAnd(-1, events_children, sets);
+
+  } else {
+    boost::to_upper(gate);
+    std::string msg = "No algorithm defined for " + gate;
+    throw ValueError(msg);
+  }
+}
+
+void FaultTreeAnalysis::ConvertChildrenToVector(
+    const std::map<std::string, EventPtr>& children,
+    std::vector<int>* events_children) {
+  // Iterator for children of top and intermediate events.
+  std::map<std::string, EventPtr>::const_iterator it_children;
+  for (it_children = children.begin();
+       it_children != children.end(); ++it_children) {
+    if (inter_events_.count(it_children->first)) {
+      events_children->push_back(
+          inter_to_int_.find(it_children->first)->second);
+    } else {
+      events_children->push_back(
+          primary_to_int_.find(it_children->first)->second);
+    }
+  }
+}
+
+bool FaultTreeAnalysis::GetExpandedSets(int inter_index,
+                                        std::vector< SupersetPtr >* sets) {
   assert(sets->empty());
   if (repeat_exp_.count(inter_index)) {
     std::vector<SupersetPtr>* repeat_set =
@@ -166,175 +296,21 @@ void FaultTreeAnalysis::ExpandSets(int inter_index,
 
     std::vector<SupersetPtr>::iterator it;
     for (it = repeat_set->begin(); it != repeat_set->end(); ++it) {
-      SupersetPtr temp_set(new Superset);
-      temp_set->InsertSet(*it);
+      SupersetPtr temp_set(new Superset(**it));
       sets->push_back(temp_set);
     }
-    return;
-  }
-
-  // Populate intermediate and primary events of the top.
-  const std::map<std::string, EventPtr>* children =
-      &int_to_inter_.find(std::abs(inter_index))->second->children();
-
-  std::string gate = int_to_inter_.find(std::abs(inter_index))->second->type();
-
-  // Iterator for children of top and intermediate events.
-  std::map<std::string, EventPtr>::const_iterator it_children;
-  std::vector<int> events_children;
-  std::vector<int>::iterator it_child;
-
-  for (it_children = children->begin();
-       it_children != children->end(); ++it_children) {
-    if (inter_events_.count(it_children->first)) {
-      events_children.push_back(inter_to_int_.find(it_children->first)->second);
-    } else {
-      events_children.push_back(
-          primary_to_int_.find(it_children->first)->second);
-    }
-  }
-
-  // Type dependent logic.
-  if (gate == "or") {
-    assert(events_children.size() > 1);
-    if (inter_index > 0) {
-      FaultTreeAnalysis::SetOr(1, events_children, sets);
-    } else {
-      FaultTreeAnalysis::SetAnd(-1, events_children, sets);
-    }
-  } else if (gate == "and") {
-    assert(events_children.size() > 1);
-    if (inter_index > 0) {
-      FaultTreeAnalysis::SetAnd(1, events_children, sets);
-    } else {
-      FaultTreeAnalysis::SetOr(-1, events_children, sets);
-    }
-  } else if (gate == "not") {
-    int mult = 1;
-    if (inter_index < 0) mult = -1;
-    // Only one child is expected.
-    assert(events_children.size() == 1);
-    FaultTreeAnalysis::SetAnd(-1 * mult, events_children, sets);
-  } else if (gate == "nor") {
-    assert(events_children.size() > 1);
-    if (inter_index > 0) {
-      FaultTreeAnalysis::SetAnd(-1, events_children, sets);
-    } else {
-      FaultTreeAnalysis::SetOr(1, events_children, sets);
-    }
-  } else if (gate == "nand") {
-    assert(events_children.size() > 1);
-    if (inter_index > 0) {
-      FaultTreeAnalysis::SetOr(-1, events_children, sets);
-    } else {
-      FaultTreeAnalysis::SetAnd(1, events_children, sets);
-    }
-  } else if (gate == "xor") {
-    assert(events_children.size() == 2);
-    SupersetPtr tmp_set_one(new scram::Superset());
-    SupersetPtr tmp_set_two(new scram::Superset());
-    if (inter_index > 0) {
-      int j = 1;
-      for (it_child = events_children.begin();
-           it_child != events_children.end(); ++it_child) {
-        if (*it_child > top_event_index_) {
-          tmp_set_one->InsertGate(j * (*it_child));
-          tmp_set_two->InsertGate(-1 * j * (*it_child));
-        } else {
-          tmp_set_one->InsertPrimary(j * (*it_child));
-          tmp_set_two->InsertPrimary(-1 * j * (*it_child));
-        }
-        j = -1;
-      }
-    } else {
-      for (it_child = events_children.begin();
-           it_child != events_children.end(); ++it_child) {
-        if (*it_child > top_event_index_) {
-          tmp_set_one->InsertGate(*it_child);
-          tmp_set_two->InsertGate(-1 * (*it_child));
-        } else {
-          tmp_set_one->InsertPrimary(*it_child);
-          tmp_set_two->InsertPrimary(-1 * (*it_child));
-        }
-      }
-    }
-    sets->push_back(tmp_set_one);
-    sets->push_back(tmp_set_two);
-  } else if (gate == "null") {
-    int mult = 1;
-    if (inter_index < 0) mult = -1;
-    // Only one child is expected.
-    assert(events_children.size() == 1);
-    FaultTreeAnalysis::SetAnd(mult, events_children, sets);
-  } else if (gate == "inhibit") {
-    assert(events_children.size() == 2);
-    if (inter_index > 0) {
-      FaultTreeAnalysis::SetAnd(1, events_children, sets);
-    } else {
-      FaultTreeAnalysis::SetOr(-1, events_children, sets);
-    }
-  } else if (gate == "vote" || gate == "atleast") {
-    int vote_number =
-        int_to_inter_.find(std::abs(inter_index))->second->vote_number();
-
-    assert(vote_number > 1);
-    assert(events_children.size() >= vote_number);
-    std::set< std::set<int> > all_sets;
-    int size = events_children.size();
-
-    for (int j = 0; j < size; ++j) {
-      std::set<int> set;
-      set.insert(events_children[j]);
-      all_sets.insert(set);
-    }
-
-    int mult = 1;
-    if (inter_index < 0) {
-      mult = -1;
-      vote_number = size - vote_number + 1;  // The main trick for negation.
-    }
-
-    for (int i = 1; i < vote_number; ++i) {
-      std::set< std::set<int> > tmp_sets;
-      std::set< std::set<int> >::iterator it_sets;
-      for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
-        for (int j = 0; j < size; ++j) {
-          std::set<int> set = *it_sets;
-          set.insert(events_children[j]);
-          if (set.size() > i) {
-            tmp_sets.insert(set);
-          }
-        }
-      }
-      all_sets = tmp_sets;
-    }
-
-    std::set< std::set<int> >::iterator it_sets;
-    for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
-      SupersetPtr tmp_set_c(new scram::Superset());
-      std::set<int>::iterator it;
-      for (it = it_sets->begin(); it != it_sets->end(); ++it) {
-        if (*it > top_event_index_) {
-          tmp_set_c->InsertGate(*it * mult);
-        } else {
-          tmp_set_c->InsertPrimary(*it * mult);
-        }
-      }
-      sets->push_back(tmp_set_c);
-    }
-
+    return true;
   } else {
-    boost::to_upper(gate);
-    std::string msg = "No algorithm defined for " + gate;
-    throw scram::ValueError(msg);
+    return false;
   }
+}
 
-  // Save the expanded sets in case this gate gets repeated.
+void FaultTreeAnalysis::SaveExpandedSets(int inter_index,
+                                         const std::vector<SupersetPtr>& sets) {
   std::vector<SupersetPtr> repeat_set;
-  std::vector<SupersetPtr>::iterator it;
-  for (it = sets->begin(); it != sets->end(); ++it) {
-    SupersetPtr temp_set(new Superset);
-    temp_set->InsertSet(*it);
+  std::vector<SupersetPtr>::const_iterator it;
+  for (it = sets.begin(); it != sets.end(); ++it) {
+    SupersetPtr temp_set(new Superset(**it));
     repeat_set.push_back(temp_set);
   }
   repeat_exp_.insert(std::make_pair(inter_index, repeat_set));
@@ -347,7 +323,7 @@ void FaultTreeAnalysis::SetOr(int mult,
   std::vector<int>::const_iterator it_child;
   for (it_child = events_children.begin();
        it_child != events_children.end(); ++it_child) {
-    SupersetPtr tmp_set_c(new scram::Superset());
+    SupersetPtr tmp_set_c(new Superset());
     if (*it_child > top_event_index_) {
       tmp_set_c->InsertGate(*it_child * mult);
     } else {
@@ -361,7 +337,7 @@ void FaultTreeAnalysis::SetAnd(int mult,
                                const std::vector<int>& events_children,
                                std::vector<SupersetPtr>* sets) {
   assert(mult == 1 || mult == -1);
-  SupersetPtr tmp_set_c(new scram::Superset());
+  SupersetPtr tmp_set_c(new Superset());
   std::vector<int>::const_iterator it_child;
   for (it_child = events_children.begin();
        it_child != events_children.end(); ++it_child) {
@@ -374,10 +350,101 @@ void FaultTreeAnalysis::SetAnd(int mult,
   sets->push_back(tmp_set_c);
 }
 
+void FaultTreeAnalysis::SetXor(int inter_index,
+                               const std::vector<int>& events_children,
+                               std::vector<SupersetPtr>* sets) {
+  assert(events_children.size() == 2);
+  assert(inter_index != 0);
+  SupersetPtr tmp_set_one(new Superset());
+  SupersetPtr tmp_set_two(new Superset());
+  std::vector<int>::const_iterator it_child;
+  if (inter_index > 0) {
+    int j = 1;
+    for (it_child = events_children.begin();
+         it_child != events_children.end(); ++it_child) {
+      if (*it_child > top_event_index_) {
+        tmp_set_one->InsertGate(j * (*it_child));
+        tmp_set_two->InsertGate(-j * (*it_child));
+      } else {
+        tmp_set_one->InsertPrimary(j * (*it_child));
+        tmp_set_two->InsertPrimary(-j * (*it_child));
+      }
+      j = -1;
+    }
+  } else {
+    for (it_child = events_children.begin();
+         it_child != events_children.end(); ++it_child) {
+      if (*it_child > top_event_index_) {
+        tmp_set_one->InsertGate(*it_child);
+        tmp_set_two->InsertGate(-(*it_child));
+      } else {
+        tmp_set_one->InsertPrimary(*it_child);
+        tmp_set_two->InsertPrimary(-(*it_child));
+      }
+    }
+  }
+  sets->push_back(tmp_set_one);
+  sets->push_back(tmp_set_two);
+}
+
+void FaultTreeAnalysis::SetAtleast(int inter_index,
+                                   const std::vector<int>& events_children,
+                                   std::vector<SupersetPtr>* sets) {
+  int vote_number =
+      int_to_inter_.find(std::abs(inter_index))->second->vote_number();
+
+  assert(vote_number > 1);
+  assert(events_children.size() >= vote_number);
+  std::set< std::set<int> > all_sets;
+  int size = events_children.size();
+
+  for (int j = 0; j < size; ++j) {
+    std::set<int> set;
+    set.insert(events_children[j]);
+    all_sets.insert(set);
+  }
+
+  int mult = 1;
+  if (inter_index < 0) {
+    mult = -1;
+    vote_number = size - vote_number + 1;  // The main trick for negation.
+  }
+
+  for (int i = 1; i < vote_number; ++i) {
+    std::set< std::set<int> > tmp_sets;
+    std::set< std::set<int> >::iterator it_sets;
+    for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
+      for (int j = 0; j < size; ++j) {
+        std::set<int> set = *it_sets;
+        set.insert(events_children[j]);
+        if (set.size() > i) {
+          tmp_sets.insert(set);
+        }
+      }
+    }
+    all_sets = tmp_sets;
+  }
+
+  std::set< std::set<int> >::iterator it_sets;
+  for (it_sets = all_sets.begin(); it_sets != all_sets.end(); ++it_sets) {
+    SupersetPtr tmp_set_c(new Superset());
+    std::set<int>::iterator it;
+    for (it = it_sets->begin(); it != it_sets->end(); ++it) {
+      if (*it > top_event_index_) {
+        tmp_set_c->InsertGate(*it * mult);
+      } else {
+        tmp_set_c->InsertPrimary(*it * mult);
+      }
+    }
+    sets->push_back(tmp_set_c);
+  }
+}
+
 void FaultTreeAnalysis::FindMcs(
     const std::vector< const std::set<int>* >& cut_sets,
     const std::vector< std::set<int> >& mcs_lower_order,
-    int min_order) {
+    int min_order,
+    std::vector< std::set<int> >* imcs) {
   if (cut_sets.empty()) return;
 
   // Iterator for cut_sets.
@@ -415,9 +482,9 @@ void FaultTreeAnalysis::FindMcs(
     }
     // Ignore the cut set because include = false.
   }
-  imcs_.insert(imcs_.end(), temp_min_sets.begin(), temp_min_sets.end());
+  imcs->insert(imcs->end(), temp_min_sets.begin(), temp_min_sets.end());
   min_order++;
-  FaultTreeAnalysis::FindMcs(temp_sets, temp_min_sets, min_order);
+  FaultTreeAnalysis::FindMcs(temp_sets, temp_min_sets, min_order, imcs);
 }
 
 // -------------------- Algorithm for Cut Set Indexation -----------
@@ -460,9 +527,9 @@ void FaultTreeAnalysis::AssignIndices(const FaultTreePtr& fault_tree) {
   }
 }
 
-void FaultTreeAnalysis::SetsToString() {
-  std::vector< std::set<int> >::iterator it_min;
-  for (it_min = imcs_.begin(); it_min != imcs_.end(); ++it_min) {
+void FaultTreeAnalysis::SetsToString(const std::vector< std::set<int> >& imcs) {
+  std::vector< std::set<int> >::const_iterator it_min;
+  for (it_min = imcs.begin(); it_min != imcs.end(); ++it_min) {
     std::set<std::string> pr_set;
     std::set<int>::iterator it_set;
     for (it_set = it_min->begin(); it_set != it_min->end(); ++it_set) {

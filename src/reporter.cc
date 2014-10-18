@@ -22,25 +22,12 @@ namespace pt = boost::posix_time;
 namespace scram {
 
 void Reporter::ReportOrphans(
-    const std::set<boost::shared_ptr<scram::PrimaryEvent> >&
-        orphan_primary_events,
-    std::string output) {
+    const std::set<boost::shared_ptr<PrimaryEvent> >& orphan_primary_events,
+    std::ostream& out) {
   if (orphan_primary_events.empty()) return;
 
-  // Check if output to file is requested.
-  std::streambuf* buf;
-  std::ofstream of;
-  if (output != "cli") {
-    of.open(output.c_str());
-    buf = of.rdbuf();
-
-  } else {
-    buf = std::cout.rdbuf();
-  }
-  std::ostream out(buf);
-
   out << "WARNING! Found unused primary events:\n";
-  std::set<boost::shared_ptr<scram::PrimaryEvent> >::const_iterator it;
+  std::set<boost::shared_ptr<PrimaryEvent> >::const_iterator it;
   for (it = orphan_primary_events.begin(); it != orphan_primary_events.end();
        ++it) {
     out << "    " << (*it)->orig_id() << "\n";
@@ -49,20 +36,8 @@ void Reporter::ReportOrphans(
 }
 
 void Reporter::ReportFta(
-    const boost::shared_ptr<const scram::FaultTreeAnalysis>& fta,
-    std::string output) {
-  // Check if output to file is requested.
-  std::streambuf* buf;
-  std::ofstream of;
-  if (output != "cli") {
-    of.open(output.c_str());
-    buf = of.rdbuf();
-
-  } else {
-    buf = std::cout.rdbuf();
-  }
-  std::ostream out(buf);
-
+    const boost::shared_ptr<const FaultTreeAnalysis>& fta,
+    std::ostream& out) {
   // An iterator for a set with ids of events.
   std::set<std::string>::const_iterator it_set;
 
@@ -85,14 +60,19 @@ void Reporter::ReportFta(
   out << "\n" << "Minimal Cut Sets" << "\n";
   out << "================\n\n";
   out << std::left;
-  // out << std::setw(40) << std::left << "Fault Tree: " << fta->input_file_ << "\n";
+  out << std::setw(40) << std::left << "Top Event: "
+      << fta->top_event_->orig_id() << "\n";
   out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
-  // out << std::setw(40) << "Analysis algorithm: " << fta->analysis_ << "\n";
-  out << std::setw(40) << "Number of Primary Events: " << fta->primary_events_.size() << "\n";
-  out << std::setw(40) << "Number of Gates: " << fta->inter_events_.size() + 1 << "\n";
-  out << std::setw(40) << "Limit on order of cut sets: " << fta->limit_order_ << "\n";
-  out << std::setw(40) << "Minimal Cut Set Maximum Order: " << fta->max_order_ << "\n";
-  out << std::setw(40) << "Total number of MCS found: " << fta->min_cut_sets_.size() << "\n";
+  out << std::setw(40) << "Number of Primary Events: "
+      << fta->primary_events_.size() << "\n";
+  out << std::setw(40) << "Number of Gates: "
+      << fta->inter_events_.size() + 1 << "\n";
+  out << std::setw(40) << "Limit on order of cut sets: "
+      << fta->limit_order_ << "\n";
+  out << std::setw(40) << "Minimal Cut Set Maximum Order: "
+      << fta->max_order_ << "\n";
+  out << std::setw(40) << "Total number of MCS found: "
+      << fta->min_cut_sets_.size() << "\n";
   out << std::setw(40) << "Gate Expansion Time: " << std::setprecision(5)
       << fta->exp_time_ << "s\n";
   out << std::setw(40) << "MCS Generation Time: " << std::setprecision(5)
@@ -149,20 +129,54 @@ void Reporter::ReportFta(
 }
 
 void Reporter::ReportProbability(
-    const boost::shared_ptr<const scram::ProbabilityAnalysis>& prob_analysis,
-    std::string output) {
-  // Check if output to file is requested.
-  std::streambuf* buf;
-  std::ofstream of;
-  if (output != "cli") {
-    of.open(output.c_str());
-    buf = of.rdbuf();
-
-  } else {
-    buf = std::cout.rdbuf();
+    const boost::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
+    std::ostream& out) {
+  // Print warnings of calculations.
+  if (prob_analysis->warnings_ != "") {
+    out << "\n" << prob_analysis->warnings_ << "\n";
   }
-  std::ostream out(buf);
 
+  out << "\n" << "Probability Analysis" << "\n";
+  out << "====================\n\n";
+  out << std::left;
+  out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
+  out << std::setw(40) << "Approximation:" << prob_analysis->approx_ << "\n";
+  out << std::setw(40) << "Limit on series: " << prob_analysis->nsums_ << "\n";
+  out << std::setw(40) << "Cut-off probabilty for cut sets: "
+      << prob_analysis->cut_off_ << "\n";
+  out << std::setw(40) << "Total MCS provided: "
+      << prob_analysis->min_cut_sets_.size() << "\n";
+  out << std::setw(40) << "Number of Cut Sets Used: "
+      << prob_analysis->num_prob_mcs_ << "\n";
+  out << std::setw(40) << "Total Probability: "
+      << prob_analysis->p_total_ << "\n";
+  out << std::setw(40) << "Probability Operations Time: "
+      << std::setprecision(5) << prob_analysis->p_time_ << "s\n\n";
+  out.flush();
+
+  // Print total probability.
+  out << "\n================================\n";
+  out <<  "Total Probability: " << std::setprecision(7)
+      << prob_analysis->p_total_;
+  out << "\n================================\n\n";
+
+  if (prob_analysis->p_total_ > 1)
+    out << "WARNING: Total Probability is invalid.\n\n";
+
+  out.flush();
+
+  Reporter::ReportMcsProb(prob_analysis, out);
+
+  out.flush();
+
+  Reporter::ReportImportance(prob_analysis, out);
+
+  out.flush();
+}
+
+void Reporter::ReportMcsProb(
+    const boost::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
+    std::ostream& out) {
   // An iterator for a set with ids of events.
   std::set<std::string>::const_iterator it_set;
 
@@ -178,28 +192,7 @@ void Reporter::ReportProbability(
                        prob_analysis->primary_events_,
                        &lines);
 
-  // Print warnings of calculations.
-  if (prob_analysis->warnings_ != "") {
-    out << "\n" << prob_analysis->warnings_ << "\n";
-  }
-
-  out << "\n" << "Probability Analysis" << "\n";
-  out << "====================\n\n";
-  out << std::left;
-  out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
-  // out << std::setw(40) << "Analysis type:" << fta->analysis_ << "\n";
-  // print approximations used.
-  out << std::setw(40) << "Limit on series: " << prob_analysis->nsums_ << "\n";
-  out << std::setw(40) << "Cut-off probabilty for cut sets: " << prob_analysis->cut_off_ << "\n";
-  // print total mcs provided.
-  // print mcs used for probability.
-  out << std::setw(40) << "Number of Cut Sets: " << prob_analysis->num_prob_mcs_ << "\n";
-  out << std::setw(40) << "Total Probability: " << prob_analysis->p_total_ << "\n";
-  out << std::setw(40) << "Probability Operations Time: " << std::setprecision(5)
-      << prob_analysis->p_time_ << "s\n\n";
-  out.flush();
-
-  out << "Minimal Cut Set Probabilities Sorted by Order:\n";
+  out << "\nMinimal Cut Set Probabilities Sorted by Order:\n";
   out << "----------------------------------------------\n";
   out.flush();
   int order = 1;  // Order of minimal cut sets.
@@ -217,9 +210,8 @@ void Reporter::ReportProbability(
     for (it_min = prob_analysis->min_cut_sets_.begin();
          it_min != prob_analysis->min_cut_sets_.end(); ++it_min) {
       if (it_min->size() == order) {
-        order_sets.insert(
-            std::make_pair(prob_analysis->prob_of_min_sets_.find(*it_min)->second,
-                           *it_min));
+        order_sets.insert(std::make_pair(prob_analysis->prob_of_min_sets_.find(*it_min)->second,
+                            *it_min));
       }
     }
     if (!order_sets.empty()) {
@@ -274,45 +266,6 @@ void Reporter::ReportProbability(
     i++;
     out.flush();
   }
-
-  // Print total probability.
-  out << "\n================================\n";
-  out <<  "Total Probability: " << std::setprecision(7) << prob_analysis->p_total_;
-  out << "\n================================\n\n";
-
-  if (prob_analysis->p_total_ > 1) out << "WARNING: Total Probability is invalid.\n\n";
-
-  out.flush();
-
-  // Primary event analysis.
-  out << "Primary Event Analysis:\n";
-  out << "-----------------------\n";
-  out << std::left;
-  out << std::setw(20) << "Event" << std::setw(20) << "Failure Contrib."
-      << "Importance\n\n";
-  std::multimap < double, std::string >::const_reverse_iterator it_contr;
-  for (it_contr = prob_analysis->ordered_primaries_.rbegin();
-       it_contr != prob_analysis->ordered_primaries_.rend(); ++it_contr) {
-    out << std::left;
-    std::vector<std::string> names;
-    boost::split(names, it_contr->second, boost::is_any_of(" "),
-                 boost::token_compress_on);
-    assert(names.size() < 3);
-    assert(names.size() > 0);
-    if (names.size() == 1) {
-      out << std::setw(20) << prob_analysis->primary_events_.find(names[0])->second->orig_id()
-          << std::setw(20) << it_contr->first
-          << 100 * it_contr->first / prob_analysis->p_total_ << "%\n";
-
-    } else if (names.size() == 2) {
-      out << "NOT " << std::setw(16)
-          << prob_analysis->primary_events_.find(names[1])->second->orig_id()
-          << std::setw(20) << it_contr->first
-          << 100 * it_contr->first / prob_analysis->p_total_ << "%\n";
-    }
-    out.flush();
-  }
-  out.flush();
 }
 
 void Reporter::McsToPrint(
@@ -362,6 +315,27 @@ void Reporter::McsToPrint(
     line += "}";
     vec_line.push_back(line);
     lines->insert(std::make_pair(*it_min, vec_line));
+  }
+}
+
+void Reporter::ReportImportance(
+    const boost::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
+    std::ostream& out) {
+  // Primary event analysis.
+  out << "\nPrimary Event Analysis:\n";
+  out << "-----------------------\n";
+  out << std::left;
+  out << std::setw(40) << "Event" << std::setw(20) << "Failure Contrib."
+      << "Importance\n\n";
+  std::multimap < double, std::string >::const_reverse_iterator it_contr;
+  for (it_contr = prob_analysis->ordered_primaries_.rbegin();
+       it_contr != prob_analysis->ordered_primaries_.rend(); ++it_contr) {
+    out << std::left;
+    out << std::setw(40)
+        << prob_analysis->primary_events_.find(it_contr->second)->second->orig_id()
+        << std::setw(20) << it_contr->first
+        << 100 * it_contr->first / prob_analysis->p_total_ << "%\n";
+    out.flush();
   }
 }
 

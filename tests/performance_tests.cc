@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "performance_tests.h"
 
 using namespace scram;
@@ -28,9 +30,9 @@ using namespace scram;
 // Tests the performance of probability calculations
 // with cut-off approximations tests are done.
 TEST_F(PerformanceTest, DISABLED_ThreeMotor) {
-  double p_time_std = 0.650;
+  double p_time_std = 0.300;
 #ifdef NDEBUG
-  p_time_std = 0.130;
+  p_time_std = 0.022;
 #endif
   std::string input = "./share/scram/input/benchmark/three_motor.xml";
   ASSERT_NO_THROW(ran->ProcessInput(input));
@@ -44,9 +46,9 @@ TEST_F(PerformanceTest, DISABLED_ThreeMotor) {
 // Tests the performance of probability calculations
 // without approximations tests are done.
 TEST_F(PerformanceTest, DISABLED_ThreeMotor_C0) {
-  double p_time_full = 30.000;  // Without cut-off approximation.
+  double p_time_full = 13.500;  // Without cut-off approximation.
 #ifdef NDEBUG
-  p_time_full = 6.000;
+  p_time_full = 0.920;
 #endif
   std::string input = "./share/scram/input/benchmark/three_motor.xml";
   settings.cut_off(0);  // No approximation.

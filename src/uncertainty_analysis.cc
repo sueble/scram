@@ -15,7 +15,7 @@ UncertaintyAnalysis::UncertaintyAnalysis(int nsums) : p_time_(-1) {
   if (nsums < 1) {
     std::string msg = "The number of sums in the probability calculation "
                       "cannot be less than one";
-    throw scram::ValueError(msg);
+    throw ValueError(msg);
   }
   nsums_ = nsums;
 }
@@ -29,28 +29,8 @@ void UncertaintyAnalysis::UpdateDatabase(
 void UncertaintyAnalysis::Analyze(
     const std::set< std::set<std::string> >& min_cut_sets) {
   min_cut_sets_ = min_cut_sets;
-  // Update databases of minimal cut sets with indexed events.
-  std::set< std::set<std::string> >::const_iterator it;
-  for (it = min_cut_sets.begin(); it != min_cut_sets.end(); ++it) {
-    std::set<int> mcs_with_indices;  // Minimal cut set with indices.
-    std::set<std::string>::const_iterator it_set;
-    for (it_set = it->begin(); it_set != it->end(); ++it_set) {
-      std::vector<std::string> names;
-      boost::split(names, *it_set, boost::is_any_of(" "),
-                   boost::token_compress_on);
-      assert(names.size() == 1 || names.size() == 2);
-      if (names.size() == 1) {
-        assert(primary_to_int_.count(names[0]));
-        mcs_with_indices.insert(primary_to_int_.find(names[0])->second);
-      } else {
-        // This must be a complement of an event.
-        assert(names[0] == "not");
-        assert(primary_to_int_.count(names[1]));
-        mcs_with_indices.insert(-primary_to_int_.find(names[1])->second);
-      }
-    }
-    imcs_.push_back(mcs_with_indices);
-  }
+
+  UncertaintyAnalysis::IndexMcs(min_cut_sets_);
 
   // Timing Initialization
   std::clock_t start_time;
@@ -85,9 +65,36 @@ void UncertaintyAnalysis::AssignIndices() {
   }
 }
 
-void UncertaintyAnalysis::CombineElAndSet(const std::set<int>& el,
-                                          const std::set< std::set<int> >& set,
-                                          std::set< std::set<int> >* combo_set) {
+void UncertaintyAnalysis::IndexMcs(
+    const std::set<std::set<std::string> >& min_cut_sets) {
+  // Update databases of minimal cut sets with indexed events.
+  std::set< std::set<std::string> >::const_iterator it;
+  for (it = min_cut_sets.begin(); it != min_cut_sets.end(); ++it) {
+    std::set<int> mcs_with_indices;  // Minimal cut set with indices.
+    std::set<std::string>::const_iterator it_set;
+    for (it_set = it->begin(); it_set != it->end(); ++it_set) {
+      std::vector<std::string> names;
+      boost::split(names, *it_set, boost::is_any_of(" "),
+                   boost::token_compress_on);
+      assert(names.size() == 1 || names.size() == 2);
+      if (names.size() == 1) {
+        assert(primary_to_int_.count(names[0]));
+        mcs_with_indices.insert(primary_to_int_.find(names[0])->second);
+      } else {
+        // This must be a complement of an event.
+        assert(names[0] == "not");
+        assert(primary_to_int_.count(names[1]));
+        mcs_with_indices.insert(-primary_to_int_.find(names[1])->second);
+      }
+    }
+    imcs_.push_back(mcs_with_indices);
+  }
+}
+
+void UncertaintyAnalysis::CombineElAndSet(
+    const std::set<int>& el,
+    const std::set< std::set<int> >& set,
+    std::set< std::set<int> >* combo_set) {
   std::set< std::set<int> >::iterator it_set;
   for (it_set = set.begin(); it_set != set.end(); ++it_set) {
     bool include = true;  // Indicates that the resultant set is not null.

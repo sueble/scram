@@ -18,14 +18,16 @@ namespace fs = boost::filesystem;
 
 using namespace scram;
 
-/// Command line SCRAM entrance.
+/// Parses the command-line arguments.
+/// @param[in] argc Count of arguments.
+/// @param[in] argv Values of arguments.
+/// @param[out] vm Variables map of program options.
 /// @returns 0 for success.
 /// @returns 1 for errored state.
-int main(int argc, char* argv[]) {
-  // Parse command line options.
+/// @returns -1 for information only state like help and version.
+int ParseArguments(int argc, char* argv[], po::variables_map* vm) {
   std::string usage = "Usage:    scram [input-file] [opts]";
   po::options_description desc("Allowed options");
-  po::variables_map vm;
 
   try {
     desc.add_options()
@@ -41,51 +43,55 @@ int main(int argc, char* argv[]) {
         ("mcub,m", "use the MCUB approximation for probability calculations")
         ("limit-order,l", po::value<int>()->default_value(20),
          "upper limit for cut set order")
-        ("nsums,s", po::value<int>()->default_value(1000000),
+        ("nsums,s", po::value<int>()->default_value(7),
          "number of sums in series expansion for probability calculations")
         ("cut-off,c", po::value<double>()->default_value(1e-8),
          "cut-off probability for cut sets")
+        ("mission-time,t", po::value<double>()->default_value(8760),
+         "system mission time in hours")
+        ("trials,S", po::value<int>()->default_value(1e3),
+         "number of trials for Monte Carlo simulations")
         ("output,o", po::value<std::string>(), "output file")
         ;
 
-    po::store(po::parse_command_line(argc, argv, desc), vm);
+    po::store(po::parse_command_line(argc, argv, desc), *vm);
   } catch (std::exception& err) {
     std::cout << "Invalid arguments.\n"
         << usage << "\n\n" << desc << "\n";
     return 1;
   }
-  po::notify(vm);
+  po::notify(*vm);
 
   po::positional_options_description p;
   p.add("input-file", 1);
 
   po::store(po::command_line_parser(argc, argv).options(desc).positional(p).
-            run(), vm);
-  po::notify(vm);
+            run(), *vm);
+  po::notify(*vm);
 
   // Process command line args.
-  if (vm.count("help")) {
+  if (vm->count("help")) {
     std::cout << usage << "\n\n" << desc << "\n";
-    return 0;
+    return -1;
   }
 
-  if (vm.count("version")) {
+  if (vm->count("version")) {
     std::cout << "SCRAM " << version::core()
         << " (" << version::describe() << ")"
         << "\n\nDependencies:\n";
     std::cout << "   Boost    " << version::boost() << "\n";
     std::cout << "   xml2     " << version::xml2() << "\n";
-    return 0;
+    return -1;
   }
 
-  if (!vm.count("input-file")) {
+  if (!vm->count("input-file")) {
     std::string msg = "No input file given.\n";
     std::cout << msg << std::endl;
     std::cout << usage << "\n\n" << desc << "\n";
     return 1;
   }
 
-  if (vm.count("rare-event") && vm.count("mcub")) {
+  if (vm->count("rare-event") && vm->count("mcub")) {
     std::string msg = "The rare event and MCUB approximations cannot be "
                       "applied at the time.";
     std::cout << msg << "\n" << std::endl;
@@ -93,53 +99,91 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  return 0;
+}
+
+/// Constructs analysis settings from command-line arguments.
+/// @param[in] vm Variables map of program options.
+/// @throws std::exception if vm does not contain a required option.
+///                        At least defaults are expected.
+Settings ConstructSettings(const po::variables_map& vm) {
+  // Analysis settings.
+  Settings settings;
+
+  // Determine if the probability approximation is requested.
+  if (vm.count("rare-event")) {
+    assert(!vm.count("mcub"));
+    settings.approx("rare");
+  } else if (vm.count("mcub")) {
+    settings.approx("mcub");
+  }
+
+  settings.limit_order(vm["limit-order"].as<int>())
+      .num_sums(vm["nsums"].as<int>())
+      .cut_off(vm["cut-off"].as<double>())
+      .mission_time(vm["mission-time"].as<double>())
+      .trials(vm["trials"].as<int>())
+      .fta_type(vm["analysis"].as<std::string>());
+
+  return settings;
+}
+
+/// Main body of commond-line entrance to run the program.
+/// @param[in] vm Variables map of program options.
+/// @throws Error for any type of internal problems like validation.
+/// @throws boost::exception for possible Boost usage errors.
+/// @throws std::exception for any other problems.
+/// @returns 0 for success.
+/// @returns 1 for errored state.
+int RunScram(const po::variables_map& vm) {
+  // Initiate risk analysis.
+  RiskAnalysis* ran = new RiskAnalysis();
+  ran->AddSettings(ConstructSettings(vm));
+
+  // Read input files and setup.
+  std::string input_file = vm["input-file"].as<std::string>();
+
+  // Process input and validate it.
+  ran->ProcessInput(input_file);
+
+  // Stop if only validation is requested.
+  if (vm.count("validate")) {
+    std::cout << "The files are VALID." << std::endl;
+    return 0;
+  }
+
+  // Graph if requested.
+  if (vm.count("graph-only")) {
+    ran->GraphingInstructions();
+    return 0;
+  }
+
+  ran->Analyze();
+
+  // Report results.
+  std::string output = "cli";  // Output to command line by default.
+  if (vm.count("output")) {
+    output = vm["output"].as<std::string>();
+  }
+  ran->Report(output);  // May throw boost exceptions according to Coverity.
+
+  delete ran;
+  return 0;
+}
+
+/// Command line SCRAM entrance.
+/// @returns 0 for success.
+/// @returns 1 for errored state.
+int main(int argc, char* argv[]) {
+  // Parse command line options.
+  po::variables_map vm;
+  int ret = ParseArguments(argc, argv, &vm);
+  if (ret == 1) return 1;
+  if (ret == -1) return 0;
+
   try {  // Catch exceptions only for non-debug builds.
-    // Analysis settings.
-    Settings settings;
 
-    // Determine if the rare event approximation is requested.
-    if (vm.count("rare-event")) settings.approx("rare");
-    // Determine if the MCUB approximation is requested.
-    if (vm.count("mcub")) settings.approx("mcub");
-
-    settings.limit_order(vm["limit-order"].as<int>())
-        .num_sums(vm["nsums"].as<int>())
-        .cut_off(vm["cut-off"].as<double>())
-        .fta_type(vm["analysis"].as<std::string>());
-
-    // Initiate risk analysis.
-    RiskAnalysis* ran = new RiskAnalysis();
-    ran->AddSettings(settings);
-
-    // Read input files and setup.
-    std::string input_file = vm["input-file"].as<std::string>();
-
-    // Process input and validate it.
-    ran->ProcessInput(input_file);
-
-    // Stop if only validation is requested.
-    if (vm.count("validate")) {
-      std::cout << "The files are VALID." << std::endl;
-      return 0;
-    }
-
-    // Graph if requested.
-    if (vm.count("graph-only")) {
-      ran->GraphingInstructions();
-      return 0;
-    }
-
-    // Analyze.
-    ran->Analyze();
-
-    // Report results.
-    std::string output = "cli";  // Output to command line by default.
-    if (vm.count("output")) {
-      output = vm["output"].as<std::string>();
-    }
-    ran->Report(output);  // May throw boost exceptions according to Coverity.
-
-    delete ran;
+    return RunScram(vm);
 
   } catch (IOError& io_err) {
     std::cerr << "SCRAM I/O Error\n" << std::endl;
@@ -152,6 +196,24 @@ int main(int argc, char* argv[]) {
   } catch (ValueError& val_err) {
     std::cerr << "SCRAM Value Error\n" << std::endl;
     std::cerr << val_err.what() << std::endl;
+    return 1;
+  } catch (LogicError& logic_err) {
+    std::cerr << "Bad, bad news. Please report this error. Thank you!\n"
+        << std::endl;
+    std::cerr << "SCRAM Logic Error\n" << std::endl;
+    std::cerr << logic_err.what() << std::endl;
+    return 1;
+  } catch (IllegalOperation& iopp_err) {
+    std::cerr << "Bad, bad news. Please report this error. Thank you!\n"
+        << std::endl;
+    std::cerr << "SCRAM Illegal Operation\n" << std::endl;
+    std::cerr << iopp_err.what() << std::endl;
+    return 1;
+  } catch (InvalidArgument& iarg_err) {
+    std::cerr << "Bad, bad news. Please report this error. Thank you!\n"
+        << std::endl;
+    std::cerr << "SCRAM Invalid Argument Error\n" << std::endl;
+    std::cerr << iarg_err.what() << std::endl;
     return 1;
   } catch (boost::exception& boost_err) {
     std::cerr << "Boost Exception:\n" << std::endl;

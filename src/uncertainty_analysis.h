@@ -20,14 +20,13 @@ typedef boost::shared_ptr<scram::PrimaryEvent> PrimaryEventPtr;
 namespace scram {
 
 class UncertaintyAnalysis {
-
 friend class ::UncertaintyAnalysisTest;
 
  public:
   /// The main constructor of Uncertainty Analysis.
   /// @param[in] nsums The number of sums in the probability series.
   /// @throws ValueError if any of the parameters are invalid.
-  UncertaintyAnalysis(int nsums = 1e6);
+  explicit UncertaintyAnalysis(int nsums = 1e6);
 
   /// Set the databases of primary events with probabilities.
   /// Resets the main primary events database and clears the
@@ -52,6 +51,10 @@ friend class ::UncertaintyAnalysisTest;
   /// The previous data are lost.
   /// These indices will be used for future analysis.
   void AssignIndices();
+
+  /// Populates databases of minimal cut sets with indices of the events.
+  /// @param[in] min_cut_sets Minimal cut sets with event ids.
+  void IndexMcs(const std::set<std::set<std::string> >& min_cut_sets);
 
   /// Calculates A(and)( B(or)C ) relationship for sets using set algebra.
   /// @param[in] el A set of indices of primary events.
