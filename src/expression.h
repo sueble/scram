@@ -18,6 +18,8 @@ namespace scram {
 /// The base class for all sorts of expressions to describe events.
 class Expression {
  public:
+  Expression() : sampled_(false), sampled_value_(0) {}
+
   virtual ~Expression() {}
 
   /// Validates the expression.
@@ -31,6 +33,18 @@ class Expression {
   /// @returns A sampled value of this expression.
   virtual double Sample() = 0;
 
+  /// This routine resets the sampling to get a new values.
+  virtual inline void Reset() { sampled_ = false; }
+
+  /// Indication of constant expression.
+  virtual inline bool IsConstant() { return false; }
+
+ protected:
+  /// Indication if the expression is already sampled.
+  bool sampled_;
+
+  /// The sampled value.
+  double sampled_value_;
 };
 
 typedef boost::shared_ptr<scram::Expression> ExpressionPtr;
@@ -38,6 +52,7 @@ typedef boost::shared_ptr<scram::Expression> ExpressionPtr;
 /// @enum Units
 /// Provides units for parameters.
 enum Units {
+  kUnitless,
   kBool,
   kInt,
   kFloat,
@@ -57,7 +72,7 @@ class Parameter : public Expression, public Element {
   /// Sets the expression of this basic event.
   /// @param[in] name The name of this variable (Case sensitive).
   /// @param[in] expression The expression to describe this event.
-  explicit Parameter(std::string name) : name_(name) {}
+  explicit Parameter(std::string name) : name_(name), unit_(kUnitless) {}
 
   /// Sets the expression of this parameter.
   /// @param[in] expression The expression to describe this parameter.
@@ -80,7 +95,15 @@ class Parameter : public Expression, public Element {
   inline const Units& unit() { return unit_; }
 
   inline double Mean() { return expression_->Mean(); }
-  inline double Sample() { return expression_->Sample(); }
+  inline double Sample() {
+    if (!Expression::sampled_) {
+      Expression::sampled_ = true;
+      Expression::sampled_value_ = expression_->Sample();
+    }
+    return Expression::sampled_value_;
+  }
+
+  inline bool IsConstant() { return expression_->IsConstant(); }
 
  private:
   /// Helper funciton to check for cyclic references in parameters.
@@ -102,7 +125,7 @@ class Parameter : public Expression, public Element {
 /// This is for the system mission time.
 class MissionTime : public Expression {
  public:
-  MissionTime() : mission_time_(-1) {}
+  MissionTime() : mission_time_(-1), unit_(kHours) {}
 
   /// Sets the mission time only once.
   /// @param[in] time The mission time.
@@ -119,6 +142,7 @@ class MissionTime : public Expression {
 
   inline double Mean() { return mission_time_; }
   inline double Sample() { return mission_time_; }
+  inline bool IsConstant() { return true; }
 
  private:
   /// The constant's value.
@@ -143,6 +167,7 @@ class ConstantExpression : public Expression {
   void Validate() {}
   inline double Mean() { return value_; }
   inline double Sample() { return value_; }
+  inline bool IsConstant() { return true; }
 
  private:
   /// The constant's value.
@@ -171,6 +196,10 @@ class ExponentialExpression : public Expression {
   /// @returns A sampled value.
   /// @throws InvalidArgument if sampled failure rate or time is negative.
   double Sample();
+
+  inline bool IsConstant() {
+    return lambda_->IsConstant() && time_->IsConstant();
+  }
 
  private:
   /// Failure rate in hours.
@@ -209,6 +238,11 @@ class GlmExpression : public Expression {
   /// @returns A sampled value.
   /// @throws InvalidArgument if sampled values are invalid.
   double Sample();
+
+  inline bool IsConstant() {
+    return gamma_->IsConstant() && lambda_->IsConstant() &&
+        time_->IsConstant() && mu_->IsConstant();
+  }
 
  private:
   /// Failure rate in hours.
@@ -251,6 +285,11 @@ class WeibullExpression : public Expression {
   /// @returns A sampled value.
   /// @throws InvalidArgument if sampled values are invalid.
   double Sample();
+
+  inline bool IsConstant() {
+    return alpha_->IsConstant() && beta_->IsConstant() && t0_->IsConstant() &&
+        time_->IsConstant();
+  }
 
  private:
   /// Scale parameter.
