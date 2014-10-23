@@ -178,7 +178,7 @@ void RiskAnalysis::Analyze() {
         ProbabilityAnalysisPtr pa(
             new ProbabilityAnalysis(settings_.approx_, settings_.num_sums_,
                                     settings_.cut_off_));
-        pa->UpdateDatabase(it->second->primary_events());
+        pa->UpdateDatabase(it->second->basic_events());
         pa->Analyze(fta->min_cut_sets());
         prob_analyses_.push_back(pa);
 
@@ -186,7 +186,7 @@ void RiskAnalysis::Analyze() {
         UncertaintyAnalysisPtr ua(new UncertaintyAnalysis(settings_.num_sums_,
                                                           settings_.cut_off_,
                                                           settings_.trials_));
-        ua->UpdateDatabase(it->second->primary_events());
+        ua->UpdateDatabase(it->second->basic_events());
         ua->Analyze(fta->min_cut_sets());
         uncertainty_analyses_.push_back(ua);
       }
@@ -1052,7 +1052,7 @@ void RiskAnalysis::ValidateInitialization() {
   for (it_p = primary_events_.begin(); it_p != primary_events_.end(); ++it_p) {
     try {
       it_p->second->parents();
-    } catch (ValueError& err) {
+    } catch (LogicError& err) {
       orphan_primary_events_.insert(it_p->second);
     }
   }
@@ -1118,7 +1118,7 @@ std::string RiskAnalysis::CheckGate(const GatePtr& event) {
   try {
     // This line throws an error if there are no children.
     size = event->children().size();
-  } catch (ValueError& err) {
+  } catch (LogicError& err) {
     msg << event->orig_id() << " : No children detected.";
     return msg.str();
   }

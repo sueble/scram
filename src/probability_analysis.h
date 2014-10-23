@@ -18,7 +18,7 @@
 class ProbabilityAnalysisTest;
 class PerformanceTest;
 
-typedef boost::shared_ptr<scram::PrimaryEvent> PrimaryEventPtr;
+typedef boost::shared_ptr<scram::BasicEvent> BasicEventPtr;
 
 namespace scram {
 
@@ -45,8 +45,9 @@ class ProbabilityAnalysis {
   /// previous information. This information is the main source for
   /// calculations.
   /// Updates internal indexes for events.
-  void UpdateDatabase(const boost::unordered_map<std::string, PrimaryEventPtr>&
-                      primary_events);
+  /// @param[in] basic_events The database of basic event in cut sets.
+  void UpdateDatabase(const boost::unordered_map<std::string, BasicEventPtr>&
+                      basic_events);
 
   /// Performs quantitative analysis on minimal cut sets containing primary
   /// events provided in the databases.
@@ -71,12 +72,14 @@ class ProbabilityAnalysis {
   }
 
   /// @returns Container for minimal cut sets ordered by their probabilities.
+  /// @todo This should be post-processing.
   inline const std::multimap< double, std::set<std::string> >
       ordered_min_sets() {
     return ordered_min_sets_;
   }
 
   /// @returns Container for primary events ordered by their contribution.
+  /// @todo This should be post-processing.
   inline const std::multimap< double, std::string > ordered_primaries() {
     return ordered_primaries_;
   }
@@ -98,15 +101,6 @@ class ProbabilityAnalysis {
   /// turns non-coherent analysis.
   /// @param[in] min_cut_sets Minimal cut sets with event ids.
   void IndexMcs(const std::set<std::set<std::string> >& min_cut_sets);
-
-  /// Calculates a probability of a minimal cut set, whose members are in AND
-  /// relationship with each other. This function assumes independence of each
-  /// member. This functionality is provided for the rare event and MCUB,
-  /// so the method is not as optimized as the others.
-  /// @param[in] min_cut_set A set of indices of primary events.
-  /// @returns The total probability.
-  /// @note O_avg(N) where N is the size of the passed set.
-  double ProbAnd(const std::set<int>& min_cut_set);
 
   /// Calculates a probability of a set of minimal cut sets, which are in OR
   /// relationship with each other. This function is a brute force probability
@@ -173,7 +167,20 @@ class ProbabilityAnalysis {
       std::set< boost::container::flat_set<int> >* combo_set);
 
   /// Importance analysis of events.
-  void PerformImportanceAnalysis();
+  /// @param[in] min_cut_sets Minimal cut sets with indices of primary events.
+  /// @todo This function must aware of approximations.
+  void PerformImportanceAnalysis(
+      const std::set< boost::container::flat_set<int> >& min_cut_sets);
+
+  /// Performes Boolean operation (A and Minimal cut sets). However, this
+  /// method does not reduce the final results to minimal cut sets.
+  /// @param[in] event The index of an event.
+  /// @param[in] min_cut_sets Minimal cut sets with indices of primary events.
+  /// @param[out] final_cut_sets The result of combining with minimal cut sets.
+  void CombineEventAndSets(
+      int event,
+      const std::set< boost::container::flat_set<int> >& min_cut_sets,
+      std::set< boost::container::flat_set<int> >* final_cut_sets);
 
   /// Approximations for probability calculations.
   std::string approx_;
@@ -184,25 +191,23 @@ class ProbabilityAnalysis {
   /// Cut-off probability for minimal cut sets.
   double cut_off_;
 
-  /// Container for primary events.
-  boost::unordered_map<std::string, PrimaryEventPtr> primary_events_;
+  /// Container for basic events.
+  boost::unordered_map<std::string, BasicEventPtr> basic_events_;
 
-  std::vector<PrimaryEventPtr> int_to_primary_;  ///< Indices to primary events.
-  /// Indices of primary events.
-  boost::unordered_map<std::string, int> primary_to_int_;
-  /// Indices of house events with state true.
-  std::set<int> true_house_events_;
-  /// Indices of house events with state false.
-  std::set<int> false_house_events_;
-
+  std::vector<BasicEventPtr> int_to_basic_;  ///< Indices to basic events.
+  /// Indices of basic events.
+  boost::unordered_map<std::string, int> basic_to_int_;
+  /// Indices of basic events.
   std::vector<double> iprobs_;  ///< Holds probabilities of primary events.
 
   /// Minimal cut sets passed for analysis.
   std::set< std::set<std::string> > min_cut_sets_;
 
-  std::vector< std::set<int> > imcs_;  ///< Min cut sets with indices of events.
+  /// Min cut sets with indices of events.
+  std::vector< boost::container::flat_set<int> > imcs_;
   /// Indices min cut sets to strings min cut sets mapping.
-  std::map< std::set<int>, std::set<std::string> > imcs_to_smcs_;
+  /// The same position as in imcs_ container is assumed.
+  std::vector< std::set<std::string> > imcs_to_smcs_;
 
   /// Total probability of the top event.
   double p_total_;
@@ -214,9 +219,14 @@ class ProbabilityAnalysis {
   std::multimap< double, std::set<std::string> > ordered_min_sets_;
 
   /// Container for primary events and their contribution.
-  std::map< std::string, double > imp_of_primaries_;
+  std::map<std::string, double> imp_of_primaries_;
 
-  /// Container for primary events ordered by their contribution.
+  /// Container for primary event importance types.
+  std::map< std::string, std::vector<double> > importance_;
+
+  /// Container for primary events ordered by their contribution of
+  /// Fussel-Vesely.
+  /// @todo This should a post processing in reporting.
   std::multimap< double, std::string > ordered_primaries_;
 
   /// Register warnings.

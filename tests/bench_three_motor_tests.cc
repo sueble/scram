@@ -10,9 +10,6 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   std::string T3 = "t3";
   std::string S1 = "s1";
   std::string T4 = "t4";
-  std::string KT2 = "kt2";
-  std::string KT3 = "kt3";
-  std::string KT1 = "kt1";
   std::string T1 = "t1";
   std::string K2 = "k2";
   std::string T2 = "t2";
@@ -34,102 +31,29 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   double delta_sqr = std::abs(p_total() - 0.0211538);
   EXPECT_TRUE(delta_sqr < 1e-5);
   // Minimal cut set check.
+  // Order 1
+  cut_set.insert(K5);
+  mcs.insert(cut_set);
+  cut_set.clear();
+
   // Order 2
   cut_set.insert(S1);
   cut_set.insert(T2);
   mcs.insert(cut_set);
   cut_set.clear();
 
-  cut_set.insert(K5);
-  cut_set.insert(T3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K5);
-  cut_set.insert(T1);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K5);
-  cut_set.insert(S1);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(K5);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
   cut_set.insert(K1);
   cut_set.insert(T2);
   mcs.insert(cut_set);
   cut_set.clear();
 
-  cut_set.insert(K1);
-  cut_set.insert(K5);
+  cut_set.insert(T1inc);
+  cut_set.insert(T2);
   mcs.insert(cut_set);
   cut_set.clear();
 
   // Order 3
-  cut_set.insert(T1inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(T1);
-  cut_set.insert(T1inc);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(T1inc);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
   // Order 4
-  cut_set.insert(K5);
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K5);
-  cut_set.insert(KT1);
-  cut_set.insert(KT3);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  // Order 5
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  cut_set.insert(T1inc);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT3);
-  cut_set.insert(T1inc);
-  cut_set.insert(T2);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(T1);
   cut_set.insert(T2);
   cut_set.insert(T2inc);
   cut_set.insert(T3inc);
@@ -140,29 +64,11 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   cut_set.insert(KT3inc);
   cut_set.insert(T2);
   cut_set.insert(T2inc);
-  cut_set.insert(T3);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT3inc);
-  cut_set.insert(T1);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
   cut_set.insert(T3inc);
   mcs.insert(cut_set);
   cut_set.clear();
 
   cut_set.insert(KT2inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT2inc);
-  cut_set.insert(T1);
   cut_set.insert(T2);
   cut_set.insert(T2inc);
   cut_set.insert(T4inc);
@@ -173,28 +79,10 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   cut_set.insert(KT3inc);
   cut_set.insert(T2);
   cut_set.insert(T2inc);
-  cut_set.insert(T3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T1);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
   mcs.insert(cut_set);
   cut_set.clear();
 
   cut_set.insert(KT1inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1inc);
-  cut_set.insert(T1);
   cut_set.insert(T2);
   cut_set.insert(T3inc);
   cut_set.insert(T4inc);
@@ -204,30 +92,12 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   cut_set.insert(KT1inc);
   cut_set.insert(KT3inc);
   cut_set.insert(T2);
-  cut_set.insert(T3);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T1);
-  cut_set.insert(T2);
   cut_set.insert(T3inc);
   mcs.insert(cut_set);
   cut_set.clear();
 
   cut_set.insert(KT1inc);
   cut_set.insert(KT2inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(T1);
   cut_set.insert(T2);
   cut_set.insert(T4inc);
   mcs.insert(cut_set);
@@ -237,243 +107,9 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   cut_set.insert(KT2inc);
   cut_set.insert(KT3inc);
   cut_set.insert(T2);
-  cut_set.insert(T3);
   mcs.insert(cut_set);
   cut_set.clear();
 
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T1);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT1inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(T2);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(K2);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  // Order 7
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T4);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T2inc);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T3inc);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(T2);
-  cut_set.insert(T4);
-  cut_set.insert(T4inc);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  cut_set.insert(KT1);
-  cut_set.insert(KT1inc);
-  cut_set.insert(KT2inc);
-  cut_set.insert(KT3);
-  cut_set.insert(KT3inc);
-  cut_set.insert(T2);
-  cut_set.insert(T4);
-  mcs.insert(cut_set);
-  cut_set.clear();
-
-  EXPECT_EQ(54, min_cut_sets().size());
+  EXPECT_EQ(12, min_cut_sets().size());
   EXPECT_EQ(mcs, min_cut_sets());
 }

@@ -70,7 +70,6 @@ class Parameter : public Expression, public Element {
  public:
   /// Sets the expression of this basic event.
   /// @param[in] name The name of this variable (Case sensitive).
-  /// @param[in] expression The expression to describe this event.
   explicit Parameter(std::string name) : name_(name), unit_(kUnitless) {}
 
   /// Sets the expression of this parameter.
@@ -277,7 +276,7 @@ class GlmExpression : public Expression {
 };
 
 /// @class WeibullExpression
-/// Weibull distribution with scale, shap, time shift, and time.
+/// Weibull distribution with scale, shape, time shift, and time.
 class WeibullExpression : public Expression {
  public:
   /// Constructor for Wibull distribution.
@@ -521,7 +520,7 @@ class BetaDeviate : public Expression {
   ExpressionPtr beta_;
 };
 
-/// @class Histrogram
+/// @class Histogram
 /// Histrogram distribution.
 class Histogram : public Expression {
  public:
@@ -530,14 +529,14 @@ class Histogram : public Expression {
   /// @param[in] weights The positive weights of intervals restricted by
   ///                    the upper boundaries. Therefore, the number of
   ///                    weights must be equal to the number of boundaries.
-  /// @todo This description is too flexible and ambiguous;
-  ///       It allows sampling both
+  /// @note This description of histogram sampling is for probabilities mostly.
+  ///       Therefore, it is not flexible. Currently, it allows sampling both
   ///       boundaries and weights. This behavior makes checking for valid
   ///       arrangement of the boundaries mandatory for each sampling.
   ///       Moreover, the first starting point is assumed but not defined.
   ///       The starting point is assumed to be 0, which leaves only positive
   ///       values for boundaries. This behavior is restrictive and should
-  ///       be handled differently.
+  ///       be handled accordingly.
   /// @throws InvalidArgument if boundaries container size is not equal to
   ///                         weights container size.
   Histogram(const std::vector<ExpressionPtr>& boundaries,

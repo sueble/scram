@@ -25,7 +25,7 @@ void FaultTree::AddGate(const GatePtr& gate) {
     const std::map<std::string, GatePtr>* parents;
     try {
       parents = &gate->parents();
-    } catch (ValueError& err) {
+    } catch (LogicError& err) {
       // No parents here.
       throw ValidationError("Gate '" + gate->orig_id() +
                             "' is a dangling gate in" +
@@ -119,6 +119,10 @@ void FaultTree::GetPrimaryEvents(const GatePtr& gate) {
       }
 
       primary_events_.insert(std::make_pair(it->first, primary_event));
+      BasicEventPtr basic_event =
+          boost::dynamic_pointer_cast<BasicEvent>(primary_event);
+      if (basic_event)
+        basic_events_.insert(std::make_pair(it->first, basic_event));
     }
   }
 }
