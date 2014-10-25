@@ -41,12 +41,16 @@ class ProbabilityAnalysisTest : public ::testing::Test {
       flat_set<int> fs(it->begin(), it->end());
       mcs.insert(mcs.end(), fs);
     }
-    return prob_analysis->ProbOr(nsums, &mcs);
+    prob_analysis->pos_terms_.clear();
+    prob_analysis->neg_terms_.clear();
+    prob_analysis->ProbOr(1, nsums, &mcs);
+    return prob_analysis->CalculateTotalProbability();
   }
 
   void CombineElAndSet(const std::set<int>& el,
                        const std::set< std::set<int> >& set,
                        std::set< std::set<int> >* combo_set) {
+    prob_analysis->coherent_ = false;  // General case.
     using boost::container::flat_set;
     std::set< flat_set<int> > mcs;
     std::set< std::set<int> >::const_iterator it;

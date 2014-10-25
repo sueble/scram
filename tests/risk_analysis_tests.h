@@ -25,10 +25,6 @@ class RiskAnalysisTest : public ::testing::Test {
     delete ran;
   }
 
-  std::string& input_file() {
-    return ran->input_file_;
-  }
-
   boost::unordered_map<std::string, GatePtr>& gates() {
     return ran->gates_;
   }
@@ -52,9 +48,9 @@ class RiskAnalysisTest : public ::testing::Test {
     return ran->prob_analyses_[0]->prob_of_min_sets();
   }
 
-  const std::map< std::string, double >& imp_of_primaries() {
+  const std::vector<double>& importance(std::string id) {
     assert(!ran->prob_analyses_.empty());
-    return ran->prob_analyses_[0]->imp_of_primaries();
+    return ran->prob_analyses_[0]->importance().find(id)->second;
   }
 
   bool CheckGate(GatePtr event) {

@@ -5,14 +5,9 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
-#include <fstream>
 #include <iomanip>
-#include <iostream>
-#include <iterator>
-#include <set>
 #include <sstream>
 #include <utility>
-#include <vector>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
@@ -54,8 +49,8 @@ void Reporter::ReportFta(
   out << "\n" << "Minimal Cut Sets" << "\n";
   out << "================\n\n";
   out << std::left;
-  out << std::setw(40) << std::left << "Top Event: "
-      << fta->top_event_->orig_id() << "\n";
+  out << std::setw(40) << std::left << "Top Event: " << fta->top_event_name_
+      << "\n";
   out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
   out << std::setw(40) << "Gate Expansion Time: " << std::setprecision(5)
       << fta->exp_time_ << "s\n";
@@ -63,8 +58,7 @@ void Reporter::ReportFta(
       << fta->mcs_time_ - fta->exp_time_ << "s\n";
   out << std::setw(40) << "Number of Basic Events: "
       << fta->basic_events_.size() << "\n";
-  out << std::setw(40) << "Number of Gates: "
-      << fta->inter_events_.size() + 1 << "\n";
+  out << std::setw(40) << "Number of Gates: " << fta->num_gates_ << "\n";
   out << std::setw(40) << "Limit on order of cut sets: "
       << fta->limit_order_ << "\n";
   out << std::setw(40) << "Minimal Cut Set Maximum Order: "
@@ -137,8 +131,10 @@ void Reporter::ReportProbability(
   out << "====================\n\n";
   out << std::left;
   out << std::setw(40) << "Time: " << pt::second_clock::local_time() << "\n\n";
-  out << std::setw(40) << "Probability Operations Time: "
-      << std::setprecision(5) << prob_analysis->p_time_ << "s\n\n";
+  out << std::setw(40) << "Probability Calculations Time: "
+      << std::setprecision(5) << prob_analysis->p_time_ << "s\n";
+  out << std::setw(40) << "Importance Calculations Time: "
+      << std::setprecision(5) << prob_analysis->imp_time_ << "s\n\n";
   out << std::setw(40) << "Approximation:" << prob_analysis->approx_ << "\n";
   out << std::setw(40) << "Limit on series: " << prob_analysis->nsums_ << "\n";
   out << std::setw(40) << "Cut-off probability for cut sets: "
@@ -351,18 +347,25 @@ void Reporter::ReportImportance(
   out << "\nBasic Event Analysis:\n";
   out << "-----------------------\n";
   out << std::left;
-  out << std::setw(40) << "Event" << std::setw(20) << "Failure Contrib."
-      << "Importance\n\n";
+  out << std::setw(20) << "Event"
+      << std::setw(12) << "DIF"
+      << std::setw(12) << "MIF"
+      << std::setw(12) << "CIF"
+      << std::setw(12) << "RRW" << "RAW"
+      << "\n\n";
   std::multimap < double, std::string >::const_reverse_iterator it_contr;
   for (it_contr = prob_analysis->ordered_primaries_.rbegin();
        it_contr != prob_analysis->ordered_primaries_.rend(); ++it_contr) {
     out << std::left;
-    out << std::setw(40)
+    out << std::setw(20)
         << prob_analysis->basic_events_.find(it_contr->second)->second
-              ->orig_id()
-        << std::setw(20) << it_contr->first
-        << 100 * it_contr->first / prob_analysis->p_total_ << "%\n";
-    out.flush();
+              ->orig_id();
+    for (int i = 0; i < 5; ++i) {
+        if (i < 4) out << std::setw(12);
+        out << std::setprecision(4)
+            << prob_analysis->importance_.find(it_contr->second)->second[i];
+    }
+    out << "\n";
   }
   out.flags(fmt);  // Restore the initial state.
 }

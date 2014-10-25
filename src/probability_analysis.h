@@ -40,6 +40,8 @@ class ProbabilityAnalysis {
   ProbabilityAnalysis(std::string approx = "no", int nsums = 7,
                       double cut_off = 1e-8);
 
+  virtual ~ProbabilityAnalysis() {}
+
   /// Set the databases of primary events with probabilities.
   /// Resets the main primary events database and clears the
   /// previous information. This information is the main source for
@@ -53,7 +55,7 @@ class ProbabilityAnalysis {
   /// events provided in the databases.
   /// @param[in] min_cut_sets Minimal cut sets with string ids of events.
   ///                         Negative event is indicated by "'not' + id"
-  void Analyze(const std::set< std::set<std::string> >& min_cut_sets);
+  virtual void Analyze(const std::set< std::set<std::string> >& min_cut_sets);
 
   /// @returns The total probability calculated by the analysis.
   /// @note The user should make sure that the analysis is actually done.
@@ -65,10 +67,11 @@ class ProbabilityAnalysis {
     return prob_of_min_sets_;
   }
 
-  /// @returns Map with primary events and their contribution.
+  /// @returns Map with primary events and their importance values.
+  ///          The associated vector contains DIF, MIF, CIF, RRW, RAW in order.
   /// @note The user should make sure that the analysis is actually done.
-  inline const std::map< std::string, double >& imp_of_primaries() {
-    return imp_of_primaries_;
+  inline const std::map< std::string, std::vector<double> >& importance() {
+    return importance_;
   }
 
   /// @returns Container for minimal cut sets ordered by their probabilities.
@@ -89,7 +92,7 @@ class ProbabilityAnalysis {
     return warnings_;
   }
 
- private:
+ protected:
   /// Assigns an index to each primary event, and then populates with this
   /// indices new databases and primary to integer converting maps.
   /// The previous data are lost.
@@ -102,19 +105,26 @@ class ProbabilityAnalysis {
   /// @param[in] min_cut_sets Minimal cut sets with event ids.
   void IndexMcs(const std::set<std::set<std::string> >& min_cut_sets);
 
-  /// Calculates a probability of a set of minimal cut sets, which are in OR
+  /// Calculates probabilities using the minimal cut set upper bound (MCUB)
+  /// approximation.
+  /// @param[in] min_cut_sets Sets of indices of primary events.
+  double ProbMcub(
+      const std::vector< boost::container::flat_set<int> >& min_cut_sets);
+
+  /// Generates positive and negative terms of probability equation expansion
+  /// a set of minimal cut sets, which are in OR
   /// relationship with each other. This function is a brute force probability
   /// calculation without approximations.
+  /// @param[in] sign The sign of the series. Negative or positive number.
   /// @param[in] nsums The number of sums in the series.
   /// @param[in] min_cut_sets Sets of indices of primary events.
-  /// @returns The total probability.
   /// @note This function drastically modifies min_cut_sets by deleting
   /// sets inside it. This is for better performance.
   ///
   /// @note O_avg(M*logM*N*2^N) where N is the number of sets, and M is
   /// the average size of the sets.
-  double ProbOr(int nsums,
-                std::set< boost::container::flat_set<int> >* min_cut_sets);
+  void ProbOr(int sign, int nsums,
+              std::set< boost::container::flat_set<int> >* min_cut_sets);
 
   /// Calculates a probability of a minimal cut set, whose members are in AND
   /// relationship with each other. This function assumes independence of each
@@ -135,52 +145,12 @@ class ProbabilityAnalysis {
       const std::set< boost::container::flat_set<int> >& set,
       std::set< boost::container::flat_set<int> >* combo_set);
 
-  /// Calculates a probability of a coherent set of minimal cut sets,
-  /// which are in OR relationship with each other.
-  /// This function is a brute force probability
-  /// calculation without approximations. Coherency is the key assumption.
-  /// @param[in] nsums The number of sums in the series.
-  /// @param[in] min_cut_sets Sets of indices of primary events.
-  /// @returns The total probability.
-  /// @note This function drastically modifies min_cut_sets by deleting
-  /// sets inside it. This is for better performance.
-  double CoherentProbOr(
-      int nsums,
-      std::set< boost::container::flat_set<int> >* min_cut_sets);
+  /// Calculates total probability from the generated probability equation.
+  double CalculateTotalProbability();
 
-  /// Calculates a probability of a minimal cut set, whose members are in AND
-  /// relationship with each other. This function assumes independence of each
-  /// member. Coherency is the key assumption for optimization.
-  /// @param[in] min_cut_set A flat set of indices of primary events.
-  /// @returns The total probability.
-  /// @note O_avg(N) where N is the size of the passed set.
-  double CoherentProbAnd(const boost::container::flat_set<int>& min_cut_set);
-
-  /// Calculates A(and)( B(or)C ) relationship for coherent sets using set
-  /// algebra.
-  /// @param[in] el A set of indices of primary events.
-  /// @param[in] set Sets of indices of primary events.
-  /// @param[out] combo_set A final set resulting from joining el and sets.
-  void CoherentCombineElAndSet(
-      const boost::container::flat_set<int>& el,
-      const std::set< boost::container::flat_set<int> >& set,
-      std::set< boost::container::flat_set<int> >* combo_set);
-
-  /// Importance analysis of events.
-  /// @param[in] min_cut_sets Minimal cut sets with indices of primary events.
+  /// Importance analysis of basic events that are in minimal cut sets.
   /// @todo This function must aware of approximations.
-  void PerformImportanceAnalysis(
-      const std::set< boost::container::flat_set<int> >& min_cut_sets);
-
-  /// Performes Boolean operation (A and Minimal cut sets). However, this
-  /// method does not reduce the final results to minimal cut sets.
-  /// @param[in] event The index of an event.
-  /// @param[in] min_cut_sets Minimal cut sets with indices of primary events.
-  /// @param[out] final_cut_sets The result of combining with minimal cut sets.
-  void CombineEventAndSets(
-      int event,
-      const std::set< boost::container::flat_set<int> >& min_cut_sets,
-      std::set< boost::container::flat_set<int> >* final_cut_sets);
+  void PerformImportanceAnalysis();
 
   /// Approximations for probability calculations.
   std::string approx_;
@@ -197,7 +167,6 @@ class ProbabilityAnalysis {
   std::vector<BasicEventPtr> int_to_basic_;  ///< Indices to basic events.
   /// Indices of basic events.
   boost::unordered_map<std::string, int> basic_to_int_;
-  /// Indices of basic events.
   std::vector<double> iprobs_;  ///< Holds probabilities of primary events.
 
   /// Minimal cut sets passed for analysis.
@@ -208,6 +177,8 @@ class ProbabilityAnalysis {
   /// Indices min cut sets to strings min cut sets mapping.
   /// The same position as in imcs_ container is assumed.
   std::vector< std::set<std::string> > imcs_to_smcs_;
+  /// Container for basic event indices that are in minimial cut sets.
+  std::set<int> mcs_basic_events_;
 
   /// Total probability of the top event.
   double p_total_;
@@ -218,10 +189,8 @@ class ProbabilityAnalysis {
   /// Container for minimal cut sets ordered by their probabilities.
   std::multimap< double, std::set<std::string> > ordered_min_sets_;
 
-  /// Container for primary events and their contribution.
-  std::map<std::string, double> imp_of_primaries_;
-
-  /// Container for primary event importance types.
+  /// Container for basic event importance types.
+  /// The order is DIF, MIF, CIF, RRW, RAW.
   std::map< std::string, std::vector<double> > importance_;
 
   /// Container for primary events ordered by their contribution of
@@ -238,6 +207,12 @@ class ProbabilityAnalysis {
   bool coherent_;  ///< Indication of coherent optimized analysis.
 
   double p_time_;  ///< Time for probability calculations.
+  double imp_time_;  ///< Time for importance calculations.
+
+  /// Positive terms of the probability equation.
+  std::vector< boost::container::flat_set<int> > pos_terms_;
+  /// Negative terms of the probability equation.
+  std::vector< boost::container::flat_set<int> > neg_terms_;
 };
 
 }  // namespace scram
