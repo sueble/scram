@@ -5,11 +5,11 @@
 #include <vector>
 
 #include <boost/exception/all.hpp>
-#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/program_options.hpp>
 
 #include "error.h"
-#include "fault_tree_analysis.h"
+#include "logger.h"
 #include "risk_analysis.h"
 #include "settings.h"
 #include "version.h"
@@ -55,6 +55,7 @@ int ParseArguments(int argc, char* argv[], po::variables_map* vm) {
         ("trials,S", po::value<int>()->default_value(1e3),
          "number of trials for Monte Carlo simulations")
         ("output,o", po::value<std::string>(), "output file")
+        ("log,L", "Turn on logging system")
         ;
 
     po::store(po::parse_command_line(argc, argv, desc), *vm);
@@ -139,6 +140,7 @@ Settings ConstructSettings(const po::variables_map& vm) {
 /// @returns 0 for success.
 /// @returns 1 for errored state.
 int RunScram(const po::variables_map& vm) {
+  if (vm.count("log")) Logger::active() = true;
   // Initiate risk analysis.
   RiskAnalysis* ran = new RiskAnalysis();
   ran->AddSettings(ConstructSettings(vm));

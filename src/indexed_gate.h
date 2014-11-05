@@ -4,22 +4,25 @@
 #ifndef SCRAM_SRC_INDEXED_GATE_H_
 #define SCRAM_SRC_INDEXED_GATE_H_
 
+#include <assert.h>
+
 #include <set>
 #include <string>
-
-#include "event.h"
 
 namespace scram {
 
 /// @class IndexedGate
 /// This gate is for use in IndexedFaultTree.
-/// This gate can be only of OR and AND type.
+/// Intially this gate can represent any type of gate; however,
+/// this gate can be only of OR and AND type at the end of all simplifications
+/// and processing. This gate class helps to process the fault tree before
+/// any complex analysis is done.
 class IndexedGate {
  public:
   /// Creates a gate with its index.
   /// @param[in] index An unique positive index of this gate.
   /// @warning The index is not validated upon instantiation.
-  IndexedGate(int index);
+  explicit IndexedGate(int index);
 
   /// Sets the gate type information.
   /// 1 is for OR gate.
@@ -52,11 +55,6 @@ class IndexedGate {
   /// This function is used to initiate this gate with children.
   /// It is assumed that children are passed in ascending order.
   void InitiateWithChild(int child);
-
-  /// This function is used to initiate this gate with children.
-  void InitiateWithChildren(const std::set<int>& children) {
-    children_ = children;
-  }
 
   /// Adds a child of this gate.
   /// @returns false If there is a complement of the added child.
@@ -100,7 +98,6 @@ class IndexedGate {
     assert(state_ == "normal");
     state_ = "null";
     children_.clear();
-    num_primary_ = 0;
   }
 
   /// Sets the state of this gate to unity.
@@ -108,7 +105,6 @@ class IndexedGate {
     assert(state_ == "normal");
     state_ = "unity";
     children_.clear();
-    num_primary_ = 0;
   }
 
   /// Sets the index of this gate.
@@ -128,13 +124,6 @@ class IndexedGate {
   ///          "normal" by default.
   inline std::string state() const { return state_; }
 
-  /// Sets the discrimination index for primary events.
-  /// @param[in] top_gate The index below which consider primary events.
-  static void top_index(int top_gate) { top_index_ = top_gate; }
-
-  /// @returns The number of primary events.
-  inline int num_primary() const { return num_primary_; }
-
  private:
   /// Type of this gate. Only two choices are allowed: OR, AND.
   int type_;
@@ -153,12 +142,6 @@ class IndexedGate {
 
   /// Vote number for atleast gate.
   int vote_number_;
-
-  /// The index below which the event is considered primary.
-  static int top_index_;
-
-  /// The number of primary events.
-  int num_primary_;
 };
 
 }  // namespace scram

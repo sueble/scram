@@ -3,18 +3,109 @@
 #ifndef SCRAM_SRC_INDEXED_FAULT_TREE_H_
 #define SCRAM_SRC_INDEXED_FAULT_TREE_H_
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
+#include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
 
-#include "event.h"
-#include "indexed_gate.h"
-
-typedef boost::shared_ptr<scram::Gate> GatePtr;
-
 namespace scram {
+
+/// @class SimpleGate
+/// A helper class to be used in indexed fault tree. This gate represents
+/// only positive OR or AND gates with basic event indices and pointers to
+/// other simple gates.
+class SimpleGate {
+ public:
+  typedef boost::shared_ptr<SimpleGate> SimpleGatePtr;
+
+  /// @param[in] type The type of this gate. 1 is OR; 2 is AND.
+  explicit SimpleGate(int type) {
+    assert(type == 1 || type == 2);
+    type_ = type;
+  }
+
+  /// @returns The type of this gate. Either 1 or 2 for OR or AND, respectively.
+  inline int type() {
+    return type_;
+  }
+
+  /// Adds a basic event index at the end of this container.
+  /// This function is specificly given to initiate the gate.
+  /// @param[in] index The index of a basic event.
+  inline void InitiateWithBasic(int index) {
+    basic_events_.insert(basic_events_.end(), index);
+  }
+
+  /// Checks if there is a complement of a given basic event.
+  /// If not, adds a basic event index into children.
+  /// If the resulting set is null with AND gate, gives indication without
+  /// actual addition.
+  /// @returns true If the final gate is not null.
+  /// @returns false If the final set would be null upon addition.
+  inline bool AddBasic(int index) {
+    if (type_ == 2 && basic_events_.count(-index)) return false;
+    basic_events_.insert(index);
+    return true;
+  }
+
+  /// Add a pointer to a child gate.
+  /// This function assumes that the tree does not have complement gates.
+  /// @param[in] gate The pointer to the child gate.
+  inline void AddChildGate(const SimpleGatePtr& gate) {
+    gates_.insert(gate);
+  }
+
+  /// Merges two gate of the same kind. This is designed for two AND gates.
+  /// @returns true If the final gate is not null.
+  /// @returns false If the final set would be null upon addition.
+  inline bool MergeGate(const SimpleGatePtr& gate) {
+    assert(type_ == 2 && gate->type() == 2);
+    std::set<int>::const_iterator it;
+    for (it = gate->basic_events_.begin(); it != gate->basic_events_.end();
+         ++it) {
+      if (basic_events_.count(-*it)) return false;
+      basic_events_.insert(*it);
+    }
+    gates_.insert(gate->gates_.begin(), gate->gates_.end());
+    return true;
+  }
+
+  /// @returns The basic events of this gate.
+  inline const std::set<int>& basic_events() const { return basic_events_; }
+
+  /// Assigns a container of basic events for this gate.
+  /// @param[in] basic_events The basic events for this gate.
+  inline void basic_events(const std::set<int>& basic_events) {
+    basic_events_ = basic_events;
+  }
+
+  /// @returns The child gates container of this gate.
+  inline std::set<SimpleGatePtr>& gates() { return gates_; }
+
+ private:
+  int type_;  ///< Type of this gate.
+  std::set<int> basic_events_;  ///< Container of basic events' indices.
+  std::set<SimpleGatePtr> gates_;  ///< Containter of child gates.
+};
+
+/// @class SetPtrComp
+/// Functor for set pointer comparison.
+struct SetPtrComp
+    : public std::binary_function<const std::set<int>*,
+                                  const std::set<int>*, bool> {
+  /// Operator overload.
+  /// Compares sets for sorting.
+  bool operator()(const std::set<int>* lhs, const std::set<int>* rhs) const {
+    return *lhs < *rhs;
+  }
+};
+
+class Gate;
+class IndexedGate;
 
 /// @class IndexedFaultTree
 /// This class should provide simpler representation of a fault tree
@@ -31,6 +122,8 @@ class IndexedFaultTree {
   // The indices of gates may change, but the indices of basic events must
   // not change.
  public:
+  typedef boost::shared_ptr<Gate> GatePtr;
+
   /// Constructs a simplified fault tree.
   /// @param[in] top_event_id The index of the top event of this tree.
   IndexedFaultTree(int top_event_id, int limit_order);
@@ -62,21 +155,14 @@ class IndexedFaultTree {
   /// @warning This is experimental for coherent trees only.
   void FindMcs();
 
-  inline const std::set<int>& GateChildren(int index) {
-    return indexed_gates_.find(index)->second->children();
-  }
-
-  /// @returns Numbered type of the gate: 1 is OR, 2 is AND.
-  inline int GateType(int index) {
-    return indexed_gates_.find(index)->second->type();
-  }
-
   /// @returns Generated minimal cut sets with basic event indices.
   inline const std::vector< std::set<int> >& GetGeneratedMcs() {
     return imcs_;
   }
 
  private:
+  typedef boost::shared_ptr<SimpleGate> SimpleGatePtr;
+
   /// Start unrolling gates to simplify gates to OR and AND gates.
   void StartUnrollingGates();
 
@@ -136,14 +222,19 @@ class IndexedFaultTree {
   /// @param[out] processed_gates The gates that has already been processed.
   void ProcessNullGates(IndexedGate* gate, std::set<int>* processed_gates);
 
-  /// Expands And layer in preprocessed fault tree.
-  /// @param[in] gate The AND gate to be processed.
-  /// @param[out] next_layer Container for processing next layer AND gates.
-  /// @returns the index of the new expanded gate that should go in place of
-  ///          the provided gate.
-  /// @returns 0 if the provided gate contains only basic events.
-  /// @returns -1 if the provided gate contains no children.
-  int ExpandAndLayer(const IndexedGate* gate, std::vector<int>* next_layer);
+  /// Expands OR layer in preprocessed fault tree.
+  /// @param[out] gate The OR gate to be processed.
+  void ExpandOrLayer(SimpleGatePtr& gate);
+
+  /// Expands AND layer in preprocessed fault tree.
+  /// @param[out] gate The AND gate to be processed into OR gate.
+  void ExpandAndLayer(SimpleGatePtr& gate);
+
+  /// Gathers cut sets from the final tree.
+  /// @param[in] gate The OR gate to start with.
+  /// @param[out] unique_sets The unique cut sets from the tree.
+  void GatherCutSets(const SimpleGatePtr& gate,
+                     std::set< const std::set<int>*, SetPtrComp >* unique_sets);
 
   /// Finds minimal cut sets from cut sets.
   /// Applys rule 4 to reduce unique cut sets to minimal cut sets.
@@ -157,6 +248,13 @@ class IndexedFaultTree {
                int min_order,
                std::vector< std::set<int> >* imcs);
 
+  /// Traverses the fault tree to convert gates into simple gates.
+  /// @param[in] gate_index The index of a gate to start with.
+  /// @param[out] processed_gates Currently processed gates.
+  /// @returns The top simple gate.
+  SimpleGatePtr CreateSimpleTree(int gate_index,
+                                 std::map<int, SimpleGatePtr>* processed_gates);
+
   int top_event_index_;  ///< The index of the top gate of this tree.
   /// All gates of this tree including newly created ones.
   boost::unordered_map<int, IndexedGate*> indexed_gates_;
@@ -165,6 +263,7 @@ class IndexedFaultTree {
   std::vector< std::set<int> > imcs_;  // Min cut sets with indexed events.
   /// Limit on the size of the minimal cut sets for performance reasons.
   int limit_order_;
+  std::set< std::set<int> > one_element_sets_;  // For one element cut sets.
 };
 
 }  // namespace scram
