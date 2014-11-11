@@ -9,7 +9,9 @@ IndexedGate::IndexedGate(int index)
       type_(-1),
       state_("normal"),
       vote_number_(-1),
-      string_type_("finished") {}
+      string_type_("undefined") {
+  std::fill(visits_, visits_ + 3, 0);
+}
 
 void IndexedGate::InitiateWithChild(int child) {
   assert(child != 0);
@@ -22,11 +24,9 @@ bool IndexedGate::AddChild(int child) {
   assert(child != 0);
   assert(state_ == "normal");
   if (children_.count(-child)) {
-    if (type_ == 2) {
-      state_ = "null";  // AND gate becomes NULL.
-      children_.clear();
-      return false;
-    }
+    state_ = type_ == 2 ? "null" : "unity";  // AND gate becomes NULL.
+    children_.clear();
+    return false;
   }
   children_.insert(child);
   return true;

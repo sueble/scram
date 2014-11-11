@@ -44,10 +44,10 @@ class IndexedGate {
   inline void string_type(std::string type) { string_type_ = type; }
 
   /// @returns String type of this gate.
-  inline std::string string_type() { return string_type_; }
+  inline std::string string_type() const { return string_type_; }
 
   /// @returns Vote number.
-  inline int vote_number() { return vote_number_; }
+  inline int vote_number() const { return vote_number_; }
 
   /// Sets the vote number.
   inline void vote_number(int number) { vote_number_ = number; }
@@ -107,6 +107,17 @@ class IndexedGate {
     children_.clear();
   }
 
+  inline void AddParent(int index) {
+    assert(index > 0);
+    parents_.insert(index);
+  }
+
+  inline void EraseParent(int index) {
+    assert(index > 0);
+    assert(parents_.count(index));
+    parents_.erase(index);
+  }
+
   /// Sets the index of this gate.
   inline void index(int index) { index_ = index; }
 
@@ -123,6 +134,35 @@ class IndexedGate {
   /// @returns The state of this gate, which is either "null", or "unity", or
   ///          "normal" by default.
   inline std::string state() const { return state_; }
+
+  /// @returns parents of this gate.
+  inline const std::set<int>& parents() { return parents_; }
+
+  /// @param[in] time The visit time of this gate.
+  /// @returns true If this gate was previously visited.
+  /// @returns false If this is visited and re-visited only once.
+  bool Visit(int time) {
+    assert(time > 0);
+    if (!visits_[0]) {
+      visits_[0] = time;
+    } else if (!visits_[1]) {
+      visits_[1] = time;
+    } else {
+      visits_[2] = time;
+      return true;
+    }
+    return false;
+  }
+
+  /// @returns Visits ordered first, second, and last.
+  const int (&visits())[3] {
+    assert(visits_[0]);
+    assert(visits_[1]);
+    if (!visits_[2]) {
+      visits_[2] = visits_[1];
+    }
+    return visits_;
+  }
 
  private:
   /// Type of this gate. Only two choices are allowed: OR, AND.
@@ -142,6 +182,12 @@ class IndexedGate {
 
   /// Vote number for atleast gate.
   int vote_number_;
+
+  /// This is a traversal vector containting first, second, and last visits.
+  int visits_[3];
+
+  /// Parents of this gate.
+  std::set<int> parents_;
 };
 
 }  // namespace scram
