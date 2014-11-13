@@ -60,6 +60,7 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   correct_inputs.push_back(dir + "orphan_primary_event.xml");
   correct_inputs.push_back(dir + "correct_expressions.xml");
   correct_inputs.push_back(dir + "flavored_types.xml");
+  correct_inputs.push_back(dir + "very_long_mcs.xml");
 
   RiskAnalysis* ran;
 
@@ -67,7 +68,7 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   for (it = correct_inputs.begin(); it != correct_inputs.end(); ++it) {
     ran = new RiskAnalysis();
     EXPECT_NO_THROW(ran->ProcessInput(*it)) << " Filename: " << *it;
-    EXPECT_NO_THROW(ran->Report("cli")) << " Filename: " << *it;
+    EXPECT_NO_THROW(ran->Report("/dev/null")) << " Filename: " << *it;
     delete ran;
   }
   /// @todo Create include tests.

@@ -327,6 +327,17 @@ TEST_F(RiskAnalysisTest, MCUB) {
   EXPECT_DOUBLE_EQ(0.766144, p_total());
 }
 
+// Apply the minimal cut set upper bound approximation for non-coherent tree.
+// This should be a warning.
+TEST_F(RiskAnalysisTest, McubNonCoherent) {
+  std::string with_prob = "./share/scram/input/benchmark/a_and_not_b.xml";
+  // Probability calculations with the MCUB approximation.
+  ran->AddSettings(settings.approx("mcub"));
+  ASSERT_NO_THROW(ran->ProcessInput(with_prob));
+  ASSERT_NO_THROW(ran->Analyze());
+  EXPECT_NEAR(0.08, p_total(), 1e-5);
+}
+
 // Test Monte Carlo Analysis
 TEST_F(RiskAnalysisTest, AnalyzeMC) {
   ran->AddSettings(settings.fta_type("mc"));
@@ -351,4 +362,44 @@ TEST_F(RiskAnalysisTest, Report) {
   // Messing up the output file.
   std::string output = "abracadabra.cadabraabra/output.txt";
   EXPECT_THROW(ran->Report(output), IOError);
+}
+
+// NAND and NOR as a child cases.
+TEST_F(RiskAnalysisTest, ChildNandNorGates) {
+  std::string tree_input = "./share/scram/input/fta/children_nand_nor.xml";
+  ASSERT_NO_THROW(ran->ProcessInput(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  std::set<std::string> mcs_1;
+  std::set<std::string> mcs_2;
+  mcs_1.insert("not pumpone");
+  mcs_1.insert("not pumptwo");
+  mcs_1.insert("not valveone");
+  mcs_2.insert("not pumpone");
+  mcs_2.insert("not valvetwo");
+  mcs_2.insert("not valveone");
+  EXPECT_EQ(2, min_cut_sets().size());
+  EXPECT_EQ(1, min_cut_sets().count(mcs_1));
+  EXPECT_EQ(1, min_cut_sets().count(mcs_2));
+}
+
+// Simple test for several house event propagation.
+TEST_F(RiskAnalysisTest, ManyHouseEvents) {
+  std::string tree_input = "./share/scram/input/fta/constant_propagation.xml";
+  ASSERT_NO_THROW(ran->ProcessInput(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  std::set<std::string> mcs_1;
+  mcs_1.insert("a");
+  mcs_1.insert("b");
+  EXPECT_EQ(1, min_cut_sets().size());
+  EXPECT_EQ(1, min_cut_sets().count(mcs_1));
+}
+
+// Simple test for several constant gate propagation.
+TEST_F(RiskAnalysisTest, ConstantGates) {
+  std::string tree_input = "./share/scram/input/fta/constant_gates.xml";
+  ASSERT_NO_THROW(ran->ProcessInput(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  std::set<std::string> mcs_1;
+  EXPECT_EQ(1, min_cut_sets().size());
+  EXPECT_EQ(1, min_cut_sets().count(mcs_1));
 }
