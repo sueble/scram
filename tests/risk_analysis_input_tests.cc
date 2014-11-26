@@ -101,6 +101,7 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "doubly_defined_basic.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_parameter.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_ccf_group.xml");
+  incorrect_inputs.push_back(dir + "extra_ccf_level_beta_factor.xml");
   incorrect_inputs.push_back(dir + "missing_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_basic_event_definition.xml");
   incorrect_inputs.push_back(dir + "missing_house_event_definition.xml");
@@ -108,6 +109,8 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "missing_bool_constant.xml");
   incorrect_inputs.push_back(dir + "missing_parameter.xml");
   incorrect_inputs.push_back(dir + "missing_gate_definition.xml");
+  incorrect_inputs.push_back(dir + "missing_ccf_level_number.xml");
+  incorrect_inputs.push_back(dir + "missing_ccf_members.xml");
   incorrect_inputs.push_back(dir + "name_clash_basic_gate.xml");
   incorrect_inputs.push_back(dir + "name_clash_house_gate.xml");
   incorrect_inputs.push_back(dir + "name_clash_gate_primary.xml");
@@ -130,6 +133,13 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "invalid_probability.xml");
   incorrect_inputs.push_back(dir + "invalid_expression.xml");
   incorrect_inputs.push_back(dir + "repeated_child.xml");
+  incorrect_inputs.push_back(dir + "alpha_ccf_level_error.xml");
+  incorrect_inputs.push_back(dir + "beta_ccf_level_error.xml");
+  incorrect_inputs.push_back(dir + "mgl_ccf_level_error.xml");
+  incorrect_inputs.push_back(dir + "phi_ccf_wrong_sum.xml");
+  incorrect_inputs.push_back(dir + "ccf_wrong_distribution.xml");
+  incorrect_inputs.push_back(dir + "ccf_negative_factor.xml");
+  incorrect_inputs.push_back(dir + "ccf_more_factors_than_needed.xml");
   RiskAnalysis* ran;
   std::vector<std::string>::iterator it;
   for (it = ioerror_inputs.begin(); it != ioerror_inputs.end(); ++it) {
