@@ -10,15 +10,21 @@ using namespace scram;
 // values and samples in a hard coded way.
 class OpenExpression : public Expression {
  public:
-  explicit OpenExpression(double m = 1, double s = 1) : mean(m), sample(s) {}
+  explicit OpenExpression(double m = 1, double s = 1, double mn = 0,
+                          double mx = 0)
+      : mean(m),
+        sample(s),
+        min(mn),
+        max(mx) {}
   double mean;
   double sample;
+  double min;  // This value is used only if explicitly set non-zero.
+  double max;  // This value is used only if explicitly set non-zero.
   inline double Mean() { return mean; }
   inline double Sample() { return sample; }
-  inline double Max() { return sample; }
-  inline double Min() { return sample; }
+  inline double Max() { return max ? max : sample; }
+  inline double Min() { return min ? min : sample; }
   inline bool IsConstant() { return true; }
-  void Validate() {}
 };
 
 typedef boost::shared_ptr<OpenExpression> OpenExpressionPtr;
@@ -451,4 +457,103 @@ TEST(ExpressionTest, Histogram) {
   EXPECT_EQ(sampled_value, dev->Sample());  // Resampling without resetting.
   ASSERT_NO_THROW(dev->Reset());
   EXPECT_NE(sampled_value, dev->Sample());
+}
+
+// Test for negation of an expression.
+TEST(ExpressionTest, Neg) {
+  OpenExpressionPtr expression(new OpenExpression(10, 8));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Neg(expression)));
+  EXPECT_DOUBLE_EQ(-10, dev->Mean());
+  EXPECT_DOUBLE_EQ(-8, dev->Sample());
+  expression->max = 100;
+  expression->min = 1;
+  EXPECT_DOUBLE_EQ(-1, dev->Max());
+  EXPECT_DOUBLE_EQ(-100, dev->Min());
+}
+
+// Test for addition of expressions.
+TEST(ExpressionTest, Add) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(10, 20)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(30, 40)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(50, 60)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Add(arguments)));
+  EXPECT_DOUBLE_EQ(90, dev->Mean());
+  EXPECT_DOUBLE_EQ(120, dev->Sample());
+  EXPECT_DOUBLE_EQ(120, dev->Max());
+  EXPECT_DOUBLE_EQ(120, dev->Min());
+}
+
+// Test for subtraction of expressions.
+TEST(ExpressionTest, Sub) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(10, 20)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(30, 40)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(50, 60)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Sub(arguments)));
+  EXPECT_DOUBLE_EQ(-70, dev->Mean());
+  EXPECT_DOUBLE_EQ(-80, dev->Sample());
+  EXPECT_DOUBLE_EQ(-80, dev->Max());
+  EXPECT_DOUBLE_EQ(-80, dev->Min());
+}
+
+// Test for multiplication of expressions.
+TEST(ExpressionTest, Mul) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(1, 2, 0.1, 10)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(3, 4, 1, 5)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(5, 6, 2, 6)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Mul(arguments)));
+  EXPECT_DOUBLE_EQ(15, dev->Mean());
+  EXPECT_DOUBLE_EQ(48, dev->Sample());
+  EXPECT_DOUBLE_EQ(0.2, dev->Min());
+  EXPECT_DOUBLE_EQ(300, dev->Max());
+}
+
+// Test for the special case of finding maximum and minimum multiplication.
+TEST(ExpressionTest, MultiplicationMaxAndMin) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(1, 2, -1, 2)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(3, 4, -7, -4)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(5, 6, 1, 5)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(4, 3, -2, 4)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Mul(arguments)));
+  EXPECT_DOUBLE_EQ(60, dev->Mean());
+  EXPECT_DOUBLE_EQ(144, dev->Sample());
+  EXPECT_DOUBLE_EQ(2 * -7 * 5 * 4, dev->Min());
+  EXPECT_DOUBLE_EQ(2 * -7 * 5 * -2, dev->Max());  // Sign matters.
+}
+
+// Test for division of expressions.
+TEST(ExpressionTest, Div) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(1, 2, 0.1, 10)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(3, 4, 1, 5)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(5, 6, 2, 6)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Div(arguments)));
+  EXPECT_DOUBLE_EQ(1.0 / 3 / 5, dev->Mean());
+  EXPECT_DOUBLE_EQ(2.0 / 4 / 6, dev->Sample());
+  EXPECT_DOUBLE_EQ(0.1 / 5 / 6, dev->Min());
+  EXPECT_DOUBLE_EQ(10.0 / 1 / 2, dev->Max());
+}
+
+// Test for the special case of finding maximum and minimum division.
+TEST(ExpressionTest, DivisionMaxAndMin) {
+  std::vector<ExpressionPtr> arguments;
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(1, 2, -1, 2)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(3, 4, -7, -4)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(5, 6, 1, 5)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(4, 3, -2, 4)));
+  ExpressionPtr dev;
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Div(arguments)));
+  EXPECT_DOUBLE_EQ(1.0 / 3 / 5 / 4, dev->Mean());
+  EXPECT_DOUBLE_EQ(2.0 / 4 / 6 / 3, dev->Sample());
+  EXPECT_DOUBLE_EQ(-1.0 / -4 / 1 / -2, dev->Min());
+  EXPECT_DOUBLE_EQ(2.0 / -4 / 1 / -2, dev->Max());
 }
