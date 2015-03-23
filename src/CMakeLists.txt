@@ -5,10 +5,10 @@ CONFIGURE_FILE(version.cc.in "${CMAKE_CURRENT_SOURCE_DIR}/version.cc" @ONLY)
 
 SET(scram_install_dir "${CMAKE_INSTALL_PREFIX}")
 CONFIGURE_FILE(
-    "${CMAKE_CURRENT_SOURCE_DIR}/env.cc.in"
-    "${CMAKE_CURRENT_SOURCE_DIR}/env.cc"
-    @ONLY
-    )
+  "${CMAKE_CURRENT_SOURCE_DIR}/env.cc.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/env.cc"
+  @ONLY
+  )
 ################### End File Configurations ####################
 
 set(SCRAM_CORE_SRC ${SCRAM_CORE_SRC}
@@ -16,10 +16,10 @@ set(SCRAM_CORE_SRC ${SCRAM_CORE_SRC}
   "${CMAKE_CURRENT_SOURCE_DIR}/version.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/error.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/settings.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/config.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/element.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/expression.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/event.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/gate.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/ccf_group.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/indexed_gate.cc"

@@ -12,11 +12,10 @@ TEST_F(RiskAnalysisTest, SmallTree) {
   std::string e4 = "e4";
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
-  settings.fta_type("mc");
+  settings.uncertainty_analysis(true);
   ran->AddSettings(settings);
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   // Minimal cut set check.
   cut_set.insert(e1);
   cut_set.insert(e2);

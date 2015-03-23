@@ -19,12 +19,7 @@ set(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SCRAM_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src")
 set(SCRAM_TEST_DIR "${PROJECT_SOURCE_DIR}/tests")
 
-# This makes all the libraries build as SHARED for Linux/Unix only
 set(BUILD_SHARED_LIBS TRUE)  # Change this for static building.
-if(CYGWIN)
-  set(BUILD_SHARED_LIBS FALSE)
-  add_definitions(-DEMBED_SCHEMA)
-endif()
 
 # Linking of external libraries, such as BOOST.
 set(USE_STATIC_LIBS OFF)  # Change this for static building
@@ -111,9 +106,9 @@ find_package(Boost ${BOOST_MIN_VERSION} COMPONENTS
   REQUIRED)
 
 if(USE_STATIC_LIBS)
-   message(STATUS "Linking against boost static libraries")
+  message(STATUS "Linking against boost static libraries")
 else()
-   message(STATUS "Linking against boost dynamic libraries")
+  message(STATUS "Linking against boost dynamic libraries")
 endif()
 
 message("--    Boost Root: ${Boost_ROOT}")

@@ -10,9 +10,9 @@ TEST_F(RiskAnalysisTest, A_OR_NOT_A) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(1, p_total());  // Total prob check.
   // Minimal cut set check.
   // Special case of one empty cut set in a container.
@@ -29,9 +29,9 @@ TEST_F(RiskAnalysisTest, A_OR_NOT_B) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0.82, p_total());  // Total prob check.
   // Minimal cut set check.
   cut_set.insert(A);
@@ -50,9 +50,9 @@ TEST_F(RiskAnalysisTest, A_AND_NOT_A) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0, p_total());  // Total prob check.
   // Minimal cut set check.
   EXPECT_EQ(0, min_cut_sets().size());
@@ -66,9 +66,9 @@ TEST_F(RiskAnalysisTest, A_AND_NOT_B) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0.08, p_total());  // Total prob check.
   // Minimal cut set check.
   cut_set.insert(A);
@@ -86,9 +86,9 @@ TEST_F(RiskAnalysisTest, A_OR_NOT_AB) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0.28, p_total());  // Total prob check.
   // Minimal cut set check.
   cut_set.insert(A);
@@ -104,22 +104,20 @@ TEST_F(RiskAnalysisTest, A_OR_NOT_AB) {
 // Uncertainty report for Unity case.
 TEST_F(RiskAnalysisTest, MC_A_OR_NOT_A) {
   std::string tree_input = "./share/scram/input/benchmark/a_or_not_a.xml";
-  ran->AddSettings(settings.fta_type("mc"));
+  ran->AddSettings(settings.uncertainty_analysis(true));
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
 }
 
 // [A OR NOT B] FTA MC
 TEST_F(RiskAnalysisTest, MC_A_OR_NOT_B) {
-  ran->AddSettings(settings.fta_type("mc"));
+  ran->AddSettings(settings.uncertainty_analysis(true));
   std::string tree_input = "./share/scram/input/benchmark/a_or_not_b.xml";
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
 }
 
 // Repeated negative gate expansion.
@@ -132,7 +130,6 @@ TEST_F(RiskAnalysisTest, MultipleParentNegativeGate) {
 
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   // Minimal cut set check.
   cut_set.insert("not " + A);
   mcs.insert(cut_set);
@@ -146,9 +143,9 @@ TEST_F(RiskAnalysisTest, NAND_UNITY) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(1, p_total());  // Total prob check.
   // Minimal cut set check.
   // Special case of one empty cut set in a container.
@@ -164,9 +161,9 @@ TEST_F(RiskAnalysisTest, OR_UNITY) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(1, p_total());  // Total prob check.
   // Minimal cut set check.
   // Special case of one empty cut set in a container.
@@ -182,10 +179,10 @@ TEST_F(RiskAnalysisTest, HOUSE_UNITY) {
   std::set<std::string> cut_set;
   std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->GraphingInstructions("/dev/null"));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(1, p_total());  // Total prob check.
   // Minimal cut set check.
   // Special case of one empty cut set in a container.
@@ -198,10 +195,10 @@ TEST_F(RiskAnalysisTest, HOUSE_UNITY) {
 TEST_F(RiskAnalysisTest, HOUSE_NULL) {
   std::string tree_input =
       "./share/scram/input/benchmark/null.xml";
+  ran->AddSettings(settings.probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->GraphingInstructions("/dev/null"));
   ASSERT_NO_THROW(ran->Analyze());
-  ASSERT_NO_THROW(ran->Report("/dev/null"));
   EXPECT_DOUBLE_EQ(0, p_total());  // Total prob check.
   // Minimal cut set check.
   // Special case of one empty cut set in a container.
