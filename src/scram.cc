@@ -111,7 +111,7 @@ int ParseArguments(int argc, char* argv[], po::variables_map* vm) {
 
 /// Updates analysis settings from command-line arguments.
 /// @param[in] vm Variables map of program options.
-/// @param[in/out] settings Pre-configured or default settings.
+/// @param[in,out] settings Pre-configured or default settings.
 /// @throws std::exception if vm does not contain a required option.
 ///                        At least defaults are expected.
 void ConstructSettings(const po::variables_map& vm, Settings* settings) {
@@ -136,7 +136,7 @@ void ConstructSettings(const po::variables_map& vm, Settings* settings) {
     settings->uncertainty_analysis(vm["uncertainty"].as<bool>());
   if (vm.count("probability"))
     settings->probability_analysis(vm["probability"].as<bool>());
-  if (vm.count("ccf")) settings->ccf_analysis(vm["ccf"].as<bool>());;
+  if (vm.count("ccf")) settings->ccf_analysis(vm["ccf"].as<bool>());
 }
 
 /// Main body of commond-line entrance to run the program.
@@ -183,7 +183,7 @@ int RunScram(const po::variables_map& vm) {
   ran->ProcessInputFiles(input_files);
 
   // Stop if only validation is requested.
-  if (vm.count("validate")) {
+  if (vm.count("validate-only")) {
     std::cout << "The files are VALID." << std::endl;
     return 0;
   }
