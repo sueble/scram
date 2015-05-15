@@ -11,7 +11,7 @@ addons:
     project:
       name: "rakhimov/scram"
     # description: "Simplified Command-line Risk Analysis Multi-tool"
-    notification_email: "olzhasrakhimov7@gmail.com"
+    notification_email: "ol.rakhimov@gmail.com"
     build_command_prepend: "cmake .."
     build_command: "make -j 2"
     branch_pattern: "coverity-scan"
