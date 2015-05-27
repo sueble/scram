@@ -2,6 +2,8 @@
 /// Implementation of risk analysis handler.
 #include "risk_analysis.h"
 
+#include <ctime>
+
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -126,7 +128,7 @@ void RiskAnalysis::Analyze() {
 
   // Set the seed for the pseudo-random number generator if given explicitly.
   // Otherwise it defaults to the current time.
-  if (settings_.seed_ >=0 ) Random::seed(settings_.seed_);
+  if (settings_.seed_ >= 0) Random::seed(settings_.seed_);
 
   std::map<std::string, FaultTreePtr>::iterator it;
   for (it = fault_trees_.begin(); it != fault_trees_.end(); ++it) {
@@ -1412,7 +1414,7 @@ std::string RiskAnalysis::CheckMissingParameters() {
 }
 
 void RiskAnalysis::ValidateExpressions() {
-  // Check for cyclicity in parameters.
+  // Check for cycles in parameters.
   if (!parameters_.empty()) {
     boost::unordered_map<std::string, ParameterPtr>::iterator it;
     for (it = parameters_.begin(); it != parameters_.end(); ++it) {

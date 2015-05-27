@@ -76,7 +76,7 @@ class Gate : public Event {
   /// @throws LogicError if the gate type is being re-assigned.
   void type(std::string type);
 
-  /// @returns The vote number iff the gate is vote.
+  /// @returns The vote number if and only if the gate is vote.
   /// @throws LogicError if the vote number is not yet assigned.
   int vote_number();
 
@@ -87,6 +87,12 @@ class Gate : public Event {
   /// @note (Children number > vote number)should be checked outside of
   ///        this class.
   void vote_number(int vnumber);
+
+  /// @returns The mark of this gate node. Empty string for no mark.
+  inline std::string mark() { return mark_; }
+
+  /// Sets the mark for this gate node.
+  inline void mark(std::string new_mark) { mark_ = new_mark; }
 
   /// Adds a child event into the children list.
   /// @param[in] child A pointer to a child event.
@@ -104,6 +110,9 @@ class Gate : public Event {
 
   /// Vote number for the vote gate.
   int vote_number_;
+
+  /// The mark for traversal. This mark is useful for toposort.
+  std::string mark_;
 
   /// The children of this gate.
   std::map<std::string, boost::shared_ptr<Event> > children_;

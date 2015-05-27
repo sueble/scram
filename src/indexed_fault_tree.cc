@@ -160,7 +160,7 @@ void IndexedFaultTree::InitiateIndexedFaultTree(
     if (gate->index() > new_gate_index_) new_gate_index_ = gate->index() + 1;
   }
 
-  LOG() << "Unrolling basic gates.";
+  LOG() << "Unrolling gates.";
   assert(top_event_sign_ == 1);
   IndexedFaultTree::UnrollGates();
   LOG() << "Finished unrolling gates.";
@@ -197,7 +197,7 @@ void IndexedFaultTree::ProcessIndexedFaultTree(int num_basic_events) {
   } while (IndexedFaultTree::ProcessConstGates(top, &processed_gates));
   // After this point there should not be null AND or unity OR gates,
   // and the tree structure should be repeating OR and AND.
-  // All gates are positive, and each gate has atleast two children.
+  // All gates are positive, and each gate has at least two children.
   if (top->children().empty()) return;  // This is null or unity.
   // Detect original modules for processing.
   IndexedFaultTree::DetectModules(num_basic_events);
@@ -311,7 +311,7 @@ void IndexedFaultTree::FindMcs() {
 }
 
 void IndexedFaultTree::UnrollGates() {
-  // Handle spacial case for a top event.
+  // Handle special case for a top event.
   IndexedGatePtr top_gate = indexed_gates_.find(top_event_index_)->second;
   std::string type = top_gate->string_type();
   assert(type != "undefined");
@@ -582,7 +582,7 @@ void IndexedFaultTree::PropagateComplements(
     std::set<int>* processed_gates) {
   // If the child gate is complement, then create a new gate that propagates
   // its sign to its children and itself becomes non-complement.
-  // Keep track of complement gates for optimization of repeted complements.
+  // Keep track of complement gates for optimization of repeated complements.
   std::set<int>::const_iterator it;
   for (it = gate->children().begin(); it != gate->children().end();) {
     if (std::abs(*it) > gate_index_) {
@@ -708,7 +708,7 @@ bool IndexedFaultTree::JoinGates(const IndexedGatePtr& gate,
 void IndexedFaultTree::DetectModules(int num_basic_events) {
   // At this stage only AND/OR gates are present.
   // All one element gates and non-coherent gates are converted and processed.
-  // All constants are propagated and there is only gates and basic events.
+  // All constants are propagated and there are only gates and basic events.
   // First stage, traverse the tree depth-first for gates and indicate
   // visit time for each node.
 
