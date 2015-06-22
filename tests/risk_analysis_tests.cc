@@ -19,25 +19,28 @@ TEST_F(RiskAnalysisTest, ProcessInput) {
   EXPECT_EQ(1, gates().count("trainone"));
   EXPECT_EQ(1, gates().count("traintwo"));
   EXPECT_EQ(1, gates().count("topevent"));
-  EXPECT_EQ(4, primary_events().size());
-  EXPECT_EQ(1, primary_events().count("pumpone"));
-  EXPECT_EQ(1, primary_events().count("pumptwo"));
-  EXPECT_EQ(1, primary_events().count("valveone"));
-  EXPECT_EQ(1, primary_events().count("valvetwo"));
+  EXPECT_EQ(4, basic_events().size());
+  EXPECT_EQ(1, basic_events().count("pumpone"));
+  EXPECT_EQ(1, basic_events().count("pumptwo"));
+  EXPECT_EQ(1, basic_events().count("valveone"));
+  EXPECT_EQ(1, basic_events().count("valvetwo"));
+  if (gates().count("topevent")) {
+    GatePtr top = gates().find("topevent")->second;
+    EXPECT_EQ("topevent", top->id());
+    ASSERT_NO_THROW(top->formula()->type());
+    EXPECT_EQ("and", top->formula()->type());
+    EXPECT_EQ(2, top->formula()->event_args().size());
+  }
   if (gates().count("trainone")) {
     GatePtr inter = gates().find("trainone")->second;
     EXPECT_EQ("trainone", inter->id());
-    ASSERT_NO_THROW(inter->type());
-    EXPECT_EQ("or", inter->type());
-    ASSERT_NO_THROW(inter->parents());
-    EXPECT_EQ("topevent", inter->parents().begin()->first);
+    ASSERT_NO_THROW(inter->formula()->type());
+    EXPECT_EQ("or", inter->formula()->type());
+    EXPECT_EQ(2, inter->formula()->event_args().size());
   }
-  if (primary_events().count("valveone")) {
-    PrimaryEventPtr primary = primary_events().find("valveone")->second;
+  if (basic_events().count("valveone")) {
+    BasicEventPtr primary = basic_events().find("valveone")->second;
     EXPECT_EQ("valveone", primary->id());
-    ASSERT_NO_THROW(primary->parents());
-    EXPECT_EQ(1, primary->parents().size());
-    EXPECT_EQ(1, primary->parents().count("trainone"));
     ASSERT_NO_THROW(primary->type());
     EXPECT_EQ("basic", primary->type());
   }
@@ -70,18 +73,15 @@ TEST_F(RiskAnalysisTest, GraphingInstructions) {
   tree_input.push_back("./share/scram/input/fta/correct_tree_input.xml");
   tree_input.push_back("./share/scram/input/fta/graphing.xml");
   tree_input.push_back("./share/scram/input/fta/flavored_types.xml");
+  tree_input.push_back("./share/scram/input/fta/nested_formula.xml");
 
   std::vector<std::string>::iterator it;
   for (it = tree_input.begin(); it != tree_input.end(); ++it) {
     delete ran;
     ran = new RiskAnalysis();
     ASSERT_NO_THROW(ran->ProcessInput(*it));
-    ASSERT_NO_THROW(ran->GraphingInstructions("/dev/null"));
+    ASSERT_NO_THROW(ran->GraphingInstructions());
   }
-
-  // Messing up the input file.
-  std::string output = "abracadabra.cadabraabra/graphing.dot";
-  EXPECT_THROW(ran->GraphingInstructions(output), IOError);
 }
 
 // Test Analysis of Two train system.
@@ -89,6 +89,7 @@ TEST_F(RiskAnalysisTest, AnalyzeDefault) {
   std::string tree_input = "./share/scram/input/fta/correct_tree_input.xml";
   std::string with_prob =
       "./share/scram/input/fta/correct_tree_input_with_probs.xml";
+  std::string nested_input = "./share/scram/input/fta/nested_formula.xml";
   ASSERT_NO_THROW(ran->ProcessInput(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
   std::set<std::string> mcs_1;
@@ -103,6 +104,17 @@ TEST_F(RiskAnalysisTest, AnalyzeDefault) {
   mcs_3.insert("valveone");
   mcs_4.insert("valveone");
   mcs_4.insert("valvetwo");
+  EXPECT_EQ(4, min_cut_sets().size());
+  EXPECT_EQ(1, min_cut_sets().count(mcs_1));
+  EXPECT_EQ(1, min_cut_sets().count(mcs_2));
+  EXPECT_EQ(1, min_cut_sets().count(mcs_3));
+  EXPECT_EQ(1, min_cut_sets().count(mcs_4));
+
+  // Nested version.
+  delete ran;
+  ran = new RiskAnalysis();
+  ASSERT_NO_THROW(ran->ProcessInput(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
   EXPECT_EQ(4, min_cut_sets().size());
   EXPECT_EQ(1, min_cut_sets().count(mcs_1));
   EXPECT_EQ(1, min_cut_sets().count(mcs_2));
@@ -207,7 +219,7 @@ TEST_F(RiskAnalysisTest, MCUB) {
 // Apply the minimal cut set upper bound approximation for non-coherent tree.
 // This should be a warning.
 TEST_F(RiskAnalysisTest, McubNonCoherent) {
-  std::string with_prob = "./share/scram/input/benchmark/a_and_not_b.xml";
+  std::string with_prob = "./share/scram/input/core/a_and_not_b.xml";
   // Probability calculations with the MCUB approximation.
   ran->AddSettings(settings.approx("mcub").probability_analysis(true));
   ASSERT_NO_THROW(ran->ProcessInput(with_prob));
@@ -236,8 +248,7 @@ TEST_F(RiskAnalysisTest, ReportIOError) {
 
 // Reporting of the default analysis for MCS only without probabilities.
 TEST_F(RiskAnalysisTest, ReportDefaultMCS) {
-  std::string tree_input =
-      "./share/scram/input/fta/correct_tree_input.xml";
+  std::string tree_input = "./share/scram/input/fta/correct_tree_input.xml";
 
   std::stringstream schema;
   std::string schema_path = Env::report_schema();
@@ -327,8 +338,7 @@ TEST_F(RiskAnalysisTest, ReportUncertaintyResults) {
 
 // Reporting of CCF analysis.
 TEST_F(RiskAnalysisTest, ReportCCF) {
-  std::string tree_input =
-      "./share/scram/input/benchmark/mgl_ccf.xml";
+  std::string tree_input = "./share/scram/input/core/mgl_ccf.xml";
 
   std::stringstream schema;
   std::string schema_path = Env::report_schema();
@@ -352,8 +362,7 @@ TEST_F(RiskAnalysisTest, ReportCCF) {
 
 // Reporting of Negative events in MCS.
 TEST_F(RiskAnalysisTest, ReportNegativeEvent) {
-  std::string tree_input =
-      "./share/scram/input/benchmark/a_or_not_b.xml";
+  std::string tree_input = "./share/scram/input/core/a_or_not_b.xml";
 
   std::stringstream schema;
   std::string schema_path = Env::report_schema();
@@ -400,8 +409,7 @@ TEST_F(RiskAnalysisTest, ReportAll) {
 
 // Reporting of orphan primary events.
 TEST_F(RiskAnalysisTest, ReportOrphanPrimaryEvents) {
-  std::string tree_input =
-      "./share/scram/input/fta/orphan_primary_event.xml";
+  std::string tree_input = "./share/scram/input/fta/orphan_primary_event.xml";
 
   std::stringstream schema;
   std::string schema_path = Env::report_schema();
@@ -422,8 +430,7 @@ TEST_F(RiskAnalysisTest, ReportOrphanPrimaryEvents) {
 
 // Reporting of unused parameters.
 TEST_F(RiskAnalysisTest, ReportUnusedParameters) {
-  std::string tree_input =
-      "./share/scram/input/fta/unused_parameter.xml";
+  std::string tree_input = "./share/scram/input/fta/unused_parameter.xml";
 
   std::stringstream schema;
   std::string schema_path = Env::report_schema();

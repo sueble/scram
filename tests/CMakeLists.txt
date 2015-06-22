@@ -22,15 +22,15 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}")
 
 include_directories(${SCRAM_CORE_INCLUDE_DIRS})
 
-# To add a new file, just add it to this list.  Any GoogleTests inside will be automatically
-# added to ctest.
+# To add a new file, just add it to this list.
+# Any GoogleTests inside will be automatically added to ctest.
 set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
+  "${CMAKE_CURRENT_SOURCE_DIR}/random_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/xml_parser_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/settings_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/config_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/element_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/event_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/xml_parser_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/random_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/expression_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/ccf_group_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_tests.cc"
@@ -39,12 +39,7 @@ set(SCRAM_CORE_TEST_SOURCE ${SCRAM_CORE_TEST_SOURCE}
   "${CMAKE_CURRENT_SOURCE_DIR}/uncertainty_analysis_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis_input_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_abc_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_abbc_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_not_gate_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_xor_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_atleast_tests.cc"
-  "${CMAKE_CURRENT_SOURCE_DIR}/bench_ccf_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/bench_core_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_two_train_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_lift_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/bench_ne574_tests.cc"
@@ -87,7 +82,7 @@ install(FILES ${header_files}
   COMPONENT testing
   )
 
-# read tests after building the driver, and add them to ctest
+# Read tests after building the driver, and add them to ctest.
 set(tgt "scram_tests")
 add_custom_command(TARGET ${tgt}
   POST_BUILD
@@ -99,7 +94,7 @@ add_custom_command(TARGET ${tgt}
   VERBATIM
   )
 
-# copy input files into build directory for testing
+# Copy test input files into the shared directory for testing.
 install(DIRECTORY
   "${CMAKE_CURRENT_SOURCE_DIR}/input"
   DESTINATION share/scram

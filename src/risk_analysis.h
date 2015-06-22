@@ -65,17 +65,12 @@ class RiskAnalysis {
   /// @throws IOError if an input file is not accessible.
   void ProcessInputFiles(const std::vector<std::string>& xml_files);
 
-  /// Graphing or other visual resources for the analysis if applicable.
-  /// Outputs instructions for Graphviz dot to create a fault tree.
-  /// Uses the standard output as destination.
+  /// Provides graphing instructions for each fault tree initialized in
+  /// the analysis. All top events from fault trees are processed into output
+  /// files named with fault tree and top event names.
+  /// @throws IOError if any output file cannot be accessed for writing.
   /// @note This function must be called only after initialization of the tree.
-  inline void GraphingInstructions() { GraphingInstructions(std::cout); }
-
-  /// Outputs graphing instructions to a specified file.
-  /// param[out] output The output destination.
-  /// @note This function must be called only after initialization of the tree.
-  /// @throws IOError if the output file is not accessible.
-  void GraphingInstructions(std::string output);
+  void GraphingInstructions();
 
   /// Performs the main analysis operations.
   /// Analyzes the fault tree and performs computations.
@@ -101,6 +96,7 @@ class RiskAnalysis {
   typedef boost::shared_ptr<Element> ElementPtr;
   typedef boost::shared_ptr<Event> EventPtr;
   typedef boost::shared_ptr<Gate> GatePtr;
+  typedef boost::shared_ptr<Formula> FormulaPtr;
   typedef boost::shared_ptr<PrimaryEvent> PrimaryEventPtr;
   typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
   typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
@@ -148,50 +144,50 @@ class RiskAnalysis {
 
   /// Registers a gate for later definition.
   /// @param[in] gate_node XML element defining the gate.
-  /// @param[in/out] ft FaultTree under which this gate is defined.
+  /// @param[in,out] ft FaultTree under which this gate is defined.
   void RegisterGate(const xmlpp::Element* gate_node, const FaultTreePtr& ft);
 
   /// Defines a gate for this analysis.
   /// @param[in] gate_node XML element defining the gate.
-  /// @param[in/out] gate Registered gate ready to be defined.
+  /// @param[in,out] gate Registered gate ready to be defined.
   void DefineGate(const xmlpp::Element* gate_node, const GatePtr& gate);
 
-  /// Processes the formula of a gate to be defined.
-  /// Currently only one layer formula is supported.
-  /// @param[in] gate The main gate to be defined with the formula.
-  /// @param[in] events The XML node list of children of the gate definition.
-  void ProcessFormula(const GatePtr& gate, const xmlpp::NodeSet& events);
+  /// Creates a Boolean formula from the XML elements describing the formula
+  /// with events and other nested formulas.
+  /// @param[in] gate_node XML element defining the formula.
+  /// @returns Boolean formula that is registered.
+  /// @throws ValidationError if the defined formula is not valid.
+  FormulaPtr GetFormula(const xmlpp::Element* formula_node);
 
-  /// Process [event name=id] cases inside of a one layer gate description.
+  /// Processes the arguments of a formula with nodes and formulas.
+  /// @param[in] formula_node The XML element with children as arguments.
+  /// @param[in/out] formula The formula to be defined by the arguments.
+  /// @throws ValidationError if repeated arguments are identified.
+  void ProcessFormula(const xmlpp::Element* formula_node,
+                      const FormulaPtr& formula);
+
+  /// Process [event name=id] cases inside of a one layer formula description.
   /// @param[in] event XML element defining this event.
-  /// @param[in] gate The main gate to be defined with the event as its child.
-  /// @param[out] child The child the currently processed gate.
-  void ProcessFormulaEvent(const xmlpp::Element* event,
-                           const GatePtr& gate, EventPtr& child);
+  /// @param[out] child The child the currently processed formula.
+  void ProcessFormulaEvent(const xmlpp::Element* event, EventPtr& child);
 
   /// Process [basic-event name=id] cases inside of a one layer
-  /// gate description.
+  /// formula description.
   /// @param[in] event XML element defining this event.
-  /// @param[in] gate The main gate to be defined with the event as its child.
-  /// @param[out] child The child the currently processed gate.
-  void ProcessFormulaBasicEvent(const xmlpp::Element* event,
-                                const GatePtr& gate, EventPtr& child);
+  /// @param[out] child The child the currently processed formula.
+  void ProcessFormulaBasicEvent(const xmlpp::Element* event, EventPtr& child);
 
   /// Process [house-event name=id] cases inside of a one layer
-  /// gate description.
+  /// formula description.
   /// @param[in] event XML element defining this event.
-  /// @param[in] gate The main gate to be defined with the event as its child.
-  /// @param[out] child The child the currently processed gate.
-  void ProcessFormulaHouseEvent(const xmlpp::Element* event,
-                                const GatePtr& gate, EventPtr& child);
+  /// @param[out] child The child the currently processed formula.
+  void ProcessFormulaHouseEvent(const xmlpp::Element* event, EventPtr& child);
 
   /// Process [gate name=id]cases inside of a one layer
-  /// gate description.
+  /// formula description.
   /// @param[in] event XML element defining this event.
-  /// @param[in] gate The main gate to be defined with the event as its child.
-  /// @param[out] child The child the currently processed gate.
-  void ProcessFormulaGate(const xmlpp::Element* event, const GatePtr& gate,
-                          EventPtr& child);
+  /// @param[out] child The child the currently processed formula.
+  void ProcessFormulaGate(const xmlpp::Element* event, EventPtr& child);
 
   /// Registers a basic event for later definition.
   /// @param[in] event_node XML element defining the event.
@@ -200,7 +196,7 @@ class RiskAnalysis {
 
   /// Defines a basic event for this analysis.
   /// @param[in] event_node XML element defining the event.
-  /// @param[in/out] basic_event Registered basic event ready to be defined.
+  /// @param[in,out] basic_event Registered basic event ready to be defined.
   /// @throws ValidationError if there is no expression for this basic event.
   void DefineBasicEvent(const xmlpp::Element* event_node,
                         const BasicEventPtr& basic_event);
@@ -218,16 +214,13 @@ class RiskAnalysis {
 
   /// Defines a variable or parameter.
   /// @param[in] param_node XML element defining the parameter.
-  /// @param[in/out] parameter Registered parameter to be defined.
+  /// @param[in,out] parameter Registered parameter to be defined.
   void DefineParameter(const xmlpp::Element* param_node,
                        const ParameterPtr& parameter);
 
   /// Processes Expression definitions in input file.
   /// @param[in] expr_element XML expression element containing the definition.
-  /// @param[out] expression Expression described in XML input expression node.
-  /// @throws ValidationError if the expression is not supported.
-  void GetExpression(const xmlpp::Element* expr_element,
-                     ExpressionPtr& expression);
+  ExpressionPtr GetExpression(const xmlpp::Element* expr_element);
 
   /// Processes Constant Expression definitions in input file.
   /// @param[in] expr_element XML expression element containing the definition.
@@ -256,7 +249,7 @@ class RiskAnalysis {
 
   /// Defines a common cause failure group for the analysis.
   /// @param[in] ccf_node XML element defining CCF group.
-  /// @param[in/out] ccf_group Registered CCF group to be defined.
+  /// @param[in,out] ccf_group Registered CCF group to be defined.
   void DefineCcfGroup(const xmlpp::Element* ccf_node,
                       const CcfGroupPtr& ccf_group);
 
@@ -295,12 +288,6 @@ class RiskAnalysis {
   /// @throws ValidationError if the second layer members contain mistakes.
   void CheckSecondLayer();
 
-  /// Verifies if gates are initialized correctly.
-  /// @returns A warning message with a list of all bad gates with problems.
-  /// @returns An empty string for no problems detected.
-  /// @throws ValidationError if major problem like a cycle is found.
-  std::string CheckAllGates();
-
   /// Validates expressions and anything that is dependent on them, such
   /// as parameters and basic events.
   /// @throws ValidationError if any problems detected with expressions.
@@ -313,16 +300,11 @@ class RiskAnalysis {
   /// is applied to analysis.
   void SetupForAnalysis();
 
-  /// Provides graphing instructions for each fault tree initialized in
-  /// the analysis.
-  /// @param[out] out The output stream.
-  void GraphingInstructions(std::ostream& out);
-
   /// Container for fully defined gates.
   boost::unordered_map<std::string, GatePtr> gates_;
 
-  /// Container for fully defined primary events.
-  boost::unordered_map<std::string, PrimaryEventPtr> primary_events_;
+  /// Container for fully defined house events.
+  boost::unordered_map<std::string, HouseEventPtr> house_events_;
 
   /// Container for fully defined basic events.
   boost::unordered_map<std::string, BasicEventPtr> basic_events_;
@@ -340,7 +322,7 @@ class RiskAnalysis {
   static const char* unit_to_string_[];
 
   /// Container for defined expressions.
-  std::set<ExpressionPtr> expressions_;
+  std::vector<ExpressionPtr> expressions_;
 
   /// A collection of models from input files.
   std::map<std::string, ModelPtr> models_;

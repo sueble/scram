@@ -65,9 +65,12 @@ TEST(RiskAnalysisInputTest, CorrectFTAInputs) {
   std::vector<std::string> correct_inputs;
   std::string dir = "./share/scram/input/fta/";
   correct_inputs.push_back(dir + "correct_tree_input.xml");
+  correct_inputs.push_back(dir + "correct_formulas.xml");
   correct_inputs.push_back(dir + "mixed_definitions.xml");
   correct_inputs.push_back(dir + "model_data_mixed_definitions.xml");
   correct_inputs.push_back(dir + "two_trees.xml");
+  correct_inputs.push_back(dir + "two_top_events.xml");
+  correct_inputs.push_back(dir + "two_top_through_formula.xml");
   correct_inputs.push_back(dir + "labels_and_attributes.xml");
   correct_inputs.push_back(dir + "orphan_primary_event.xml");
   correct_inputs.push_back(dir + "very_long_mcs.xml");
@@ -143,8 +146,8 @@ TEST(RiskAnalysisInputTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "def_clash_basic_house.xml");
   incorrect_inputs.push_back(dir + "def_clash_house_basic.xml");
   incorrect_inputs.push_back(dir + "atleast_gate.xml");
-  incorrect_inputs.push_back(dir + "two_top_events.xml");
   incorrect_inputs.push_back(dir + "cyclic_tree.xml");
+  incorrect_inputs.push_back(dir + "cyclic_formula.xml");
   incorrect_inputs.push_back(dir + "cyclic_parameter.xml");
   incorrect_inputs.push_back(dir + "cyclic_expression.xml");
   incorrect_inputs.push_back(dir + "invalid_expression.xml");
@@ -185,4 +188,18 @@ TEST(RiskAnalysisInputTest, IncorrectProbInputs) {
         << " Filename:  " << *it;
     delete ran;
   }
+}
+
+// Test the case when a top event is not orphan. The top event of one fault
+// tree can be a child of a gate of another fault tree.
+TEST(RiskAnalysisInputTest, NonOrphanTopEvent) {
+  std::string dir = "./share/scram/input/fta/";
+  std::vector<std::string> input_files;
+
+  input_files.push_back(dir + "correct_tree_input.xml");
+  input_files.push_back(dir + "second_fault_tree.xml");
+
+  RiskAnalysis* ran = new RiskAnalysis();
+  EXPECT_NO_THROW(ran->ProcessInputFiles(input_files));
+  delete ran;
 }

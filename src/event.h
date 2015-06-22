@@ -4,6 +4,7 @@
 #define SCRAM_SRC_EVENT_H_
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,7 @@
 
 namespace scram {
 
-class Gate;  // Needed for being a parent of an event.
+class Formula;  // Needed for being used by events.
 
 /// @class Event
 /// General fault tree event base class.
@@ -38,23 +39,28 @@ class Event : public Element {
   /// @param[in] id_with_caps The id name with capitalizations.
   void name(std::string id_with_caps) { name_ = id_with_caps; }
 
-  /// Adds a parent into the parent map.
-  /// @param[in] parent One of the gate parents of this event.
-  /// @throws LogicError if the parent is being re-inserted.
-  void AddParent(const boost::shared_ptr<Gate>& parent);
+  /// Sets the container this event is defined in.
+  /// @param[in] id_with_caps The id name with capitalizations.
+  void container(std::string container) { container_ = container; }
 
-  /// @returns All the parents of this gate event.
+  /// @returns The container this event belongs to.
+  const std::string& container() { return container_; }
+
+  /// @returns All the parent formulas where event is used.
   /// @throws LogicError if there are no parents for this gate event.
-  const std::map<std::string, boost::shared_ptr<Gate> >& parents();
+  const std::set<boost::shared_ptr<Formula> >& parents();
 
-  /// @returns True if this event is orphan.
-  inline bool IsOrphan() { return parents_.empty(); }
+  /// Sets the orphanage state.
+  inline void orphan(bool state) { orphan_ = state; }
+
+  /// @returns True if this node is orphan.
+  inline bool orphan() { return orphan_; }
 
  private:
   std::string id_;  ///< Id name of a event. It is in lower case.
   std::string name_;  ///< Original name with capitalizations preserved.
-  ///< The parents of this event.
-  std::map<std::string, boost::shared_ptr<Gate> > parents_;
+  std::string container_;  ///< The container this event belongs to.
+  bool orphan_;  ///< Indication of an orphan node.
 };
 
 /// @class Gate
@@ -63,47 +69,25 @@ class Gate : public Event {
  public:
   /// Constructs with an id and a gate.
   /// @param[in] id The identifying name for this event.
-  /// @param[in] type The type for this gate.
-  explicit Gate(std::string id, std::string type = "NONE");
+  explicit Gate(std::string id);
 
-  /// @returns The gate type.
-  /// @throws LogicError if the gate is not yet assigned.
-  const std::string& type();
+  /// Sets the formula of this gate.
+  /// @param[in] formula Boolean formula of this gate.
+  inline void formula(const boost::shared_ptr<Formula>& formula) {
+    assert(!formula_);
+    formula_ = formula;
+  }
 
-  /// Sets the gate type.
-  /// @param[in] type The gate type for this event.
-  /// @throws LogicError if the gate type is being re-assigned.
-  void type(std::string type);
+  /// @returns The formula of this gate.
+  inline const boost::shared_ptr<Formula>& formula() { return formula_; }
 
-  /// @returns The vote number if and only if the gate is vote.
-  /// @throws LogicError if the vote number is not yet assigned.
-  int vote_number();
-
-  /// Sets the vote number only for a vote gate.
-  /// @param[in] vnumber The vote number.
-  /// @throws InvalidArgument if the vote number is invalid.
-  /// @throws LogicError if the vote number is assigned illegally.
-  /// @note (Children number > vote number)should be checked outside of
-  ///        this class.
-  void vote_number(int vnumber);
-
-  /// Adds a child event into the children list.
-  /// @param[in] child A pointer to a child event.
-  /// @throws LogicError if the child is being re-inserted.
-  void AddChild(const boost::shared_ptr<Event>& child);
-
-  /// @returns The children of this gate.
-  /// @throws LogicError if there are no children, which should be checked
-  ///                    at gate initialization.
-  const std::map<std::string, boost::shared_ptr<Event> >& children();
+  /// This function is for cycle detection.
+  /// @returns The connector between gates.
+  inline Formula* connector() { return &*formula_; }
 
   /// Checks if a gate is initialized correctly.
   /// @throws Validation error if anything is wrong.
   void Validate();
-
-  /// This function is for cycle detection.
-  /// @returns The connector between gates.
-  inline Gate* connector() { return this; }
 
   /// @returns The mark of this gate node. Empty string for no mark.
   inline const std::string& mark() const { return mark_; }
@@ -111,34 +95,91 @@ class Gate : public Event {
   /// Sets the mark for this gate node.
   inline void mark(const std::string& new_mark) { mark_ = new_mark; }
 
-  /// @returns Parameters as nodes.
+ private:
+  boost::shared_ptr<Formula> formula_;  ///< Boolean formula of this gate.
+  std::string mark_;  ///< The mark for traversal or toposort.
+};
+
+/// @class Formula
+/// Boolean formula with operators and arguments.
+/// Formulas are not expected to be shared.
+class Formula {
+ public:
+  /// Constructs a formula.
+  /// @param[in] type The logical operator for this Boolean formula.
+  /// @param[in] vote Vote number if the operator is atleast.
+  explicit Formula(std::string type)
+      : type_(type),
+        vote_number_(-1),
+        gather_(true) {}
+
+  /// @returns The type of this formula.
+  /// @throws LogicError if the gate is not yet assigned.
+  inline const std::string& type() { return type_; }
+
+  /// @returns The vote number if and only if the operator is atleast.
+  /// @throws LogicError if the vote number is not yet assigned.
+  int vote_number();
+
+  /// Sets the vote number only for an atleast formula.
+  /// @param[in] vnumber The vote number.
+  /// @throws InvalidArgument if the vote number is invalid.
+  /// @throws LogicError if the vote number is assigned illegally.
+  /// @note (Children number > vote number)should be checked outside of
+  ///        this class.
+  void vote_number(int vnumber);
+
+  /// Adds an event into the arguments list.
+  /// @param[in] event A pointer to an argument event.
+  /// @throws LogicError if the argument is being re-inserted.
+  void AddArgument(const boost::shared_ptr<Event>& event);
+
+  /// Adds a formula into the arguments list.
+  /// @param[in] formula A pointer to an argument formula.
+  /// @throws LogicError if the formula is being re-inserted.
+  void AddArgument(const boost::shared_ptr<Formula>& formula);
+
+  /// Checks if a formula is initialized correctly.
+  /// @throws Validation error if anything is wrong.
+  void Validate();
+
+  /// @returns The event arguments of this formula.
+  /// @throws LogicError if there are no event or formula arguments,
+  ///                    which should have been checked at initialization.
+  const std::map<std::string, boost::shared_ptr<Event> >& event_args();
+
+  /// @returns The formula arguments of this formula.
+  /// @throws LogicError if there are no event or formula arguments,
+  ///                    which should have been checked at initialization.
+  const std::set<boost::shared_ptr<Formula> >& formula_args();
+
+  /// @returns The number of arguments.
+  inline int num_args() { return event_args_.size() + formula_args_.size(); }
+
+  /// @returns Gates as nodes.
   inline const std::vector<Gate*>& nodes() {
-    if (gather_) Gate::GatherNodesAndConnectors();
+    if (gather_) Formula::GatherNodesAndConnectors();
     return nodes_;
   }
 
-  /// @returns Non-Parameter Expressions as connectors.
-  inline const std::vector<Gate*>& connectors() {
-    if (gather_) Gate::GatherNodesAndConnectors();
+  /// @returns Formulae as connectors.
+  inline const std::vector<Formula*>& connectors() {
+    if (gather_) Formula::GatherNodesAndConnectors();
     return connectors_;
   }
 
  private:
-  /// Gathers nodes and connectors from children of the gate.
+  /// Gathers nodes and connectors from arguments of the gate.
   void GatherNodesAndConnectors();
 
-  /// Checks if an Inhibit gate is initialized correctly.
-  /// @returns A warning message with the problem description.
-  /// @returns An empty string for no problems detected.
-  std::string CheckInhibitGate();
-
-  std::string type_;  ///< Gate type.
-  int vote_number_;  ///< Vote number for the vote gate.
-  std::string mark_;  ///< The mark for traversal or toposort.
-  /// The children of this gate.
-  std::map<std::string, boost::shared_ptr<Event> > children_;
-  std::vector<Gate*> nodes_;  ///< Gate children as nodes.
-  std::vector<Gate*> connectors_;  ///< Formulae as connectors.
+  std::string type_;  ///< Logical operator.
+  int vote_number_;  ///< Vote number for atleast operator.
+  /// Arguments that are events, such as gates, basic and house events.
+  std::map<std::string, boost::shared_ptr<Event> > event_args_;
+  /// Arguments that are formulas if this formula is nested.
+  std::set<boost::shared_ptr<Formula> > formula_args_;
+  std::vector<Gate*> nodes_;  ///< Gate arguments as nodes.
+  std::vector<Formula*> connectors_;  ///< Formulae as connectors.
   bool gather_;  ///< A flag to gather nodes and connectors.
 };
 
