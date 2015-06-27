@@ -27,6 +27,7 @@ set(SCRAM_CORE_SRC ${SCRAM_CORE_SRC}
   "${CMAKE_CURRENT_SOURCE_DIR}/event.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/ccf_group.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/model.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/indexed_gate.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/indexed_fault_tree.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/fault_tree_analysis.cc"
@@ -34,6 +35,7 @@ set(SCRAM_CORE_SRC ${SCRAM_CORE_SRC}
   "${CMAKE_CURRENT_SOURCE_DIR}/uncertainty_analysis.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/grapher.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/reporter.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/initializer.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/risk_analysis.cc"
   )
 add_library(scramcore ${SCRAM_CORE_SRC})

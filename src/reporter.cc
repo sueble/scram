@@ -8,10 +8,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time.hpp>
 
-#include "event.h"
 #include "error.h"
+#include "event.h"
 #include "expression.h"
 #include "fault_tree_analysis.h"
+#include "model.h"
 #include "probability_analysis.h"
 #include "risk_analysis.h"
 #include "settings.h"
@@ -20,8 +21,8 @@
 
 namespace scram {
 
-void Reporter::SetupReport(const RiskAnalysis* risk_an,
-                           const Settings& settings, xmlpp::Document* doc) {
+void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
+                           xmlpp::Document* doc) {
   if (doc->get_root_node() != 0) {
     throw LogicError("The passed document is not empty for reporting");
   }
@@ -102,16 +103,19 @@ void Reporter::SetupReport(const RiskAnalysis* risk_an,
     }
   }
 
-  xmlpp::Element* model = information->add_child("model-features");
-  model->add_child("gates")->add_child_text(ToString(risk_an->gates_.size()));
-  model->add_child("basic-events")
-      ->add_child_text(ToString(risk_an->basic_events_.size()));
-  model->add_child("house-events")
-      ->add_child_text(ToString(risk_an->house_events_.size()));
-  model->add_child("ccf-groups")
-      ->add_child_text(ToString(risk_an->ccf_groups_.size()));
-  model->add_child("fault-trees")
-      ->add_child_text(ToString(risk_an->fault_trees_.size()));
+  xmlpp::Element* model_features = information->add_child("model-features");
+  if (!model->name().empty())
+    model_features->set_attribute("name", model->name());
+  model_features->add_child("gates")
+      ->add_child_text(ToString(model->gates().size()));
+  model_features->add_child("basic-events")
+      ->add_child_text(ToString(model->basic_events().size()));
+  model_features->add_child("house-events")
+      ->add_child_text(ToString(model->house_events().size()));
+  model_features->add_child("ccf-groups")
+      ->add_child_text(ToString(model->ccf_groups().size()));
+  model_features->add_child("fault-trees")
+      ->add_child_text(ToString(model->fault_trees().size()));
 
   // Setup for results.
   root->add_child("results");
@@ -182,8 +186,8 @@ void Reporter::ReportFta(
   }
 
   std::set< std::set<std::string> >::const_iterator it_min;
-  for (it_min = fta->min_cut_sets_.begin(); it_min != fta->min_cut_sets_.end();
-       ++it_min) {
+  for (it_min = fta->min_cut_sets().begin();
+       it_min != fta->min_cut_sets().end(); ++it_min) {
     xmlpp::Element* product = sum_of_products->add_child("product");
     product->set_attribute("order",
                            ToString(it_min->size()));
@@ -227,7 +231,7 @@ void Reporter::ReportFta(
   xmlpp::Element* calc_time = performance->add_child("calculation-time");
   calc_time->set_attribute("name", ft_name);
   calc_time->add_child("minimal-cut-set")->add_child_text(
-      Reporter::ToString(fta->analysis_time_, 5));
+      Reporter::ToString(fta->analysis_time(), 5));
   if (prob_analysis) {
     calc_time->add_child("probability")->add_child_text(
       Reporter::ToString(prob_analysis->p_time_, 5));
@@ -319,7 +323,7 @@ void Reporter::ReportUncertainty(
   assert(!calc_times.empty());
   xmlpp::Element* calc_time = dynamic_cast<xmlpp::Element*>(calc_times.back());
   calc_time->add_child("uncertainty")->add_child_text(
-      Reporter::ToString(uncert_analysis->p_time_, 5));
+      Reporter::ToString(uncert_analysis->analysis_time(), 5));
 }
 
 xmlpp::Element* Reporter::ReportBasicEvent(const BasicEventPtr& basic_event,
