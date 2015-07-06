@@ -77,7 +77,10 @@ TEST(InitializerTest, CorrectFTAInputs) {
   std::string dir = "./share/scram/input/fta/";
   correct_inputs.push_back(dir + "correct_tree_input.xml");
   correct_inputs.push_back(dir + "correct_formulas.xml");
+  correct_inputs.push_back(dir + "component_definition.xml");
   correct_inputs.push_back(dir + "mixed_definitions.xml");
+  correct_inputs.push_back(dir + "mixed_references.xml");
+  correct_inputs.push_back(dir + "mixed_roles.xml");
   correct_inputs.push_back(dir + "model_data_mixed_definitions.xml");
   correct_inputs.push_back(dir + "two_trees.xml");
   correct_inputs.push_back(dir + "two_top_events.xml");
@@ -88,6 +91,7 @@ TEST(InitializerTest, CorrectFTAInputs) {
   correct_inputs.push_back(dir + "unordered_structure.xml");
   correct_inputs.push_back(dir + "non_top_gate.xml");
   correct_inputs.push_back(dir + "unused_parameter.xml");
+  correct_inputs.push_back(dir + "nested_formula.xml");
 
   std::vector<std::string>::iterator it;
   for (it = correct_inputs.begin(); it != correct_inputs.end(); ++it) {
@@ -134,6 +138,7 @@ TEST(InitializerTest, IncorrectFTAInputs) {
   incorrect_inputs.push_back(dir + "doubly_defined_basic.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_parameter.xml");
   incorrect_inputs.push_back(dir + "doubly_defined_ccf_group.xml");
+  incorrect_inputs.push_back(dir + "doubly_defined_component.xml");
   incorrect_inputs.push_back(dir + "extra_ccf_level_beta_factor.xml");
   incorrect_inputs.push_back(dir + "missing_gate_definition.xml");
   incorrect_inputs.push_back(dir + "missing_ccf_level_number.xml");

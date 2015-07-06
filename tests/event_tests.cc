@@ -16,7 +16,7 @@ typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
 
 // Test for Event base class.
 TEST(EventTest, Id) {
-  EventPtr event(new Event("event_name"));
+  EventPtr event(new BasicEvent("event_name"));
   EXPECT_EQ(event->id(), "event_name");
 }
 
@@ -44,14 +44,14 @@ TEST(FormulaTest, VoteNumber) {
 TEST(FormulaTest, Arguments) {
   FormulaPtr top(new Formula("and"));
   std::map<std::string, EventPtr> children;
-  EventPtr first_child(new Event("first"));
-  EventPtr second_child(new Event("second"));
+  EventPtr first_child(new BasicEvent("first"));
+  EventPtr second_child(new BasicEvent("second"));
   // Request for children when there are no children is an error.
   EXPECT_THROW(top->event_args(), LogicError);
   // Adding first child.
   EXPECT_NO_THROW(top->AddArgument(first_child));
   // Re-adding a child must cause an error.
-  EXPECT_THROW(top->AddArgument(first_child), LogicError);
+  EXPECT_THROW(top->AddArgument(first_child), ValidationError);
   // Check the contents of the children container.
   children.insert(std::make_pair(first_child->id(), first_child));
   EXPECT_EQ(children, top->event_args());
@@ -63,15 +63,12 @@ TEST(FormulaTest, Arguments) {
 
 TEST(GateTest, Cycle) {
   GatePtr top(new Gate("Top"));
-  top->name("Top");
   FormulaPtr formula_one(new Formula("not"));
   top->formula(formula_one);
   GatePtr middle(new Gate("Middle"));
-  middle->name("Middle");
   FormulaPtr formula_two(new Formula("not"));
   middle->formula(formula_two);
   GatePtr bottom(new Gate("Bottom"));
-  bottom->name("Bottom");
   FormulaPtr formula_three(new Formula("not"));
   bottom->formula(formula_three);
   formula_one->AddArgument(middle);
