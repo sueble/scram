@@ -68,14 +68,16 @@ class Logger {
   }
 
   /// This function can be to get and set the cut-off level for logging.
+  ///
   /// @returns The cut-off level for reporting.
   static LogLevel& ReportLevel();
 
   /// Returns a string stream by reference that is flushed to stderr by
   /// the Logger class destructor.
+  ///
   /// @param[in] level The log level for the information.
   inline std::ostringstream& Get(LogLevel level) {
-    os_ << Logger::level_to_string_[level] << ": ";
+    os_ << Logger::kLevelToString_[level] << ": ";
     os_ << std::string(level < DEBUG1 ? 0 : level - DEBUG1 + 1, '\t');
     return os_;
   }
@@ -83,7 +85,7 @@ class Logger {
  private:
   /// Translates the logging level into a string. The index is the value
   /// of the enum.
-  static const char* const level_to_string_[];
+  static const char* const kLevelToString_[];
 
   /// Restrict copy construction.
   Logger(const Logger&);

@@ -24,7 +24,6 @@ void CcfGroup::AddMember(const BasicEventPtr& basic_event) {
   if (distribution_) {
     throw IllegalOperation("No more members accepted. The distribution for " +
                            name_ + " CCF group has already been defined.");
-
   }
   if (members_.count(name)) {
     throw DuplicateArgumentError("Duplicate member " + basic_event->name() +
@@ -87,6 +86,7 @@ void CcfGroup::ApplyModel() {
     BasicEventPtr member = it_m->second;
     GatePtr new_gate(
         new Gate(member->name(), member->base_path(), member->is_public()));
+    assert(member->id() == new_gate->id());
     new_gate->formula(FormulaPtr(new Formula("or")));
     gates.insert(std::make_pair(it_m->first, new_gate));
     member->ccf_gate(new_gate);
