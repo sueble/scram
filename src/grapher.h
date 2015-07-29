@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file grapher.h
 /// Graphing of analysis entities.
 #ifndef SCRAM_SRC_GRAPHER_H_
@@ -101,11 +117,13 @@ class Grapher {
   ///
   /// @param[in] primary_event The primary event to be formatted.
   /// @param[in] repetition The repetition number of the node.
+  /// @param[in] type Type information message with flavors.
   /// @param[in] prob_msg Probability information message.
   /// @param[out] out The output stream.
   void FormatPrimaryEvent(const PrimaryEventPtr& primary_event,
                           int repetition,
-                          std::string prob_msg,
+                          const std::string& type,
+                          const std::string& prob_msg,
                           std::ostream& out);
 
   /// Format formulas gathered from nested formulas of gate descriptions.

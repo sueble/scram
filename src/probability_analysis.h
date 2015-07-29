@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file probability_analysis.h
 /// Contains functionality to do numerical analysis of probabilities and
 /// importances.
@@ -124,6 +140,8 @@ class ProbabilityAnalysis {
   /// approximation.
   ///
   /// @param[in] min_cut_sets Sets of indices of basic events.
+  ///
+  /// @returns The total probability with the MCUB approximation.
   double ProbMcub(
       const std::vector< boost::container::flat_set<int> >& min_cut_sets);
 
@@ -149,7 +167,7 @@ class ProbabilityAnalysis {
   ///
   /// @param[in] min_cut_set A flat set of indices of basic events.
   ///
-  /// @returns The total probability.
+  /// @returns The total probability of the set.
   ///
   /// @note O_avg(N) where N is the size of the passed set.
   double ProbAnd(const boost::container::flat_set<int>& min_cut_set);

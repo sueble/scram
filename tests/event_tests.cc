@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #include "event.h"
 
 #include <boost/shared_ptr.hpp>
@@ -44,10 +60,9 @@ TEST(FormulaTest, VoteNumber) {
 TEST(FormulaTest, EventArguments) {
   FormulaPtr top(new Formula("and"));
   std::map<std::string, EventPtr> children;
-  EventPtr first_child(new BasicEvent("first"));
-  EventPtr second_child(new BasicEvent("second"));
-  // Request for children when there are no children is an error.
-  EXPECT_THROW(top->event_args(), LogicError);
+  BasicEventPtr first_child(new BasicEvent("first"));
+  BasicEventPtr second_child(new BasicEvent("second"));
+  EXPECT_EQ(0, top->num_args());
   // Adding first child.
   EXPECT_NO_THROW(top->AddArgument(first_child));
   // Re-adding a child must cause an error.
@@ -64,7 +79,7 @@ TEST(FormulaTest, EventArguments) {
 TEST(FormulaTest, FormulaArguments) {
   FormulaPtr top(new Formula("and"));
   FormulaPtr arg(new Formula("or"));
-  EXPECT_THROW(top->formula_args(), LogicError);
+  EXPECT_EQ(0, top->num_args());
   // Adding first child.
   EXPECT_NO_THROW(top->AddArgument(arg));
   // Re-adding a child must cause an error.

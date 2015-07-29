@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file fault_tree.h
 /// Fault Tree and Component containers.
 #ifndef SCRAM_SRC_FAULT_TREE_H_
@@ -163,7 +179,7 @@ class Component : public Element, public Role {
 /// @class FaultTree
 /// Fault tree representation as a container of gates, basic and house events,
 /// and other information. Additional functionality of a fault tree includes
-/// detection of top events upon validation.
+/// detection of top events.
 class FaultTree : public Component {
  public:
   typedef boost::shared_ptr<Gate> GatePtr;
@@ -174,14 +190,14 @@ class FaultTree : public Component {
   /// @param[in] name The name identificator of this fault tree.
   explicit FaultTree(const std::string& name);
 
-  /// @returns The top events of this fault tree.
+  /// @returns The collected top events of this fault tree.
   inline const std::vector<GatePtr>& top_events() const { return top_events_; }
 
-  /// Validates this fault tree's structure by detecting top gates.
-  /// This function is essential to guess the analysis targets.
-  ///
-  /// @todo Replace with more explicit function that detects top gates.
-  void Validate();
+  /// Collects top event gates in this fault tree with components.
+  /// This function is essential to guess the analysis targets if the user does
+  /// not supply any. If the structure of the fault tree changes, this function
+  /// must be called again to update the top events.
+  void CollectTopEvents();
 
  private:
   typedef boost::shared_ptr<Formula> FormulaPtr;

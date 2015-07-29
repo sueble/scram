@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #ifndef SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 #define SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 
@@ -17,6 +33,7 @@ typedef boost::shared_ptr<Event> EventPtr;
 typedef boost::shared_ptr<Gate> GatePtr;
 typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
 typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
+typedef boost::shared_ptr<FaultTree> FaultTreePtr;
 
 class RiskAnalysisTest : public ::testing::Test {
  protected:
@@ -39,6 +56,11 @@ class RiskAnalysisTest : public ::testing::Test {
     std::vector<std::string> input_files;
     input_files.push_back(input_file);
     ProcessInputFiles(input_files);
+  }
+
+  // Returns a single fault tree, assuming one fault tree with single top gate.
+  const FaultTreePtr& fault_tree() {
+    return init->model()->fault_trees().begin()->second;
   }
 
   const boost::unordered_map<std::string, GatePtr>& gates() {

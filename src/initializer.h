@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file initializer.h
 /// A facility that processes input files into analysis constructs.
 #ifndef SCRAM_SRC_INITIALIZER_H_
@@ -87,6 +103,7 @@ class Initializer {
   void ProcessInputFile(const std::string& xml_file);
 
   /// Processes definitions of elements that are left to be determined later.
+  /// This late definition happens primarily due to unregistered dependencies.
   ///
   /// @throws ValidationError The elements contain undefined dependencies.
   void ProcessTbdElements();
@@ -241,6 +258,8 @@ class Initializer {
   /// @param[in] expr_element XML expression element containing the definition.
   /// @param[in] base_path Series of ancestor containers in the path with dots.
   ///
+  /// @returns Pointer to the newly defined or registered expression.
+  ///
   /// @throws ValidationError There are problems with getting the expression.
   ExpressionPtr GetExpression(const xmlpp::Element* expr_element,
                               const std::string& base_path);
@@ -370,8 +389,19 @@ class Initializer {
   /// Map roots of documents to files. This is for error reporting.
   std::map<const xmlpp::Node*, std::string> doc_to_file_;
 
-  /// Elements that are defined on the second pass.
-  std::vector<std::pair<ElementPtr, const xmlpp::Element*> > tbd_elements_;
+  /// @struct TbdElements
+  /// Collection of elements that are defined late because of unordered
+  /// registration and definition of their dependencies.
+  struct TbdElements {
+    /// Parameters rely on parameter registration.
+    std::vector<std::pair<ParameterPtr, const xmlpp::Element*> > parameters;
+    /// Basic events rely on parameter registration.
+    std::vector<std::pair<BasicEventPtr, const xmlpp::Element*> > basic_events;
+    /// Gates rely on gate, basic event, and house event registrations.
+    std::vector<std::pair<GatePtr, const xmlpp::Element*> > gates;
+    /// CCF groups rely on both parameter and basic event registration.
+    std::vector<std::pair<CcfGroupPtr, const xmlpp::Element*> > ccf_groups;
+  } tbd_;  ///< Elements are assumed to be unique.
 
   /// Container for defined expressions for later validation.
   std::vector<ExpressionPtr> expressions_;

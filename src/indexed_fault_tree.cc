@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file indexed_fault_tree.cc
 /// Implementation of indexed nodes, events, gates, and fault trees.
 #include "indexed_fault_tree.h"
@@ -13,7 +29,7 @@ namespace scram {
 
 int Node::next_index_ = 1e6;  // 1 million basic events per fault tree is crazy!
 
-Node::Node() : index_(next_index_++) {
+Node::Node() : index_(next_index_++), opti_value_(0) {
   std::fill(visits_, visits_ + 3, 0);
 }
 
@@ -34,7 +50,11 @@ IGate::IGate(const GateType& type)
       type_(type),
       state_(kNormalState),
       vote_number_(-1),
-      module_(false) {}
+      mark_(false),
+      min_time_(0),
+      max_time_(0),
+      module_(false),
+      num_failed_children_(0) {}
 
 bool IGate::AddChild(int child, const IGatePtr& gate) {
   assert(child != 0);
@@ -42,6 +62,7 @@ bool IGate::AddChild(int child, const IGatePtr& gate) {
   assert(state_ == kNormalState);
   if (type_ == kNotGate || type_ == kNullGate) assert(children_.empty());
   if (type_ == kXorGate) assert(children_.size() < 2);
+  if (children_.count(child)) return IGate::ProcessDuplicateChild(child);
   if (children_.count(-child)) return IGate::ProcessComplementChild(child);
   children_.insert(child);
   gate_children_.insert(std::make_pair(child, gate));
@@ -146,6 +167,7 @@ bool IGate::JoinGate(const IGatePtr& child_gate) {
   assert(children_.count(child_gate->index()));  // Positive child only.
   children_.erase(child_gate->index());
   gate_children_.erase(child_gate->index());
+  assert(child_gate->parents_.count(this));
   child_gate->parents_.erase(this);
   boost::unordered_map<int, IGatePtr>::const_iterator it_g;
   for (it_g = child_gate->gate_children_.begin();
@@ -194,6 +216,18 @@ bool IGate::JoinNullGate(int index) {
   }
 }
 
+bool IGate::ProcessDuplicateChild(int index) {
+  assert(type_ != kNotGate && type_ != kNullGate);
+  assert(type_ != kAtleastGate);  /// @todo Provide the complex logic.
+  assert(children_.count(index));
+  switch (type_) {
+    case kXorGate:
+      IGate::Nullify();
+      return false;;
+  }
+  return true;  // Duplicate children are OK in most cases.
+}
+
 bool IGate::ProcessComplementChild(int index) {
   assert(type_ != kNotGate && type_ != kNullGate);
   assert(children_.count(-index));
@@ -221,13 +255,39 @@ bool IGate::ProcessComplementChild(int index) {
   return false;  // Becomes constant most of the cases.
 }
 
+void IGate::ChildFailed() {
+  if (this->opti_value() == 1) return;
+  assert(this->opti_value() == 0);
+  assert(num_failed_children_ < children_.size());
+  ++num_failed_children_;
+  switch (type_) {
+    case kNullGate:
+    case kOrGate:
+      this->opti_value(1);
+      break;
+    case kAndGate:
+      if (num_failed_children_ == children_.size()) this->opti_value(1);
+      break;
+    case kAtleastGate:
+      if (num_failed_children_ == vote_number_) this->opti_value(1);
+      break;
+    default:
+      assert(false);  // Coherent gates only!
+  }
+}
+
+void IGate::ResetChildrenFailure() {
+  num_failed_children_ = 0;
+}
+
 const std::map<std::string, GateType> IndexedFaultTree::kStringToType_ =
     boost::assign::map_list_of("and", kAndGate) ("or", kOrGate)
                               ("atleast", kAtleastGate) ("xor", kXorGate)
                               ("not", kNotGate) ("nand", kNandGate)
                               ("nor", kNorGate) ("null", kNullGate);
 
-IndexedFaultTree::IndexedFaultTree(const GatePtr& root, bool ccf) {
+IndexedFaultTree::IndexedFaultTree(const GatePtr& root, bool ccf) 
+    : coherent_(true) {
   Node::ResetIndex();
   IBasicEvent::ResetIndex();
   boost::unordered_map<std::string, NodePtr> id_to_index;
@@ -241,70 +301,82 @@ boost::shared_ptr<IGate> IndexedFaultTree::ProcessFormula(
     boost::unordered_map<std::string, NodePtr>* id_to_index) {
   GateType type = kStringToType_.find(formula->type())->second;
   IGatePtr parent(new IGate(type));
-  if (type == kAtleastGate) parent->vote_number(formula->vote_number());
-
-  typedef boost::shared_ptr<Event> EventPtr;
-  typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
-
-  const std::map<std::string, EventPtr>& children = formula->event_args();
-  std::map<std::string, EventPtr>::const_iterator it_children;
-  for (it_children = children.begin(); it_children != children.end();
-       ++it_children) {
-    EventPtr event = it_children->second;
-    if (BasicEventPtr basic_event =
-        boost::dynamic_pointer_cast<BasicEvent>(event)) {
-      if (id_to_index->count(basic_event->id())) {
-        NodePtr node = id_to_index->find(basic_event->id())->second;
-        if (ccf && basic_event->HasCcf()) {
-          parent->AddChild(node->index(),
-                           boost::static_pointer_cast<IGate>(node));
-        } else {
-          parent->AddChild(node->index(),
-                           boost::static_pointer_cast<IBasicEvent>(node));
-        }
-      } else {
-        if (ccf && basic_event->HasCcf()) {
-          GatePtr ccf_gate = basic_event->ccf_gate();
-          IGatePtr new_gate = IndexedFaultTree::ProcessFormula(
-              ccf_gate->formula(),
-              ccf,
-              id_to_index);
-          parent->AddChild(new_gate->index(), new_gate);
-          id_to_index->insert(std::make_pair(basic_event->id(), new_gate));
-        } else {
-          basic_events_.push_back(basic_event);
-          IBasicEventPtr new_basic(new IBasicEvent());
-          assert(basic_events_.size() == new_basic->index());
-          parent->AddChild(new_basic->index(), new_basic);
-          id_to_index->insert(std::make_pair(basic_event->id(), new_basic));
-        }
-      }
-    } else if (GatePtr gate = boost::dynamic_pointer_cast<Gate>(event)) {
-      if (id_to_index->count(gate->id())) {
-        NodePtr node = id_to_index->find(gate->id())->second;
+  switch (type) {
+    case kNotGate:
+    case kNandGate:
+    case kNorGate:
+    case kXorGate:
+      coherent_ = false;
+      break;
+    case kAtleastGate:
+      parent->vote_number(formula->vote_number());
+      break;
+  }
+  std::vector<BasicEventPtr>::const_iterator it_b;
+  for (it_b = formula->basic_event_args().begin();
+       it_b != formula->basic_event_args().end(); ++it_b) {
+    BasicEventPtr basic_event = *it_b;
+    if (id_to_index->count(basic_event->id())) {
+      NodePtr node = id_to_index->find(basic_event->id())->second;
+      if (ccf && basic_event->HasCcf()) {
         parent->AddChild(node->index(),
                          boost::static_pointer_cast<IGate>(node));
       } else {
-        IGatePtr new_gate = IndexedFaultTree::ProcessFormula(gate->formula(),
-                                                             ccf,
-                                                             id_to_index);
-        parent->AddChild(new_gate->index(), new_gate);
-        id_to_index->insert(std::make_pair(gate->id(), new_gate));
+        parent->AddChild(node->index(),
+                         boost::static_pointer_cast<IBasicEvent>(node));
       }
     } else {
-      HouseEventPtr house = boost::dynamic_pointer_cast<HouseEvent>(event);
-      assert(house);
-      if (id_to_index->count(house->id())) {
-        NodePtr node = id_to_index->find(house->id())->second;
-        parent->AddChild(node->index(),
-                         boost::static_pointer_cast<Constant>(node));
+      if (ccf && basic_event->HasCcf()) {
+        GatePtr ccf_gate = basic_event->ccf_gate();
+        IGatePtr new_gate = IndexedFaultTree::ProcessFormula(
+            ccf_gate->formula(),
+            ccf,
+            id_to_index);
+        parent->AddChild(new_gate->index(), new_gate);
+        id_to_index->insert(std::make_pair(basic_event->id(), new_gate));
       } else {
-        ConstantPtr constant(new Constant(house->state()));
-        parent->AddChild(constant->index(), constant);
-        id_to_index->insert(std::make_pair(house->id(), constant));
+        basic_events_.push_back(basic_event);
+        IBasicEventPtr new_basic(new IBasicEvent());
+        assert(basic_events_.size() == new_basic->index());
+        parent->AddChild(new_basic->index(), new_basic);
+        id_to_index->insert(std::make_pair(basic_event->id(), new_basic));
       }
     }
   }
+
+  typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
+  std::vector<HouseEventPtr>::const_iterator it_h;
+  for (it_h = formula->house_event_args().begin();
+       it_h != formula->house_event_args().end(); ++it_h) {
+    HouseEventPtr house = *it_h;
+    if (id_to_index->count(house->id())) {
+      NodePtr node = id_to_index->find(house->id())->second;
+      parent->AddChild(node->index(),
+                       boost::static_pointer_cast<Constant>(node));
+    } else {
+      ConstantPtr constant(new Constant(house->state()));
+      parent->AddChild(constant->index(), constant);
+      id_to_index->insert(std::make_pair(house->id(), constant));
+    }
+  }
+
+  std::vector<GatePtr>::const_iterator it_g;
+  for (it_g = formula->gate_args().begin();
+       it_g != formula->gate_args().end(); ++it_g) {
+    GatePtr gate = *it_g;
+    if (id_to_index->count(gate->id())) {
+      NodePtr node = id_to_index->find(gate->id())->second;
+      parent->AddChild(node->index(),
+                       boost::static_pointer_cast<IGate>(node));
+    } else {
+      IGatePtr new_gate = IndexedFaultTree::ProcessFormula(gate->formula(),
+                                                           ccf,
+                                                           id_to_index);
+      parent->AddChild(new_gate->index(), new_gate);
+      id_to_index->insert(std::make_pair(gate->id(), new_gate));
+    }
+  }
+
   const std::set<FormulaPtr>& formulas = formula->formula_args();
   std::set<FormulaPtr>::const_iterator it_f;
   for (it_f = formulas.begin(); it_f != formulas.end(); ++it_f) {

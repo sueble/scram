@@ -1,9 +1,26 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file model.h
 /// Representation for a model container for risk analysis.
 #ifndef SCRAM_SRC_MODEL_H_
 #define SCRAM_SRC_MODEL_H_
 
 #include <string>
+#include <utility>
 
 #include <boost/unordered_map.hpp>
 
@@ -100,16 +117,19 @@ class Model : public Element {
 
   /// Finds an event from a reference. The reference is not case sensitive and
   /// can contain the identifier, full path, or local path. The returned event
-  /// may be a basic event, house event, or gate.
+  /// may be a basic event, house event, or gate. This information is
+  /// communicated with the return value.
   ///
   /// @param[in] reference Reference string to the event.
   /// @param[in] base_path The series of containers indicating the scope.
   ///
-  /// @returns Pointer to the event found by following the given reference.
+  /// @returns A pair of the pointer to the event and its type("gate",
+  ///          "basic-event", "house-event").
   ///
   /// @throws ValidationError There are problems with referencing.
   /// @throws LogicError The given base path is invalid.
-  EventPtr GetEvent(const std::string& reference, const std::string& base_path);
+  std::pair<EventPtr, std::string> GetEvent(const std::string& reference,
+                                            const std::string& base_path);
 
   /// Adds a house event that is used in this model.
   ///

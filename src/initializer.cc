@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2014-2015 Olzhas Rakhimov
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 /// @file initializer.cc
 /// Implementation of input file processing into analysis constructs.
 #include "initializer.h"
@@ -139,28 +155,39 @@ void Initializer::ProcessInputFile(const std::string& xml_file) {
 }
 
 void Initializer::ProcessTbdElements() {
-  std::vector< std::pair<ElementPtr, const xmlpp::Element*> >::iterator it;
+  // This element helps report errors.
+  const xmlpp::Element* el_def;  // XML element with the definition.
   try {
-    for (it = tbd_elements_.begin(); it != tbd_elements_.end(); ++it) {
-      if (BasicEventPtr basic_event =
-          boost::dynamic_pointer_cast<BasicEvent>(it->first)) {
-        Initializer::DefineBasicEvent(it->second, basic_event);
+    std::vector<std::pair<ParameterPtr,
+        const xmlpp::Element*> >::iterator it_p;
+    for (it_p = tbd_.parameters.begin(); it_p != tbd_.parameters.end();
+         ++it_p) {
+      el_def = it_p->second;
+      Initializer::DefineParameter(el_def, it_p->first);
+    }
+    std::vector<std::pair<BasicEventPtr,
+        const xmlpp::Element*> >::iterator it_b;
+    for (it_b = tbd_.basic_events.begin(); it_b != tbd_.basic_events.end();
+         ++it_b) {
+      el_def = it_b->second;
+      Initializer::DefineBasicEvent(el_def, it_b->first);
+    }
+    std::vector<std::pair<GatePtr,
+        const xmlpp::Element*> >::iterator it_g;
+    for (it_g = tbd_.gates.begin(); it_g != tbd_.gates.end(); ++it_g) {
+      el_def = it_g->second;
+      Initializer::DefineGate(el_def, it_g->first);
 
-      } else if (GatePtr gate = boost::dynamic_pointer_cast<Gate>(it->first)) {
-        Initializer::DefineGate(it->second, gate);
-
-      } else if (CcfGroupPtr ccf_group =
-                 boost::dynamic_pointer_cast<CcfGroup>(it->first)) {
-        Initializer::DefineCcfGroup(it->second, ccf_group);
-
-      } else {
-        ParameterPtr param = boost::dynamic_pointer_cast<Parameter>(it->first);
-        assert(param);
-        Initializer::DefineParameter(it->second, param);
-      }
+    }
+    std::vector<std::pair<CcfGroupPtr,
+        const xmlpp::Element*> >::iterator it_c;
+    for (it_c = tbd_.ccf_groups.begin(); it_c != tbd_.ccf_groups.end();
+         ++it_c) {
+      el_def = it_c->second;
+      Initializer::DefineCcfGroup(el_def, it_c->first);
     }
   } catch (ValidationError& err) {
-    const xmlpp::Node* root = it->second->find("/opsa-mef")[0];
+    const xmlpp::Node* root = el_def->find("/opsa-mef")[0];
     err.msg("In file '" + doc_to_file_.find(root)->second + "', " + err.msg());
     throw err;
   }
@@ -336,7 +363,7 @@ boost::shared_ptr<Gate> Initializer::RegisterGate(
     err.msg(msg.str() + err.msg());
     throw err;
   }
-  tbd_elements_.push_back(std::make_pair(gate, gate_node));
+  tbd_.gates.push_back(std::make_pair(gate, gate_node));
   Initializer::AttachLabelAndAttributes(gate_node, gate);
   return gate;
 }
@@ -416,21 +443,36 @@ void Initializer::ProcessFormula(const xmlpp::Element* formula_node,
     }
 
     try {
-      EventPtr child;
       if (element_type == "event") {  // Undefined type yet.
-        child = model_->GetEvent(name, base_path);
-
+        std::pair<EventPtr, std::string> target =
+            model_->GetEvent(name, base_path);
+        EventPtr event = target.first;
+        event->orphan(false);
+        std::string type = target.second;
+        if (type == "gate") {
+          formula->AddArgument(boost::static_pointer_cast<Gate>(event));
+        } else if (type == "basic-event") {
+          formula->AddArgument(boost::static_pointer_cast<BasicEvent>(event));
+        } else {
+          assert(type == "house-event");
+          formula->AddArgument(boost::static_pointer_cast<HouseEvent>(event));
+        }
       } else if (element_type == "gate") {
-        child = model_->GetGate(name, base_path);
+        GatePtr gate = model_->GetGate(name, base_path);
+        formula->AddArgument(gate);
+        gate->orphan(false);
 
       } else if (element_type == "basic-event") {
-        child = model_->GetBasicEvent(name, base_path);
+        BasicEventPtr basic_event = model_->GetBasicEvent(name, base_path);
+        formula->AddArgument(basic_event);
+        basic_event->orphan(false);
 
-      } else if (element_type == "house-event") {
-        child = model_->GetHouseEvent(name, base_path);
+      } else {
+        assert(element_type == "house-event");
+        HouseEventPtr house_event = model_->GetHouseEvent(name, base_path);
+        formula->AddArgument(house_event);
+        house_event->orphan(false);
       }
-      formula->AddArgument(child);
-      child->orphan(false);
     } catch (ValidationError& err) {
       std::stringstream msg;
       msg << "Line " << event->get_line() << ":\n";
@@ -469,7 +511,7 @@ boost::shared_ptr<BasicEvent> Initializer::RegisterBasicEvent(
     err.msg(msg.str() + err.msg());
     throw err;
   }
-  tbd_elements_.push_back(std::make_pair(basic_event, event_node));
+  tbd_.basic_events.push_back(std::make_pair(basic_event, event_node));
   Initializer::AttachLabelAndAttributes(event_node, basic_event);
   return basic_event;
 }
@@ -544,7 +586,7 @@ boost::shared_ptr<Parameter> Initializer::RegisterParameter(
     err.msg(msg.str() + err.msg());
     throw err;
   }
-  tbd_elements_.push_back(std::make_pair(parameter, param_node));
+  tbd_.parameters.push_back(std::make_pair(parameter, param_node));
 
   // Attach units.
   std::string unit = param_node->get_attribute_value("unit");
@@ -829,7 +871,7 @@ boost::shared_ptr<CcfGroup> Initializer::RegisterCcfGroup(
 
   Initializer::AttachLabelAndAttributes(ccf_node, ccf_group);
 
-  tbd_elements_.push_back(std::make_pair(ccf_group, ccf_node));
+  tbd_.ccf_groups.push_back(std::make_pair(ccf_group, ccf_node));
   return ccf_group;
 }
 
@@ -970,14 +1012,6 @@ void Initializer::CheckFirstLayer() {
 }
 
 void Initializer::CheckSecondLayer() {
-  if (!model_->fault_trees().empty()) {
-    boost::unordered_map<std::string, FaultTreePtr>::const_iterator it;
-    for (it = model_->fault_trees().begin(); it != model_->fault_trees().end();
-         ++it) {
-      it->second->Validate();
-    }
-  }
-
   if (!model_->ccf_groups().empty()) {
     boost::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
     for (it = model_->ccf_groups().begin(); it != model_->ccf_groups().end();
@@ -1047,7 +1081,16 @@ void Initializer::ValidateExpressions() {
 }
 
 void Initializer::SetupForAnalysis() {
-  // CCF groups.
+  // Collecting top events of fault trees.
+  if (!model_->fault_trees().empty()) {
+    boost::unordered_map<std::string, FaultTreePtr>::const_iterator it;
+    for (it = model_->fault_trees().begin(); it != model_->fault_trees().end();
+         ++it) {
+      it->second->CollectTopEvents();
+    }
+  }
+
+  // CCF groups must apply models to basic event members.
   if (!model_->ccf_groups().empty()) {
     boost::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
     for (it = model_->ccf_groups().begin(); it != model_->ccf_groups().end();
