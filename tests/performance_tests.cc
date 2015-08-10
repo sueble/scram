@@ -20,26 +20,31 @@
 
 using namespace scram;
 
-// Performance testing is done only if requested by activating
-// disabled tests.
+// Performance testing is done only if requested
+// by activating disabled tests.
 //
-// To run the performance tests, supply "--gtest_also_run_disabled_tests" flag
-// to GTest. The GTest filter may be applied to filter only performance tests.
-// Different tests are compiled depending on the build type. Generally,
-// debug or non-debug types are recognized.
+// To run the performance tests,
+// supply "--gtest_also_run_disabled_tests" flag to GTest.
+// The GTest filter may be applied to filter only performance tests.
+// Different tests are compiled depending on the build type.
+// Generally, debug or non-debug types are recognized.
 //
-// Performance testing values are taken from a computer with the following
-// specs:
-//   Core i5-2410M, Ubuntu 14.04 64bit
-//   Compilation with GCC 4.8.4 and Boost 1.55
+// Performance testing values are taken
+// from a computer with the following specs:
+//
+//   Proc         Core i5-2410M
+//   Ubuntu       14.04 64bit
+//   GCC          4.8.4
+//   Boost        1.55
+//   TCMalloc     2.1
 //
 // The values for performance are expected to have some random variation.
-// Better as well as worse performance are reported as test failures to
-// indicate the change.
+// Better as well as worse performance are reported
+// as test failures to indicate the change.
 //
 // NOTE: Running all the tests may take considerable time.
-// NOTE: Running tests several times is recommended to take into account
-//       the variation of time results.
+// NOTE: Running tests several times is recommended
+//       to take into account the random variation of time results.
 
 // Tests the performance of probability calculations
 // with cut-off approximations tests are done.
@@ -49,6 +54,17 @@ TEST_F(PerformanceTest, DISABLED_ThreeMotor) {
   settings.probability_analysis(true);
   ASSERT_NO_THROW(Analyze(input));
   EXPECT_LT(ProbCalcTime(), p_time_std);
+}
+
+TEST_F(PerformanceTest, DISABLED_ChineseTree) {
+  double mcs_time = 0.1;
+  std::vector<std::string> input_files;
+  input_files.push_back("./share/scram/input/Chinese/chinese.xml");
+  input_files.push_back("./share/scram/input/Chinese/chinese-basic-events.xml");
+  settings.probability_analysis(false);
+  ASSERT_NO_THROW(Analyze(input_files));
+  EXPECT_LT(McsGenerationTime(), mcs_time);
+  // EXPECT_LT(ProbCalcTime(), p_time);
 }
 
 // Test performance of MCS generation.
@@ -78,9 +94,9 @@ TEST_F(PerformanceTest, DISABLED_Baobab1_L6) {
 
 // Test performance of MCS generation.
 TEST_F(PerformanceTest, DISABLED_Baobab1_L7) {
-  double mcs_time = 21.5;
+  double mcs_time = 19;
 #ifdef NDEBUG
-  mcs_time = 3.0;
+  mcs_time = 2.3;
 #endif
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/Baobab/baobab1.xml");
@@ -92,9 +108,9 @@ TEST_F(PerformanceTest, DISABLED_Baobab1_L7) {
 }
 
 TEST_F(PerformanceTest, DISABLED_CEA9601_L10) {
-  double mcs_time = 4.0;
+  double mcs_time = 3.2;
 #ifdef NDEBUG
-  mcs_time = 0.62;
+  mcs_time = 0.45;
 #endif
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/CEA9601/CEA9601.xml");
@@ -105,10 +121,24 @@ TEST_F(PerformanceTest, DISABLED_CEA9601_L10) {
   EXPECT_NEAR(mcs_time, McsGenerationTime(), mcs_time * delta);
 }
 
+TEST_F(PerformanceTest, DISABLED_Baobab2_L5) {
+  double mcs_time = 20;
+#ifdef NDEBUG
+  mcs_time = 3.3;
+#endif
+  std::vector<std::string> input_files;
+  input_files.push_back("./share/scram/input/Baobab/baobab2.xml");
+  input_files.push_back("./share/scram/input/Baobab/baobab2-basic-events.xml");
+  settings.limit_order(5);
+  ASSERT_NO_THROW(Analyze(input_files));
+  EXPECT_EQ(1025, NumOfMcs());
+  EXPECT_NEAR(mcs_time, McsGenerationTime(), mcs_time * delta);
+}
+
 // Release only tests.
 #ifdef NDEBUG
 TEST_F(PerformanceTest, DISABLED_CEA9601_L14) {
-  double mcs_time = 15.5;
+  double mcs_time = 12.5;
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/CEA9601/CEA9601.xml");
   input_files.push_back("./share/scram/input/CEA9601/CEA9601-basic-events.xml");
@@ -117,4 +147,16 @@ TEST_F(PerformanceTest, DISABLED_CEA9601_L14) {
   EXPECT_EQ(5160, NumOfMcs());
   EXPECT_NEAR(mcs_time, McsGenerationTime(), mcs_time * delta);
 }
+
+TEST_F(PerformanceTest, DISABLED_Baobab2_L6) {
+  double mcs_time = 19.3;
+  std::vector<std::string> input_files;
+  input_files.push_back("./share/scram/input/Baobab/baobab2.xml");
+  input_files.push_back("./share/scram/input/Baobab/baobab2-basic-events.xml");
+  settings.limit_order(6);
+  ASSERT_NO_THROW(Analyze(input_files));
+  EXPECT_EQ(4805, NumOfMcs());
+  EXPECT_NEAR(mcs_time, McsGenerationTime(), mcs_time * delta);
+}
+
 #endif

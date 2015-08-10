@@ -16,9 +16,11 @@
  */
 /// @file mocus.h
 /// Fault tree analysis with the MOCUS algorithm.
-/// This algorithm requires normalized, only layered AND and OR, fault tree. All
-/// gates must be positive; that is, negations must be pushed down to leaves,
-/// basic events. The fault tree should not contian constants or house events.
+/// This algorithm requires a fault tree in negation normal form.
+/// The fault tree must only contain layered AND and OR gates.
+/// All gates must be positive;
+/// that is, negations must be pushed down to leaves, basic events.
+/// The fault tree should not contain constants or house events.
 #ifndef SCRAM_SRC_MOCUS_H_
 #define SCRAM_SRC_MOCUS_H_
 
@@ -29,7 +31,7 @@
 
 #include <boost/shared_ptr.hpp>
 
-#include "indexed_fault_tree.h"
+#include "boolean_graph.h"
 
 namespace scram {
 
@@ -52,19 +54,20 @@ struct SetPtrComp
 };
 
 /// @class SimpleGate
-/// A helper class to be used in indexed fault tree. This gate represents
-/// only positive OR or AND gates with basic event indices and pointers to
-/// other simple gates.
+/// A helper class to be used in MOCUS.
+/// This gate represents only positive OR or AND gates
+/// with basic event indices
+/// and pointers to other simple gates.
 /// All the child gates of this gate must be of opposite type.
 class SimpleGate {
  public:
   typedef boost::shared_ptr<SimpleGate> SimpleGatePtr;
 
   /// @param[in] type The type of this gate. AND or OR types are expected.
-  explicit SimpleGate(const GateType& type) : type_(type) {}
+  explicit SimpleGate(const Operator& type) : type_(type) {}
 
   /// @returns The type of this gate.
-  inline const GateType& type() const { return type_; }
+  inline const Operator& type() const { return type_; }
 
   /// Adds a basic event index at the end of a container.
   /// This function is specifically given to initiate the gate.
@@ -107,7 +110,8 @@ class SimpleGate {
   static void limit_order(int limit) { limit_order_ = limit; }
 
  private:
-  /// Generates cut sets for AND gate children using already generated sets.
+  /// Generates cut sets for AND gate children
+  /// using already generated sets.
   /// The tree is assumed to be layered with OR children of AND gates.
   ///
   /// @param[in] cut_set The base cut set to work with.
@@ -115,7 +119,8 @@ class SimpleGate {
   void AndGateCutSets(const SetPtr& cut_set,
                       std::set<SetPtr, SetPtrComp>* new_cut_sets);
 
-  /// Generates cut sets for OR gate children using already generated sets.
+  /// Generates cut sets for OR gate children
+  /// using already generated sets.
   /// The tree is assumed to be layered with AND children of OR gates.
   ///
   /// @param[in] cut_set The base cut set to work with.
@@ -123,7 +128,7 @@ class SimpleGate {
   void OrGateCutSets(const SetPtr& cut_set,
                       std::set<SetPtr, SetPtrComp>* new_cut_sets);
 
-  GateType type_;  ///< Type of this gate.
+  Operator type_;  ///< Type of this gate.
   std::vector<int> basic_events_;  ///< Container of basic events' indices.
   std::vector<int> modules_;  ///< Container of modules' indices.
   std::vector<SimpleGatePtr> gates_;  ///< Container of child gates.
@@ -131,15 +136,15 @@ class SimpleGate {
 };
 
 /// @class Mocus
-/// This class analyzes normalized, preprocessed, and indexed fault trees to
-/// generate minimal cut sets with the MOCUS algorithm.
+/// This class analyzes normalized, preprocessed, and indexed fault trees
+/// to generate minimal cut sets with the MOCUS algorithm.
 class Mocus {
  public:
   /// Constructor with the analysis target.
   ///
   /// @param[in] fault_tree Preprocessed, normalized, and indexed fault tree.
   /// @param[in] limit_order The limit on the size of minimal cut sets.
-  explicit Mocus(const IndexedFaultTree* fault_tree, int limit_order = 20);
+  explicit Mocus(const BooleanGraph* fault_tree, int limit_order = 20);
 
   /// Finds minimal cut sets from the initiated fault tree with indices.
   void FindMcs();
@@ -169,8 +174,9 @@ class Mocus {
 
   /// Finds minimal cut sets from cut sets.
   /// Reduces unique cut sets to minimal cut sets.
-  /// The performance is highly dependent on the passed sets. If the sets
-  /// share many events, it takes more time to remove supersets.
+  /// The performance is highly dependent on the passed sets.
+  /// If the sets share many events,
+  /// it takes more time to remove supersets.
   ///
   /// @param[in] cut_sets Cut sets with primary events.
   /// @param[in] mcs_lower_order Reference minimal cut sets of some order.
@@ -183,7 +189,7 @@ class Mocus {
                        int min_order,
                        std::vector<std::set<int> >* mcs);
 
-  const IndexedFaultTree* fault_tree_;  ///< The main fault tree.
+  const BooleanGraph* fault_tree_;  ///< The main fault tree.
   std::vector< std::set<int> > imcs_;  ///< Min cut sets with indexed events.
   /// Limit on the size of the minimal cut sets for performance reasons.
   int limit_order_;

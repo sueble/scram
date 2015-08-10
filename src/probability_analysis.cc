@@ -15,8 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /// @file probability_analysis.cc
-/// Implementations of functions to provide probability and importance
-/// informations.
+/// Implementations of functions to provide
+/// probability and importance informations.
 #include "probability_analysis.h"
 
 #include <boost/algorithm/string.hpp>
@@ -74,8 +74,9 @@ void ProbabilityAnalysis::Analyze(
 
   // Special case of unity with empty sets.
   if (min_cut_sets_.size() == 1 && min_cut_sets_.begin()->empty()) {
-    warnings_ += "Probability for UNITY case.";
+    warnings_ += " Probability is for UNITY case.";
     p_total_ = 1;
+    p_rare_ = 1;
     prob_of_min_sets_.insert(std::make_pair(*min_cut_sets_.begin(), 1));
     return;
   }

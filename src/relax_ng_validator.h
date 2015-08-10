@@ -1,6 +1,4 @@
 /*
- * Copyright (C) 2000 Ari Johnson
- * Copyright (C) 2002-2004 The libxml dev team
  * Copyright (C) 2014-2015 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
@@ -16,6 +14,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+/*
+ * libxml++ and this file are copyright (C) 2000 by Ari Johnson,
+ * (C) 2002-2004 by the libxml dev team and
+ * are covered by the GNU Lesser General Public License, which should be
+ * included with libxml++ as the file COPYING.
+ */
 /// @file relax_ng_validator.h
 /// RelaxNG Validator.
 /// This class is agented off of the schemavalidator in libxml++.
@@ -29,7 +33,8 @@
 namespace scram {
 
 /// @class RelaxNGValidator
-/// This class provides a simple interface to validate XML documents
+/// This class provides a simple interface
+/// to validate XML documents
 /// against a given RelaxNG schema.
 class RelaxNGValidator {
  public:

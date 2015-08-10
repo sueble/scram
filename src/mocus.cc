@@ -16,37 +16,48 @@
  */
 /// @file mocus.cc
 /// Implementation of the MOCUS algorithm.
-/// It is assumed that the tree is layered with OR and AND gates on each
-/// level. That is, one level contains only AND or OR gates.
+/// It is assumed that the tree is layered
+/// with OR and AND gates on each level.
+/// That is, one level contains only AND or OR gates.
 /// The function assumes the tree contains only positive gates.
 ///
 /// The description of the algorithm.
 ///
 /// Turn all existing gates in the tree into simple gates
 /// with pointers to the child gates but not modules.
-/// Leave minimal cut set modules to the last moment till all the gates
-/// are operated. Those modules' minimal cut sets can be joined without
+/// Leave minimal cut set modules to the last moment
+/// till all the gates are operated.
+/// Those modules' minimal cut sets can be joined without
 /// additional check for minimality.
 ///
 /// Operate on each module starting from the top gate.
-/// For now, it is assumed that a module cannot be unity, this means that
-/// a module will at least add a new event into a cut set, so size of
-/// a cut set with modules is a minimum number of members in the set.
-/// This will fail if there is unity case but will hold if the module is
-/// null because the cut set will be deleted anyway.
+/// For now, it is assumed that a module cannot be unity,
+/// which means that a module will at least add a new event into a cut set,
+/// so the size of a cut set with modules
+/// is a minimum number of members in the set.
+/// This assumption will fail
+/// if there is unity case
+/// but will hold
+/// if the module is null because the cut set will be deleted anyway.
 ///
-/// Upon walking from top to children gates, there are two types: OR and AND.
-/// The generated sets are passed to child gates, which use the passed set
-/// to generate new sets. AND gate will simply add its basic events and
-/// modules to the set and pass the resultant sets into its OR child, which
-/// will generate a lot more sets. These generated sets are passed to the
-/// next gate child to generate even more.
+/// Upon walking from top to children gates,
+/// there are two types: OR and AND.
+/// The generated sets are passed to child gates,
+/// which use the passed set to generate new sets.
+/// AND gate will simply add its basic events and modules to the set
+/// and pass the resultant sets into its OR child,
+/// which will generate a lot more sets.
+/// These generated sets are passed to the next gate child
+/// to generate even more.
 ///
-/// For OR gates, the passed set is checked to have basic events of the gate.
-/// If so, this is a local minimum cut set, so generation of the sets stops
-/// on this gate. No new sets should be generated in this case. This condition
-/// is also applicable if the child AND gate keeps the input set as output and
-/// generates only additional supersets.
+/// For OR gates, the passed set is checked
+/// to have basic events of the gate.
+/// If so, this is a local minimum cut set,
+/// so generation of the sets stops on this gate.
+/// No new sets should be generated in this case.
+/// This condition is also applicable
+/// if the child AND gate keeps the input set as output
+/// and generates only additional supersets.
 ///
 /// The generated sets are kept unique by storing them in a set.
 #include "mocus.h"
@@ -172,7 +183,7 @@ void SimpleGate::OrGateCutSets(const SetPtr& cut_set,
   new_cut_sets->insert(local_sets.begin(), local_sets.end());
 }
 
-Mocus::Mocus(const IndexedFaultTree* fault_tree, int limit_order)
+Mocus::Mocus(const BooleanGraph* fault_tree, int limit_order)
       : fault_tree_(fault_tree),
         limit_order_(limit_order) {
   SimpleGate::limit_order(limit_order);
@@ -182,10 +193,10 @@ void Mocus::FindMcs() {
   CLOCK(mcs_time);
   LOG(DEBUG2) << "Start minimal cut set generation.";
 
-  IGatePtr top = fault_tree_->top_event();
+  IGatePtr top = fault_tree_->root();
 
   // Special case of empty top gate.
-  if (top->children().empty()) {
+  if (top->args().empty()) {
     State state = top->state();
     assert(state == kNullState || state == kUnityState);
     if (state == kUnityState) {
@@ -194,9 +205,9 @@ void Mocus::FindMcs() {
     }  // Other cases are null.
     return;
   } else if (top->type() == kNullGate) {  // Special case of NULL type top.
-    assert(top->children().size() == 1);
-    assert(top->gate_children().empty());
-    int child = *top->children().begin();
+    assert(top->args().size() == 1);
+    assert(top->gate_args().empty());
+    int child = *top->args().begin();
     std::set<int> one_element;
     one_element.insert(child);
     imcs_.push_back(one_element);
@@ -252,7 +263,7 @@ void Mocus::FindMcs() {
   /// @todo Detect unity in modules.
   assert(top->state() != kUnityState);
   LOG(DEBUG2) << "The number of MCS found: " << imcs_.size();
-  LOG(DEBUG2) << "Minimal cut set finding time: " << DUR(mcs_time);
+  LOG(DEBUG2) << "Minimal cut sets found in " << DUR(mcs_time);
 }
 
 void Mocus::CreateSimpleTree(const IGatePtr& gate,
@@ -262,10 +273,10 @@ void Mocus::CreateSimpleTree(const IGatePtr& gate,
   SimpleGatePtr simple_gate(new SimpleGate(gate->type()));
   processed_gates->insert(std::make_pair(gate->index(), simple_gate));
 
-  assert(gate->constant_children().empty());
+  assert(gate->constant_args().empty());
+  assert(gate->args().size() > 1);
   boost::unordered_map<int, IGatePtr>::const_iterator it;
-  for (it = gate->gate_children().begin(); it != gate->gate_children().end();
-       ++it) {
+  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     assert(it->first > 0);
     IGatePtr child_gate = it->second;
     Mocus::CreateSimpleTree(it->second, processed_gates);
@@ -275,10 +286,10 @@ void Mocus::CreateSimpleTree(const IGatePtr& gate,
       simple_gate->AddChildGate(processed_gates->find(it->first)->second);
     }
   }
-  typedef boost::shared_ptr<IBasicEvent> IBasicEventPtr;
-  boost::unordered_map<int, IBasicEventPtr>::const_iterator it_b;
-  for (it_b = gate->basic_event_children().begin();
-       it_b != gate->basic_event_children().end(); ++it_b) {
+  typedef boost::shared_ptr<Variable> VariablePtr;
+  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  for (it_b = gate->variable_args().begin();
+       it_b != gate->variable_args().end(); ++it_b) {
     simple_gate->InitiateWithBasic(it_b->first);
   }
 }

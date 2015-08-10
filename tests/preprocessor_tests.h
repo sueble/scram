@@ -24,8 +24,8 @@
 using namespace scram;
 
 /// @class PreprocessorTest
-/// This test fixture is for white-box testing of algorithms for fault tree
-/// preprossing.
+/// This test fixture is for white-box testing of algorithms
+/// for fault tree preprossing.
 class PreprocessorTest : public ::testing::Test {
  protected:
   typedef boost::shared_ptr<IGate> IGatePtr;
@@ -36,14 +36,9 @@ class PreprocessorTest : public ::testing::Test {
   virtual void TearDown() {
   }
 
-  bool ProcessConstantChild(const IGatePtr& gate, int child,
-                            bool state, std::vector<int>* to_erase) {
-    return false;
-  }
-
   // Members for tests.
   Preprocessor* prep;
-  IndexedFaultTree* fault_tree;
+  BooleanGraph* fault_tree;
 };
 
 #endif // SCRAM_TESTS_PREPROCESSOR_TESTS_H_
