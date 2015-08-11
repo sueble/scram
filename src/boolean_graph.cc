@@ -328,18 +328,18 @@ BooleanGraph::BooleanGraph(const GatePtr& root, bool ccf)
       normal_(true) {
   Node::ResetIndex();
   Variable::ResetIndex();
-  boost::unordered_map<std::string, NodePtr> id_to_index;
-  root_ = BooleanGraph::ProcessFormula(root->formula(), ccf, &id_to_index);
+  boost::unordered_map<std::string, NodePtr> id_to_node;
+  root_ = BooleanGraph::ProcessFormula(root->formula(), ccf, &id_to_node);
 }
 
 boost::shared_ptr<IGate> BooleanGraph::ProcessFormula(
     const FormulaPtr& formula,
     bool ccf,
-    boost::unordered_map<std::string, NodePtr>* id_to_index) {
+    boost::unordered_map<std::string, NodePtr>* id_to_node) {
   Operator type = kStringToType_.find(formula->type())->second;
   IGatePtr parent(new IGate(type));
 
-  if (normal_ && type != kOrGate && type != kAndGate) normal_ = false;
+  if (type != kOrGate && type != kAndGate) normal_ = false;
 
   switch (type) {
     case kNotGate:
@@ -352,12 +352,33 @@ boost::shared_ptr<IGate> BooleanGraph::ProcessFormula(
       parent->vote_number(formula->vote_number());
       break;
   }
+  BooleanGraph::ProcessBasicEvents(parent, formula->basic_event_args(),
+                                   ccf, id_to_node);
+
+  BooleanGraph::ProcessHouseEvents(parent, formula->house_event_args(),
+                                   id_to_node);
+
+  BooleanGraph::ProcessGates(parent, formula->gate_args(), ccf, id_to_node);
+
+  const std::set<FormulaPtr>& formulas = formula->formula_args();
+  std::set<FormulaPtr>::const_iterator it_f;
+  for (it_f = formulas.begin(); it_f != formulas.end(); ++it_f) {
+    IGatePtr new_gate = BooleanGraph::ProcessFormula(*it_f, ccf, id_to_node);
+    parent->AddArg(new_gate->index(), new_gate);
+  }
+  return parent;
+}
+
+void BooleanGraph::ProcessBasicEvents(
+      const IGatePtr& parent,
+      const std::vector<BasicEventPtr>& basic_events,
+      bool ccf,
+      boost::unordered_map<std::string, NodePtr>* id_to_node) {
   std::vector<BasicEventPtr>::const_iterator it_b;
-  for (it_b = formula->basic_event_args().begin();
-       it_b != formula->basic_event_args().end(); ++it_b) {
+  for (it_b = basic_events.begin(); it_b != basic_events.end(); ++it_b) {
     BasicEventPtr basic_event = *it_b;
-    if (id_to_index->count(basic_event->id())) {  // Node already exists.
-      NodePtr node = id_to_index->find(basic_event->id())->second;
+    if (id_to_node->count(basic_event->id())) {  // Node already exists.
+      NodePtr node = id_to_node->find(basic_event->id())->second;
       if (ccf && basic_event->HasCcf()) {  // Replace with a CCF gate.
         parent->AddArg(node->index(), boost::static_pointer_cast<IGate>(node));
       } else {
@@ -368,58 +389,58 @@ boost::shared_ptr<IGate> BooleanGraph::ProcessFormula(
       if (ccf && basic_event->HasCcf()) {  // Create a CCF gate.
         GatePtr ccf_gate = basic_event->ccf_gate();
         IGatePtr new_gate =
-            BooleanGraph::ProcessFormula(ccf_gate->formula(), ccf, id_to_index);
+            BooleanGraph::ProcessFormula(ccf_gate->formula(), ccf, id_to_node);
         parent->AddArg(new_gate->index(), new_gate);
-        id_to_index->insert(std::make_pair(basic_event->id(), new_gate));
+        id_to_node->insert(std::make_pair(basic_event->id(), new_gate));
       } else {
         basic_events_.push_back(basic_event);
         VariablePtr new_basic(new Variable());  // Sequential indexation.
         assert(basic_events_.size() == new_basic->index());
         parent->AddArg(new_basic->index(), new_basic);
-        id_to_index->insert(std::make_pair(basic_event->id(), new_basic));
+        id_to_node->insert(std::make_pair(basic_event->id(), new_basic));
       }
     }
   }
+}
 
-  typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
+void BooleanGraph::ProcessHouseEvents(
+      const IGatePtr& parent,
+      const std::vector<HouseEventPtr>& house_events,
+      boost::unordered_map<std::string, NodePtr>* id_to_node) {
   std::vector<HouseEventPtr>::const_iterator it_h;
-  for (it_h = formula->house_event_args().begin();
-       it_h != formula->house_event_args().end(); ++it_h) {
+  for (it_h = house_events.begin(); it_h != house_events.end(); ++it_h) {
     constants_ = true;
 
     HouseEventPtr house = *it_h;
-    if (id_to_index->count(house->id())) {
-      NodePtr node = id_to_index->find(house->id())->second;
+    if (id_to_node->count(house->id())) {
+      NodePtr node = id_to_node->find(house->id())->second;
       parent->AddArg(node->index(), boost::static_pointer_cast<Constant>(node));
     } else {
       ConstantPtr constant(new Constant(house->state()));
       parent->AddArg(constant->index(), constant);
-      id_to_index->insert(std::make_pair(house->id(), constant));
+      id_to_node->insert(std::make_pair(house->id(), constant));
     }
   }
+}
 
+void BooleanGraph::ProcessGates(
+      const IGatePtr& parent,
+      const std::vector<GatePtr>& gates,
+      bool ccf,
+      boost::unordered_map<std::string, NodePtr>* id_to_node) {
   std::vector<GatePtr>::const_iterator it_g;
-  for (it_g = formula->gate_args().begin(); it_g != formula->gate_args().end();
-       ++it_g) {
+  for (it_g = gates.begin(); it_g != gates.end(); ++it_g) {
     GatePtr gate = *it_g;
-    if (id_to_index->count(gate->id())) {
-      NodePtr node = id_to_index->find(gate->id())->second;
+    if (id_to_node->count(gate->id())) {
+      NodePtr node = id_to_node->find(gate->id())->second;
       parent->AddArg(node->index(), boost::static_pointer_cast<IGate>(node));
     } else {
       IGatePtr new_gate = BooleanGraph::ProcessFormula(gate->formula(), ccf,
-                                                       id_to_index);
+                                                       id_to_node);
       parent->AddArg(new_gate->index(), new_gate);
-      id_to_index->insert(std::make_pair(gate->id(), new_gate));
+      id_to_node->insert(std::make_pair(gate->id(), new_gate));
     }
   }
-
-  const std::set<FormulaPtr>& formulas = formula->formula_args();
-  std::set<FormulaPtr>::const_iterator it_f;
-  for (it_f = formulas.begin(); it_f != formulas.end(); ++it_f) {
-    IGatePtr new_gate = BooleanGraph::ProcessFormula(*it_f, ccf, id_to_index);
-    parent->AddArg(new_gate->index(), new_gate);
-  }
-  return parent;
 }
 
 std::ostream& operator<<(std::ostream& os,
@@ -439,110 +460,130 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
+namespace {
+
+/// @struct FormulaSig
+/// Gate formula signature for printing in the shorthand format.
+struct FormulaSig {
+  std::string begin;  ///< Beginning of the formula string.
+  std::string op;  ///< Operator between the formula arguments.
+  std::string end;  ///< The end of the formula string.
+};
+
+/// Provides proper formatting clues for gate formulas.
+///
+/// @param[in] gate The gate with the formula to be printed.
+///
+/// @returns The beginning, operator, and end strings for the formula.
+const FormulaSig GetFormulaSig(const boost::shared_ptr<const IGate>& gate) {
+  FormulaSig sig = {"(", "", ")"};  // Defaults for most gate types.
+
+  switch (gate->type()) {
+    case kNandGate:
+      sig.begin = "~(";  // Fall-through to AND gate.
+    case kAndGate:
+      sig.op = " & ";
+      break;
+    case kNorGate:
+      sig.begin = "~(";  // Fall-through to OR gate.
+    case kOrGate:
+      sig.op = " | ";
+      break;
+    case kXorGate:
+      sig.op = " ^ ";
+      break;
+    case kNotGate:
+      sig.begin = "~(";  // Parentheses are for cases of NOT(NOT Arg).
+      break;
+    case kNullGate:
+      sig.begin = "";  // No need for the parentheses.
+      sig.end = "";
+      break;
+    case kAtleastGate:
+      sig.begin = "@(" + boost::lexical_cast<std::string>(gate->vote_number()) +
+                  ", [";
+      sig.op = ", ";
+      sig.end = "])";
+      break;
+  }
+  return sig;
+}
+
+/// Provides special formatting for indexed gate names.
+///
+/// @param[in] gate The gate which name must be created.
+///
+/// @returns The name of the gate with extra information about its state.
+const std::string GetName(const boost::shared_ptr<const IGate>& gate) {
+  std::string name = "G";
+  if (gate->state() == kNormalState) {
+    if (gate->IsModule()) name += "M";
+  } else {  // This gate has become constant.
+    name += "C";
+  }
+  name += boost::lexical_cast<std::string>(gate->index());
+  return name;
+}
+
+}  // namespace
+
 std::ostream& operator<<(std::ostream& os,
                          const boost::shared_ptr<IGate>& gate) {
   if (gate->Visited()) return os;
   gate->Visit(1);
+  std::string name = GetName(gate);
   if (gate->state() != kNormalState) {
     std::string state = gate->state() == kNullState ? "false" : "true";
-    os << "s(GC" << gate->index() << ") = " << state << std::endl;
+    os << "s(" << name << ") = " << state << std::endl;
     return os;
   }
-  std::string formula = "(";  // Beginning string for most formulas.
-  std::string op = "";  // Operator of the formula.
-  std::string end = ")";  // Closing parentheses for most formulas.
-  switch (gate->type()) {  // Determine the beginning string and the operator.
-    case kNandGate:
-      formula = "~(";  // Fall-through to AND gate.
-    case kAndGate:
-      op = " & ";
-      break;
-    case kNorGate:
-      formula = "~(";  // Fall-through to OR gate.
-    case kOrGate:
-      op = " | ";
-      break;
-    case kXorGate:
-      op = " ^ ";
-      break;
-    case kNotGate:
-      formula = "~(";  // Parentheses are for cases of NOT(NOT Arg).
-      break;
-    case kNullGate:
-      formula = "";  // No need for the parentheses.
-      end = "";
-      break;
-    case kAtleastGate:
-      formula = "@(" + boost::lexical_cast<std::string>(gate->vote_number());
-      formula += ", [";
-      op = ", ";
-      end = "])";
-      break;
-  }
-  bool first_arg = true;  // To get the formatting correct.
+  std::string formula = "";  // The formula of the gate for printing.
+  const FormulaSig sig = GetFormulaSig(gate);  // Formatting for the formula.
+  int num_args = gate->args().size();  // The number of arguments to print.
 
   typedef boost::shared_ptr<IGate> IGatePtr;
   boost::unordered_map<int, IGatePtr>::const_iterator it_gate;
   for (it_gate = gate->gate_args().begin(); it_gate != gate->gate_args().end();
        ++it_gate) {
-    if (first_arg) {
-      first_arg = false;
-    } else {
-      formula += op;
-    }
     if (it_gate->first < 0) formula += "~";  // Negation.
-    IGatePtr arg_gate = it_gate->second;
-    if (arg_gate->state() == kNormalState) {
-      formula += "G";
-      if (arg_gate->IsModule()) formula += "M";
-    } else {
-      formula += "GC";
-    }
-    formula += boost::lexical_cast<std::string>(arg_gate->index());
+    formula += GetName(it_gate->second);
 
-    os << arg_gate;
+    if (--num_args) formula += sig.op;
+
+    os << it_gate->second;
   }
 
   typedef boost::shared_ptr<Variable> VariablePtr;
   boost::unordered_map<int, VariablePtr>::const_iterator it_basic;
   for (it_basic = gate->variable_args().begin();
        it_basic != gate->variable_args().end(); ++it_basic) {
-    if (first_arg) {
-      first_arg = false;
-    } else {
-      formula += op;
-    }
     if (it_basic->first < 0) formula += "~";  // Negation.
-    VariablePtr arg = it_basic->second;
-    formula += "B" + boost::lexical_cast<std::string>(arg->index());
+    int index = it_basic->second->index();
+    formula += "B" + boost::lexical_cast<std::string>(index);
 
-    os << arg;
+    if (--num_args) formula += sig.op;
+
+    os << it_basic->second;
   }
 
   typedef boost::shared_ptr<Constant> ConstantPtr;
   boost::unordered_map<int, ConstantPtr>::const_iterator it_const;
   for (it_const = gate->constant_args().begin();
        it_const != gate->constant_args().end(); ++it_const) {
-    if (first_arg) {
-      first_arg = false;
-    } else {
-      formula += op;
-    }
     if (it_const->first < 0) formula += "~";  // Negation.
-    ConstantPtr arg = it_const->second;
-    formula += "H" + boost::lexical_cast<std::string>(arg->index());
+    int index = it_const->second->index();
+    formula += "H" + boost::lexical_cast<std::string>(index);
 
-    os << arg;
+    if (--num_args) formula += sig.op;
+
+    os << it_const->second;
   }
-  std::string signature = "G";
-  if (gate->IsModule()) signature += "M";
-  os << signature << gate->index() << " := " << formula << end << std::endl;
+  os << name << " := " << sig.begin << formula << sig.end << std::endl;
   return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const BooleanGraph* ft) {
-  os << "BooleanGraph_G" << ft->root()->index() << std::endl;
-  os << std::endl;
+  os << "BooleanGraph" << std::endl << std::endl;
   os << ft->root();
   return os;
 }
