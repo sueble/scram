@@ -14,26 +14,27 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "boolean_graph.h"
 
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#include <gtest/gtest.h>
 
-#include <QMainWindow>
+#include "initializer.h"
+#include "fault_tree.h"
+#include "model.h"
+#include "settings.h"
 
-namespace Ui {
-class MainWindow;
+using namespace scram;
+
+TEST(BooleanGraphTest, Print) {
+  Settings settings;
+  Initializer* init = new Initializer(settings);
+  std::vector<std::string> input_files;
+  input_files.push_back("./share/scram/input/fta/correct_formulas.xml");
+  EXPECT_NO_THROW(init->ProcessInputFiles(input_files));
+  BooleanGraph* graph = new BooleanGraph(init->model()
+                                         ->fault_trees().begin()->second
+                                         ->top_events().front());
+  graph->Print();
+  delete init;
+  delete graph;
 }
-
-class MainWindow : public QMainWindow
-{
-    Q_OBJECT
-
-public:
-    explicit MainWindow(QWidget *parent = 0);
-    ~MainWindow();
-
-private:
-    Ui::MainWindow *ui;
-};
-
-#endif // MAINWINDOW_H

@@ -17,6 +17,7 @@ project(SCRAM)
 # set project directories
 set(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SCRAM_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src")
+set(SCRAM_GUI_DIR "${PROJECT_SOURCE_DIR}/gui")
 set(SCRAM_TEST_DIR "${PROJECT_SOURCE_DIR}/tests")
 
 set(BUILD_SHARED_LIBS TRUE)  # Change this for static building.
@@ -119,6 +120,13 @@ message("--    Boost System location: ${Boost_SYSTEM_LIBRARY}")
 set(LIBS ${LIBS} ${Boost_FILESYSTEM_LIBRARY})
 message("--    Boost Filesystem location: ${Boost_FILESYSTEM_LIBRARY}")
 
+# Find the QtWidgets library
+find_package(Qt5Widgets)
+if(Qt5Widgets_FOUND)
+  message("-- Found Qt5")
+  message("-- Qt5 Version: ${Qt5Widgets_VERSION_STRING}")
+endif()
+
 ########################## end of find libraries ########################
 
 ########################## begin includes ###############################
@@ -133,6 +141,10 @@ include_directories("${SCRAM_SOURCE_DIR}")
 
 add_subdirectory("${SCRAM_SOURCE_DIR}")
 add_subdirectory("${SCRAM_TEST_DIR}")
+
+if(Qt5Widgets_FOUND)
+  add_subdirectory("${SCRAM_GUI_DIR}")
+endif()
 
 ####################### end includes ####################################
 

@@ -29,6 +29,7 @@
 #include <boost/pointer_cast.hpp>
 
 #include "event.h"
+#include "logger.h"
 
 namespace scram {
 
@@ -61,14 +62,40 @@ IGate::IGate(const Operator& type)
       module_(false),
       num_failed_args_(0) {}
 
+boost::shared_ptr<IGate> IGate::Clone() {
+  IGatePtr clone(new IGate(type_));  // The same type.
+  clone->vote_number_ = vote_number_;  // Copy vote number in case it is K/N.
+  // Getting arguments copied.
+  clone->args_ = args_;
+  clone->gate_args_ = gate_args_;
+  clone->variable_args_ = variable_args_;
+  clone->constant_args_ = constant_args_;
+  // Introducing the new parent to the args.
+  boost::unordered_map<int, IGatePtr>::const_iterator it_g;
+  for (it_g = gate_args_.begin(); it_g != gate_args_.end(); ++it_g) {
+    it_g->second->parents_.insert(std::make_pair(clone->index(), clone));
+  }
+  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  for (it_b = variable_args_.begin(); it_b != variable_args_.end(); ++it_b) {
+    it_b->second->parents_.insert(std::make_pair(clone->index(), clone));
+  }
+  boost::unordered_map<int, ConstantPtr>::const_iterator it_c;
+  for (it_c = constant_args_.begin(); it_c != constant_args_.end(); ++it_c) {
+    it_c->second->parents_.insert(std::make_pair(clone->index(), clone));
+  }
+  return clone;
+}
+
 void IGate::AddArg(int arg, const IGatePtr& gate) {
   assert(arg != 0);
   assert(std::abs(arg) == gate->index());
   assert(state_ == kNormalState);
-  if (type_ == kNotGate || type_ == kNullGate) assert(args_.empty());
-  if (type_ == kXorGate) assert(args_.size() < 2);
+  assert((type_ == kNotGate || type_ == kNullGate) ? args_.empty() : true);
+  assert(type_ == kXorGate ? args_.size() < 2 : true);
+
   if (args_.count(arg)) return IGate::ProcessDuplicateArg(arg);
   if (args_.count(-arg)) return IGate::ProcessComplementArg(arg);
+
   args_.insert(arg);
   gate_args_.insert(std::make_pair(arg, gate));
   gate->parents_.insert(std::make_pair(Node::index(), shared_from_this()));
@@ -78,10 +105,12 @@ void IGate::AddArg(int arg, const VariablePtr& variable) {
   assert(arg != 0);
   assert(std::abs(arg) == variable->index());
   assert(state_ == kNormalState);
-  if (type_ == kNotGate || type_ == kNullGate) assert(args_.empty());
-  if (type_ == kXorGate) assert(args_.size() < 2);
+  assert((type_ == kNotGate || type_ == kNullGate) ? args_.empty() : true);
+  assert(type_ == kXorGate ? args_.size() < 2 : true);
+
   if (args_.count(arg)) return IGate::ProcessDuplicateArg(arg);
   if (args_.count(-arg)) return IGate::ProcessComplementArg(arg);
+
   args_.insert(arg);
   variable_args_.insert(std::make_pair(arg, variable));
   variable->parents_.insert(std::make_pair(Node::index(), shared_from_this()));
@@ -91,10 +120,12 @@ void IGate::AddArg(int arg, const ConstantPtr& constant) {
   assert(arg != 0);
   assert(std::abs(arg) == constant->index());
   assert(state_ == kNormalState);
-  if (type_ == kNotGate || type_ == kNullGate) assert(args_.empty());
-  if (type_ == kXorGate) assert(args_.size() < 2);
+  assert((type_ == kNotGate || type_ == kNullGate) ? args_.empty() : true);
+  assert(type_ == kXorGate ? args_.size() < 2 : true);
+
   if (args_.count(arg)) return IGate::ProcessDuplicateArg(arg);
   if (args_.count(-arg)) return IGate::ProcessComplementArg(arg);
+
   args_.insert(arg);
   constant_args_.insert(std::make_pair(arg, constant));
   constant->parents_.insert(std::make_pair(Node::index(), shared_from_this()));
@@ -230,39 +261,32 @@ void IGate::ProcessDuplicateArg(int index) {
       // @(k, [x, x, y_i]) = x & @(k-2, [y_i]) | @(k, [y_i])
       assert(vote_number_ > 1);
       assert(args_.size() > 2);
+      IGatePtr clone_one = IGate::Clone();  // @(k, [y_i])
+
+      this->EraseAllArgs();  // The main gate turns into OR with x.
       type_ = kOrGate;
-      std::set<int> to_share(args_);  // Copy before manipulations.
-      to_share.erase(index);
-
-      IGatePtr child_and(new IGate(kAndGate));  // May not be needed.
-      IGatePtr grand_child;  // Only if child_and is needed.
-      if (vote_number_ == 3) {  // Create an OR grand child.
-        grand_child = IGatePtr(new IGate(kOrGate));
-
-      } else if (vote_number_ > 3) {  // Create a K/N grand child.
-        grand_child = IGatePtr(new IGate(kAtleastGate));
-        grand_child->vote_number(vote_number_ - 2);
+      this->AddArg(clone_one->index(), clone_one);
+      if (vote_number_ == 2) {  // No need for the second K/N gate.
+        clone_one->TransferArg(index, shared_from_this());  // Transfered the x.
+        assert(this->args_.size() == 2);
+        return;
       }
-      if (grand_child) {
-        this->AddArg(child_and->index(), child_and);
-        this->TransferArg(index, child_and);
-        child_and->AddArg(grand_child->index(), grand_child);
-        assert(child_and->args().size() == 2);
-      }
+      // Create the AND gate to combine with the duplicate node.
+      IGatePtr and_gate(new IGate(kAndGate));
+      this->AddArg(and_gate->index(), and_gate);
+      clone_one->TransferArg(index, and_gate);  // Transfered the x.
 
-      IGatePtr child_atleast(new IGate(kAtleastGate));
-      child_atleast->vote_number(vote_number_);
-      this->AddArg(child_atleast->index(), child_atleast);
+      // Have to create the second K/N for vote_number > 2.
+      IGatePtr clone_two = clone_one->Clone();
+      clone_two->vote_number(vote_number_ - 2);  // @(k-2, [y_i])
+      if (clone_two->vote_number() == 1) clone_two->type(kOrGate);
+      and_gate->AddArg(clone_two->index(), clone_two);
 
-      std::set<int>::iterator it;
-      for (it = to_share.begin(); it != to_share.end(); ++it) {
-        if (grand_child) this->ShareArg(*it, grand_child);
-        this->TransferArg(*it, child_atleast);
-      }
-      assert(args_.size() == 2);
+      assert(and_gate->args().size() == 2);
+      assert(this->args_.size() == 2);
   }
   if (args_.size() == 1) {
-    switch(type_) {
+    switch (type_) {
       case kAndGate:
       case kOrGate:
         type_ = kNullGate;
@@ -332,12 +356,16 @@ const std::map<std::string, Operator> BooleanGraph::kStringToType_ =
 
 BooleanGraph::BooleanGraph(const GatePtr& root, bool ccf)
     : coherent_(true),
-      constants_(false),
       normal_(true) {
   Node::ResetIndex();
   Variable::ResetIndex();
   boost::unordered_map<std::string, NodePtr> id_to_node;
   root_ = BooleanGraph::ProcessFormula(root->formula(), ccf, &id_to_node);
+}
+
+void BooleanGraph::Print() {
+  ClearNodeVisits();
+  std::cerr << std::endl << this << std::endl;
 }
 
 boost::shared_ptr<IGate> BooleanGraph::ProcessFormula(
@@ -358,6 +386,9 @@ boost::shared_ptr<IGate> BooleanGraph::ProcessFormula(
       break;
     case kAtleastGate:
       parent->vote_number(formula->vote_number());
+      break;
+    case kNullGate:
+      null_gates_.push_back(parent);
       break;
   }
   BooleanGraph::ProcessBasicEvents(parent, formula->basic_event_args(),
@@ -417,8 +448,6 @@ void BooleanGraph::ProcessHouseEvents(
       boost::unordered_map<std::string, NodePtr>* id_to_node) {
   std::vector<HouseEventPtr>::const_iterator it_h;
   for (it_h = house_events.begin(); it_h != house_events.end(); ++it_h) {
-    constants_ = true;
-
     HouseEventPtr house = *it_h;
     if (id_to_node->count(house->id())) {
       NodePtr node = id_to_node->find(house->id())->second;
@@ -427,6 +456,7 @@ void BooleanGraph::ProcessHouseEvents(
       ConstantPtr constant(new Constant(house->state()));
       parent->AddArg(constant->index(), constant);
       id_to_node->insert(std::make_pair(house->id(), constant));
+      constants_.push_back(constant);
     }
   }
 }
@@ -449,6 +479,75 @@ void BooleanGraph::ProcessGates(
       id_to_node->insert(std::make_pair(gate->id(), new_gate));
     }
   }
+}
+
+void BooleanGraph::ClearGateMarks() {
+  BooleanGraph::ClearGateMarks(root_);
+}
+
+void BooleanGraph::ClearGateMarks(const IGatePtr& gate) {
+  if (!gate->mark()) return;
+  gate->mark(false);
+  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
+    BooleanGraph::ClearGateMarks(it->second);
+  }
+}
+
+void BooleanGraph::ClearNodeVisits() {
+  LOG(DEBUG5) << "Clearing node visit times...";
+  BooleanGraph::ClearGateMarks();
+  BooleanGraph::ClearNodeVisits(root_);
+  BooleanGraph::ClearGateMarks();
+  LOG(DEBUG5) << "Node visit times are clear!";
+}
+
+void BooleanGraph::ClearNodeVisits(const IGatePtr& gate) {
+  if (gate->mark()) return;
+  gate->mark(true);
+
+  if (gate->Visited()) gate->ClearVisits();
+
+  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
+    BooleanGraph::ClearNodeVisits(it->second);
+  }
+  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  for (it_b = gate->variable_args().begin();
+       it_b != gate->variable_args().end(); ++it_b) {
+    if (it_b->second->Visited()) it_b->second->ClearVisits();
+  }
+  boost::unordered_map<int, ConstantPtr>::const_iterator it_c;
+  for (it_c = gate->constant_args().begin();
+       it_c != gate->constant_args().end(); ++it_c) {
+    if (it_c->second->Visited()) it_c->second->ClearVisits();
+  }
+}
+
+void BooleanGraph::ClearOptiValues() {
+  LOG(DEBUG5) << "Clearing OptiValues...";
+  BooleanGraph::ClearGateMarks();
+  BooleanGraph::ClearOptiValues(root_);
+  BooleanGraph::ClearGateMarks();
+  LOG(DEBUG5) << "Node OptiValues are clear!";
+}
+
+void BooleanGraph::ClearOptiValues(const IGatePtr& gate) {
+  if (gate->mark()) return;
+  gate->mark(true);
+
+  gate->opti_value(0);
+  gate->ResetArgFailure();
+  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
+    BooleanGraph::ClearOptiValues(it->second);
+  }
+  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  for (it_b = gate->variable_args().begin();
+       it_b != gate->variable_args().end(); ++it_b) {
+    it_b->second->opti_value(0);
+  }
+  assert(gate->constant_args().empty());
 }
 
 std::ostream& operator<<(std::ostream& os,

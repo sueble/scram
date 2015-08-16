@@ -29,7 +29,7 @@
 #define SCRAM_SRC_BOOLEAN_GRAPH_H_
 
 #include <map>
-#include <ostream>
+#include <iostream>
 #include <set>
 #include <string>
 #include <vector>
@@ -49,7 +49,7 @@ class IGate;  // Indexed gate parent of nodes.
 /// The node holds weak pointers to the parents
 /// that are managed by the parents.
 class Node {
-  friend class IGate;  // To manage parent information.
+  friend class IGate;  ///< To manage parent information.
 
  public:
   /// Creates a graph node with its index assigned sequentially.
@@ -114,7 +114,9 @@ class Node {
 
   /// @returns The last time this node was visited.
   /// @returns 0 if no last time is registered.
-  inline int LastVisit() const { return visits_[2] ? visits_[2] : visits_[1]; }
+  inline int LastVisit() const {
+    return visits_[2] ? visits_[2] : visits_[1] ? visits_[1] : visits_[0];
+  }
 
   /// @returns The minimum time of the visit.
   /// @returns 0 if no time is registered.
@@ -122,9 +124,7 @@ class Node {
 
   /// @returns The maximum time of the visit.
   /// @returns 0 if no time is registered.
-  inline virtual int max_time() const {
-    return visits_[2] ? visits_[2] : visits_[1] ? visits_[1] : visits_[0];
-  }
+  inline virtual int max_time() const { return LastVisit(); }
 
   /// @returns false if this node was only visited once upon graph traversal.
   /// @returns true if this node was revisited at one more time.
@@ -257,6 +257,13 @@ class IGate : public Node, public boost::enable_shared_from_this<IGate> {
     assert(Node::parents().empty());
     IGate::EraseAllArgs();
   }
+
+  /// Clones arguments and parameters.
+  /// The semantics of the gate is cloned,
+  /// not the gate data like index and parents.
+  ///
+  /// @returns Shared pointer to a newly created gate.
+  IGatePtr Clone();
 
   /// @returns Type of this gate.
   inline const Operator& type() const { return type_; }
@@ -448,12 +455,12 @@ class IGate : public Node, public boost::enable_shared_from_this<IGate> {
 
   /// Makes all arguments complements of themselves.
   /// This is a helper function to propagate a complement gate
-  /// and apply De Morgan's Law.
+  /// and apply the De Morgan's Law.
   void InvertArgs();
 
   /// Replaces an argument with the complement of it.
   /// This is a helper function to propagate a complement gate
-  /// and apply De Morgan's Law.
+  /// and apply the De Morgan's Law.
   ///
   /// @param[in] existing_arg Positive or negative index of the argument.
   void InvertArg(int existing_arg);
@@ -477,16 +484,6 @@ class IGate : public Node, public boost::enable_shared_from_this<IGate> {
   ///
   /// @param[in] index Positive or negative index of the argument gate.
   void JoinNullGate(int index);
-
-  /// Directly copies arguments from another gate.
-  /// This is a helper function for initialization of gates' copies.
-  ///
-  /// @param[in] gate The gate which arguments will be copied.
-  inline void CopyArgs(const IGatePtr& gate) {
-    assert(args_.empty());
-    IGate::AddArg(gate->index(), gate);  // This is a hack to keep the parent
-    IGate::JoinGate(gate);               // information updated.
-  }
 
   /// Removes an argument from the arguments container.
   /// The passed argument index must be
@@ -599,6 +596,7 @@ class BasicEvent;
 class HouseEvent;
 class Gate;
 class Formula;
+class Preprocessor;
 
 /// @class BooleanGraph
 /// BooleanGraph is a propositional directed acyclic graph (PDAG).
@@ -606,6 +604,9 @@ class Formula;
 /// that takes into account the indices of events
 /// instead of IDs and pointers.
 /// This graph can also be called an indexed fault tree.
+///
+/// This class is designed
+/// to help preprocessing and other graph transformation functions.
 ///
 /// @warning Never hold a shared pointer to any other indexed gate
 ///          except for the root gate of a Boolean graph.
@@ -617,6 +618,8 @@ class Formula;
 ///          which is not the assumption of
 ///          all the other preprocessing and analysis algorithms.
 class BooleanGraph {
+  friend class Preprocessor;  ///< The main manipulator of Boolean graphs.
+
  public:
   typedef boost::shared_ptr<Gate> GatePtr;
   typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
@@ -634,12 +637,6 @@ class BooleanGraph {
 
   /// @returns true if the fault tree is coherent.
   inline bool coherent() const { return coherent_; }
-
-  /// @returns true if the initialized fault tree has constants.
-  inline bool constants() const { return constants_; }
-
-  /// @returns true if the initialized fault tree has only OR and AND gates.
-  inline bool normal() const { return normal_; }
 
   /// @returns The current root gate of the graph.
   inline const IGatePtr& root() const { return root_; }
@@ -671,6 +668,13 @@ class BooleanGraph {
     assert(index <= basic_events_.size());
     return basic_events_[index - 1];
   }
+
+  /// Prints the Boolean graph in the shorthand format.
+  /// This is a helper for logging and debugging.
+  /// The output is the standard error.
+  ///
+  /// @warning Node visits are used.
+  void Print();
 
  private:
   typedef boost::shared_ptr<Formula> FormulaPtr;
@@ -709,6 +713,7 @@ class BooleanGraph {
 
   /// Processes a Boolean formula's house events
   /// into constant arguments of an indexed gate of the Boolean graph.
+  /// Newly created constants are registered for removal for Preprocessor.
   ///
   /// @param[in,out] parent The parent gate to own the arguments.
   /// @param[in] house_events The collection of house events of the formula.
@@ -730,11 +735,71 @@ class BooleanGraph {
                     bool ccf,
                     boost::unordered_map<std::string, NodePtr>* id_to_node);
 
+  /// Sets the visit marks to False for all indexed gates,
+  /// starting from the root gate,
+  /// that have been visited top-down.
+  /// Any function updating and using the visit marks of gates
+  /// must ensure to clean visit marks
+  /// before running algorithms.
+  /// However, cleaning after finishing algorithms is not mandatory.
+  ///
+  /// @warning If the marks have not been assigned in a top-down traversal,
+  ///          this function will fail silently.
+  void ClearGateMarks();
+
+  /// Sets the visit marks of descendant gates to False
+  /// starting from the given gate as the root.
+  /// The top-down traversal marking is assumed.
+  ///
+  /// @param[in,out] gate The root gate to be traversed and marks.
+  ///
+  /// @warning If the marks have not been assigned in a top-down traversal,
+  ///          starting from the given gate,
+  ///          this function will fail silently.
+  void ClearGateMarks(const IGatePtr& gate);
+
+  /// Clears visit time information from all indexed nodes
+  /// that have been visited.
+  /// Any member function updating and using the visit information of nodes
+  /// must ensure to clean visit times
+  /// before running algorithms.
+  /// However, cleaning after finishing algorithms is not mandatory.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeVisits();
+
+  /// Clears visit information from descendant nodes
+  /// starting from the given gate as the root.
+  ///
+  /// @param[in,out] gate The root gate to be traversed and cleaned.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeVisits(const IGatePtr& gate);
+
+  /// Clears optimization values of all nodes in the graph.
+  /// The optimization values are set to 0.
+  /// Resets the number of failed arguments of gates.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearOptiValues();
+
+  /// Clears optimization values of nodes.
+  /// The optimization values are set to 0.
+  /// Resets the number of failed arguments of gates.
+  ///
+  /// @param[in,out] gate The root gate to be traversed and cleaned.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearOptiValues(const IGatePtr& gate);
+
   IGatePtr root_;  ///< The root gate of this graph.
   std::vector<BasicEventPtr> basic_events_;  ///< Mapping for basic events.
   bool coherent_;  ///< Indication that the graph does not contain negation.
-  bool constants_;  ///< Indication that the original graph contains constants.
   bool normal_;  ///< Indication for the graph containing only OR and AND gates.
+  /// Registered house events upon the creation of the Boolean graph.
+  std::vector<boost::weak_ptr<Constant> > constants_;
+  /// Registered NULL type gates upon the creation of the Boolean graph.
+  std::vector<boost::weak_ptr<IGate> > null_gates_;
 };
 
 /// Prints indexed house events or constants in the shorthand format.

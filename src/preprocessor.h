@@ -21,6 +21,7 @@
 #define SCRAM_SRC_PREPROCESSOR_H_
 
 #include <map>
+#include <iostream>
 #include <set>
 #include <string>
 #include <utility>
@@ -81,128 +82,102 @@ class Preprocessor {
   typedef boost::shared_ptr<Variable> VariablePtr;
   typedef boost::shared_ptr<Constant> ConstantPtr;
 
-  /// Normalizes the gates of the whole Boolean graph
-  /// into OR, AND gates.
+  /// The initial phase of preprocessing.
+  /// The most basic cleanup algorithms are applied.
+  /// The cleanup should benefit all other phases
+  /// and algorithms.
   ///
-  /// @note The negation of the top gate is saved
-  ///       and handled as a special case for negation propagation
-  ///       because it does not have a parent.
-  /// @note New gates are created upon normalization
-  ///       of complex gates like XOR.
-  /// @note This function is meant to be called only once.
+  /// @note The constants or house events in the graph are cleaned.
+  ///       Any constant state gates must be removed
+  ///       by the future preprocessing algorithms
+  ///       as they introduce these constant state  gates.
+  /// @note NULL type (pass-through) gates are processed.
+  ///       Any NULL type gates must be processed and removed
+  ///       by the future preprocessing algorithms
+  ///       as they introduce these NULL type gates.
   ///
-  /// @warning The root get may still be NULL type.
-  void NormalizeGates();
+  /// @warning This phase also runs partial normalization of gates;
+  ///          however, the preprocessing algorithms should not rely on this.
+  ///          If the partial normalization messes some significant algorithm,
+  ///          it may be removed from this phase in future.
+  void PhaseOne();
 
-  /// Notifies all parents of negative gates,
-  /// such as NOT, NOR, and NAND,
-  /// before transforming these gates
-  /// into basic gates of OR and AND.
-  /// The argument gates are swapped with a negative sign.
+  /// Preprocessing phase of the original structure of the graph.
+  /// This phase attempts to leverage
+  /// the existing information from the structure of the graph
+  /// to maximize the optimization
+  /// and to make the preprocessing techniques efficient.
   ///
-  /// @param[in] gate The gate to start processing.
-  ///
-  /// @note This function is a helper function for NormalizeGates().
-  ///
-  /// @warning Gate marks must be clear.
-  /// @warning This function does not change the types of gates.
-  /// @warning The root gate does not have parents,
-  ///          so it is not handled here.
-  void NotifyParentsOfNegativeGates(const IGatePtr& gate);
+  /// @note Multiple definitions of gates are detected and processed.
+  /// @note Modules are detected and created.
+  /// @note Non-module and non-multiple gates are coalesced.
+  /// @note Boolean optimization is applied.
+  void PhaseTwo();
 
-  /// Normalizes complex gates into OR, AND gates.
+  /// Application of gate normalization.
+  /// After this phase,
+  /// the graph is in normal form.
   ///
-  /// @param[in,out] gate The gate to be processed.
-  ///
-  /// @note This is a helper function for NormalizeGates().
-  ///
-  /// @note This function registers NULL type gates for future removal.
-  ///
-  /// @warning Gate marks must be clear.
-  /// @warning The parents of negative gates are assumed to be
-  ///          notified about the change of their argument types.
-  void NormalizeGate(const IGatePtr& gate);
+  /// @note Gate normalization is conducted.
+  void PhaseThree();
 
-  /// Normalizes a gate with XOR logic.
-  /// This is a helper function
-  /// for the main gate normalization function.
+  /// Propagation of complements.
+  /// Complements are propagated down to the variables in the graph.
+  /// After this phase,
+  /// the graph is in negation normal form.
   ///
-  /// @param[in,out] gate The gate to normalize.
-  ///
-  /// @note This is a helper function for NormalizeGate.
-  void NormalizeXorGate(const IGatePtr& gate);
+  /// @note Complements are propagated to the variables of the graph.
+  void PhaseFour();
 
-  /// Normalizes an ATLEAST gate with a vote number.
-  /// The gate is turned into an OR gate of
-  /// recursively normalized ATLEAST and AND arg gates
-  /// according to the formula
-  /// K/N(x, y_i) = OR(AND(x, K-1/N-1(y_i)), K/N-1(y_i)))
-  /// with y_i being the rest of formula arguments,
-  /// which exclude x.
-  /// This representation is more friendly
-  /// to other preprocessing and analysis techniques
-  /// than the alternative,
-  /// which is OR of AND gates of combinations.
-  ///
-  /// @param[in,out] gate The ATLEAST gate to normalize.
-  ///
-  /// @note This is a helper function for NormalizeGate.
-  void NormalizeAtleastGate(const IGatePtr& gate);
+  /// The final phase
+  /// that cleans up the graph,
+  /// and puts the structure of the graph ready for analysis.
+  /// This phase makes the graph structure
+  /// alternating AND/OR gate layers.
+  void PhaseFive();
 
-  /// Propagates constant gates bottom-up.
-  /// This is a helper function for algorithms
-  /// that may produce and need to remove constant gates.
+  /// Checks the root gate of the graph for further processing.
+  /// The root gate may become constant
+  /// or one-variable-NULL-gate,
+  /// which signals the special case
+  /// and no need for further processing.
   ///
-  /// @param[in,out] gate The gate that has become constant.
+  /// @returns true if no more processing is needed.
   ///
-  /// @note This function works together with
-  ///       NULL type gate propagation function
-  ///       to cleanup the structure of the graph.
-  ///
-  /// @warning All parents of the gate will be removed,
-  ///          so the gate itself may get deleted
-  ///          unless it is the top gate.
-  void PropagateConstGate(const IGatePtr& gate);
+  /// @note This function may swap the root gate of the graph.
+  bool CheckRootGate();
 
-  /// Propagate NULL type gates bottom-up.
-  /// This is a helper function for algorithms
-  /// that may produce and need to remove NULL type gates.
+  /// Removes argument gates of NULL type,
+  /// which means these arg gates have only one argument.
+  /// That one grand arg is transfered to the parent gate,
+  /// and the original argument gate is removed from the parent gate.
   ///
-  /// @param[in,out] gate The gate that is NULL type.
+  /// This function is used only once
+  /// to get rid of all NULL type gates
+  /// at the very beginning of preprocessing.
   ///
-  /// @note This function works together with
-  ///       constant state gate propagation function
-  ///       to cleanup the structure of the graph.
+  /// @note This function assumes
+  ///       that the container for NULL gates is empty.
+  ///       In other words, it is assumed
+  ///       no other function was trying to
+  ///       communicate NULL type gates for future processing.
+  /// @note This function is designed to be called only once
+  ///       at the start of preprocessing
+  ///       after cleaning all the constants from the graph.
   ///
-  /// @warning All parents of the gate will be removed,
-  ///          so the gate itself may get deleted
-  ///          unless it is the top gate.
-  void PropagateNullGate(const IGatePtr& gate);
-
-  /// Clears all constant gates registered for removal
-  /// by algorithms or other preprocessing functions.
-  ///
-  /// @warning Gate marks will get cleared by this function.
-  void ClearConstGates();
-
-  /// Clears all NULL type gates registered for removal
-  /// by algorithms or other preprocessing functions.
-  ///
-  /// @warning Gate marks will get cleared by this function.
-  void ClearNullGates();
+  /// @warning There still may be only one NULL type gate
+  ///          which is the root of the graph.
+  ///          This must be handled separately.
+  /// @warning NULL gates that are constant are not handled
+  ///          and left for constant propagation functions.
+  void RemoveNullGates();
 
   /// Removes all Boolean constants from the Boolean graph
   /// according to the Boolean logic of the gates.
-  /// This algorithm is top-down search for all constants.
-  /// It is less efficient
-  /// than a targeted bottom-up propagation for a specific constant.
-  /// Therefore, this function is used
+  /// This function is only used
   /// to get rid of all constants
-  /// without knowing where they are or what they are
+  /// registered by the Boolean graph
   /// at the very beginning of preprocessing.
-  ///
-  /// @returns true if the graph has been changed by this function.
-  /// @returns false if no change has been made.
   ///
   /// @note This is one of the first preprocessing steps.
   ///       Other algorithms are safe to assume
@@ -213,20 +188,7 @@ class Preprocessor {
   /// @warning There still may be only one constant state gate
   ///          which is the root of the graph.
   ///          This must be handled separately.
-  bool RemoveConstants();
-
-  /// Gathers all Boolean constants in the graph.
-  /// This is a helper function for initial cleanup of constants.
-  ///
-  /// @param[in,out] gate The gate to start the traversal.
-  /// @param[out] constants The container for constants.
-  ///
-  /// @warning Gate marks must be clear.
-  /// @warning The constants are assumed to be removed after this function.
-  ///          The visit information must be cleaned from constants
-  ///          if they are not going to be deleted.
-  void GatherConstants(const IGatePtr& gate,
-                       std::vector<boost::weak_ptr<Constant> >* constants);
+  void RemoveConstants();
 
   /// Propagates a Boolean constant bottom-up.
   /// This is a helper function for initial cleanup of the Boolean graph.
@@ -239,12 +201,9 @@ class Preprocessor {
   void PropagateConstant(const ConstantPtr& constant);
 
   /// Changes the state of a gate
-  /// or passes a constant argument to be removed later.
+  /// or removes a constant argument.
   /// The function determines its actions depending on
   /// the type of a gate and state of an argument.
-  /// The type of the gate may change,
-  /// but it will only be valid
-  /// after the to-be-erased arguments are handled properly.
   ///
   /// @param[in,out] gate The parent gate that contains the arguments.
   /// @param[in] arg The positive or negative index of the argument.
@@ -298,6 +257,121 @@ class Preprocessor {
   ///          so it must be handled by the caller.
   void RemoveConstantArg(const IGatePtr& gate, int arg);
 
+  /// Propagates constant gates bottom-up.
+  /// This is a helper function for algorithms
+  /// that may produce and need to remove constant gates.
+  ///
+  /// @param[in,out] gate The gate that has become constant.
+  ///
+  /// @note This function works together with
+  ///       NULL type gate propagation function
+  ///       to cleanup the structure of the graph.
+  ///
+  /// @warning All parents of the gate will be removed,
+  ///          so the gate itself may get deleted
+  ///          unless it is the top gate.
+  void PropagateConstGate(const IGatePtr& gate);
+
+  /// Propagate NULL type gates bottom-up.
+  /// This is a helper function for algorithms
+  /// that may produce and need to remove NULL type gates.
+  ///
+  /// @param[in,out] gate The gate that is NULL type.
+  ///
+  /// @note This function works together with
+  ///       constant state gate propagation function
+  ///       to cleanup the structure of the graph.
+  ///
+  /// @warning All parents of the gate will be removed,
+  ///          so the gate itself may get deleted
+  ///          unless it is the top gate.
+  void PropagateNullGate(const IGatePtr& gate);
+
+  /// Clears all constant gates registered for removal
+  /// by algorithms or other preprocessing functions.
+  ///
+  /// @warning Gate marks will get cleared by this function.
+  void ClearConstGates();
+
+  /// Clears all NULL type gates registered for removal
+  /// by algorithms or other preprocessing functions.
+  ///
+  /// @warning Gate marks will get cleared by this function.
+  void ClearNullGates();
+
+  /// Normalizes the gates of the whole Boolean graph
+  /// into OR, AND gates.
+  ///
+  /// @param[in] full A flag to handle complex gates like XOR and K/N,
+  ///                 which generate a lot more new gates
+  ///                 and make the structure of the graph more complex.
+  ///
+  /// @note The negation of the top gate is saved
+  ///       and handled as a special case for negation propagation
+  ///       because it does not have a parent.
+  /// @note New gates are created only upon full normalization
+  ///       of complex gates like XOR and K/N.
+  /// @note The full normalization is meant to be called only once.
+  ///
+  /// @warning The root get may still be NULL type.
+  void NormalizeGates(bool full);
+
+  /// Notifies all parents of negative gates,
+  /// such as NOT, NOR, and NAND,
+  /// before transforming these gates
+  /// into basic gates of OR and AND.
+  /// The argument gates are swapped with a negative sign.
+  ///
+  /// @param[in] gate The gate to start processing.
+  ///
+  /// @note This function is a helper function for NormalizeGates().
+  ///
+  /// @warning Gate marks must be clear.
+  /// @warning This function does not change the types of gates.
+  /// @warning The root gate does not have parents,
+  ///          so it is not handled here.
+  void NotifyParentsOfNegativeGates(const IGatePtr& gate);
+
+  /// Normalizes complex gates into OR, AND gates.
+  ///
+  /// @param[in,out] gate The gate to be processed.
+  /// @param[in] full A flag to handle complex gates like XOR and K/N.
+  ///
+  /// @note This is a helper function for NormalizeGates().
+  ///
+  /// @note This function registers NULL type gates for future removal.
+  ///
+  /// @warning Gate marks must be clear.
+  /// @warning The parents of negative gates are assumed to be
+  ///          notified about the change of their arguments' types.
+  void NormalizeGate(const IGatePtr& gate, bool full);
+
+  /// Normalizes a gate with XOR logic.
+  /// This is a helper function
+  /// for the main gate normalization function.
+  ///
+  /// @param[in,out] gate The gate to normalize.
+  ///
+  /// @note This is a helper function for NormalizeGate.
+  void NormalizeXorGate(const IGatePtr& gate);
+
+  /// Normalizes an ATLEAST gate with a vote number.
+  /// The gate is turned into an OR gate of
+  /// recursively normalized ATLEAST and AND arg gates
+  /// according to the formula
+  /// K/N(x, y_i) = OR(AND(x, K-1/N-1(y_i)), K/N-1(y_i)))
+  /// with y_i being the rest of formula arguments,
+  /// which exclude x.
+  /// This representation is more friendly
+  /// to other preprocessing and analysis techniques
+  /// than the alternative,
+  /// which is OR of AND gates of combinations.
+  ///
+  /// @param[in,out] gate The ATLEAST gate to normalize.
+  ///
+  /// @note This is a helper function for NormalizeGate.
+  void NormalizeAtleastGate(const IGatePtr& gate);
+
   /// Propagates complements of argument gates down to leafs
   /// according to the De Morgan's law
   /// in order to remove any negative logic from the graph's gates.
@@ -321,56 +395,14 @@ class Preprocessor {
   void PropagateComplements(const IGatePtr& gate,
                             std::map<int, IGatePtr>* gate_complements);
 
-  /// Removes argument gates of NULL type,
-  /// which means these arg gates have only one argument.
-  /// That one grand arg is transfered to the parent gate,
-  /// and the original argument gate is removed from the parent gate.
-  ///
-  /// This is a top-down algorithm that searches for all NULL type gates,
-  /// which means it is less efficient
-  /// than having a specific NULL type gate propagate its argument bottom-up.
-  /// Therefore, this function is used
-  /// to get rid of all NULL type gates
-  /// without knowing where they are or what they are
-  /// at the very beginning of preprocessing.
-  ///
-  /// @returns true if the Boolean graph had it NULL type gates removed.
-  /// @returns false if no change has been made.
-  ///
-  /// @note This function assumes
-  ///       that the container for NULL gates is empty.
-  ///       In other words, it is assumed
-  ///       no other function was trying to
-  ///       communicate NULL type gates for future processing.
-  /// @note This function is designed to be called only once
-  ///       at the start of preprocessing
-  ///       after cleaning all the constants from the graph.
-  /// @note Other algorithms must use
-  ///       the bottom-up NULL gate propagation function
-  ///       because that function is more targeted and efficient.
-  ///
-  /// @warning This function clears and uses gate marks.
-  /// @warning There still may be only one NULL type gate
-  ///          which is the root of the graph.
-  ///          This must be handled separately.
-  /// @warning NULL gates that are constant are not handled
-  ///          and left for constant propagation functions.
-  bool RemoveNullGates();
-
-  /// Gathers all NULL type gates
-  /// starting from the given gate as a root.
-  ///
-  /// @param[in,out] gate The starting gate to search for NULL gates.
-  ///
-  /// @warning Gate marks must be clear.
-  void GatherNullGates(const IGatePtr& gate);
-
   /// Coalesces positive argument gates
   /// with the same OR or AND logic as parents.
   /// This function merges similar logic gates of NAND and NOR as well.
   ///
   /// @param[in,out] gate The starting gate to traverse the graph.
   ///                     This is for recursive purposes.
+  /// @param[in] common A flag to also join common gates.
+  ///                   These gates may be important for other algorithms.
   ///
   /// @returns true if the given graph has been changed by this function.
   /// @returns false if no change has been made.
@@ -379,7 +411,7 @@ class Preprocessor {
   ///       These gates are registered for future processing.
   /// @note It is impossible that this function generates NULL type gates.
   /// @note Module gates are omitted from coalescing to preserve them.
-  bool JoinGates(const IGatePtr& gate);
+  bool JoinGates(const IGatePtr& gate, bool common);
 
   /// Traverses the Boolean graph to detect modules.
   /// Modules are independent sub-graphs
@@ -472,12 +504,91 @@ class Preprocessor {
       const std::vector<std::pair<int, NodePtr> >& modular_args,
       const std::vector<std::vector<std::pair<int, NodePtr> > >& groups);
 
+  /// Identifies common arguments of gates,
+  /// and merges the common arguments into new gates.
+  /// This technique helps uncover the common structure
+  /// within gates that are not modules.
+  ///
+  /// @returns true if the graph structure is changed by this technique.
+  ///
+  /// @note This technique works only with OR/AND gates.
+  ///       Partial or full normalization may make
+  ///       this technique more effective.
+  /// @note Constant arguments are not expected.
+  ///
+  /// @warning Gate marks are used for traversal.
+  /// @warning Node visit times are used for common node detection.
+  /// @warning Gate optimization values are used
+  ///          to mark the optimized gates.
+  bool MergeCommonArgs();
+
+  /// Merges common arguments for a specific group of gates.
+  /// The gates are grouped by their operators.
+  /// This is a helper function
+  /// that divides the main merging technique by the gate types.
+  ///
+  /// @param[in] op The operator that defines the group.
+  ///
+  /// @returns true if common args are merged into gates.
+  ///
+  /// @note The operator or logic of the gates must allow merging.
+  ///       OR/AND operators are expected.
+  ///
+  /// @warning Gate marks are used for traversal.
+  /// @warning Node visit times are used for common node detection.
+  /// @warning Gate optimization values are used
+  ///          to mark the optimized gates.
+  bool MergeCommonArgs(const Operator& op);
+
+  /// Marks common arguments of gates with a specific operator.
+  ///
+  /// @param[in] gate The gate to start the traversal.
+  /// @param[in] op The operator of gates
+  ///               which arguments must be marked.
+  ///
+  /// @note Visit information is used to mark the common arguments.
+  ///
+  /// @warning Gate marks are used for linear traversal.
+  void MarkCommonArgs(const IGatePtr& gate, const Operator& op);
+
+  /// Gathers common arguments of the gates
+  /// in the group of a specific operator.
+  /// The common arguments must be marked
+  /// by the second visit exit time.
+  ///
+  /// @param[in] gate The gate to start the traversal.
+  /// @param[in] op The operator of gates in the group.
+  /// @param[out] group The group of the gates with their common arguments.
+  ///
+  /// @note The common arguments are sorted.
+  ///
+  /// @warning Gate marks are used for linear traversal.
+  void GatherCommonArgs(
+      const IGatePtr& gate,
+      const Operator& op,
+      std::vector<std::pair<IGatePtr, std::vector<int> > >* group);
+
+  /// Findes intersections of common arguments of gates.
+  /// Gates with the same common arguments are grouped
+  /// to represent common parents for the arguments.
+  ///
+  /// @param[in] group The group of the gates with their common arguments.
+  /// @param[out] parents Grouped common parent gates
+  ///             for the sets of common arguments.
+  ///
+  /// @note The common arguments are sorted.
+  void GroupCommonParents(
+     const std::vector<std::pair<IGatePtr, std::vector<int> > >& group,
+     boost::unordered_map<std::vector<int>, std::set<IGatePtr> >* parents);
+
   /// Propagates failures of common nodes to detect redundancy.
   /// The graph structure is optimized
   /// by removing the redundancies if possible.
   /// This optimization helps reduce the number of common nodes.
   ///
   /// @warning Boolean optimization may replace the root gate of the graph.
+  /// @warning The current implementation works
+  ///          only for coherent graphs.
   void BooleanOptimization();
 
   /// Traverses the graph to find nodes
@@ -489,6 +600,8 @@ class Preprocessor {
   /// @param[out] common_variables Common variables.
   ///
   /// @note Constant nodes are not expected to be operated.
+  ///
+  /// @warning Node visit information must be clear.
   void GatherCommonNodes(
       std::vector<IGateWeakPtr>* common_gates,
       std::vector<boost::weak_ptr<Variable> >* common_variables);
@@ -550,6 +663,61 @@ class Preprocessor {
       const boost::shared_ptr<N>& node,
       const std::map<int, IGateWeakPtr>& destinations);
 
+  /// The Shannon decomposition for common nodes in the Boolean graph.
+  /// This procedure is also called "Constant Propagation",
+  /// but it is confusing with the actual propagation of
+  /// house events and constant gates.
+  ///
+  /// The main two operations are performed
+  ///  according to the Shannon decomposition of particular setups:
+  ///
+  /// x & f(x, y) = x & f(1, y)
+  /// x | f(x, y) = x | f(0, y)
+  ///
+  /// @returns true if the setups are found and processed.
+  bool DecomposeCommonNodes();
+
+  /// Processes common nodes in decomposition setups.
+  ///
+  /// @param[in] common_node The common node.
+  ///
+  /// @returns true if the decomposition setups are found and processed.
+  ///
+  /// @warning Gate visit information is manipulated.
+  bool ProcessDecompositionCommonNode(const boost::weak_ptr<Node>& common_node);
+
+  /// Marks destinations for common node decomposition.
+  ///
+  /// @param[in] parent The parent or ancestor of the common node.
+  /// @param[in] index The positive index of the common node.
+  ///
+  /// @warning The gate visit fields are manipulated.
+  void MarkDecompositionDestinations(const IGatePtr& parent, int index);
+
+  /// Processes decomposition destinations with particular setups.
+  ///
+  /// @param[in] node The common node under consideration.
+  /// @param[in] dest The set of destination parents.
+  void ProcessDecompositionDestinations(const NodePtr& node,
+                                        const std::vector<IGateWeakPtr>& dest);
+
+  /// Processes decomposition ancestors
+  /// in the link to the decomposition destinations.
+  /// Common gates in the sub-graph
+  /// are cloned to not mess the whole graph.
+  ///
+  /// @param[in] ancestor The parent or ancestor of the common node.
+  /// @param[in] node The common node under consideration.
+  /// @param[in] state The constant state to be propagated.
+  /// @param[in] destination Indication that the ancestor is the destination.
+  /// @param[in,out] clones Clones of common gates in the sub-graph.
+  void ProcessDecompositionAncestors(
+      const IGatePtr& ancestor,
+      const NodePtr& node,
+      bool state,
+      bool destination,
+      boost::unordered_map<int, IGatePtr>* clones);
+
   /// Detects and replaces multiple definitions of gates.
   /// Gates with the same logic and inputs
   /// but different indices are considered redundant.
@@ -575,6 +743,26 @@ class Preprocessor {
       boost::unordered_map<IGatePtr, std::vector<IGateWeakPtr> >* multi_def,
       std::vector<std::vector<IGatePtr> >* gates);
 
+  /// Detects and manipulates AND and OR gate distributivity.
+  /// For example,
+  /// (a + b) * (a + c) = a + b * c.
+  ///
+  /// @param[in] gate The gate which arguments must be tested.
+  ///
+  /// @returns true if transformations are performed.
+  ///
+  /// @warning Gate marks must be clear.
+  bool DetectDistributivity(const IGatePtr& gate);
+
+  /// Manipulates gates with distributive arguments.
+  ///
+  /// @param[in,out] gate The gate which arguments must be manipulated.
+  /// @param[in,out] candidates Candidates for distributivity check.
+  ///
+  /// @returns true if transformations are performed.
+  bool HandleDistributiveArgs(const IGatePtr& gate,
+                              const std::vector<IGatePtr>& candidates);
+
   /// Replaces one gate in the graph with another.
   ///
   /// @param[in,out] gate An existing gate to be replaced.
@@ -586,50 +774,6 @@ class Preprocessor {
   /// @note If any parent becomes constant or NULL type,
   ///       the parent is registered for removal.
   void ReplaceGate(const IGatePtr& gate, const IGatePtr& replacement);
-
-  /// Sets the visit marks to False for all indexed gates,
-  /// starting from the top gate,
-  /// that have been visited top-down.
-  /// Any member function updating and using the visit marks of gates
-  /// must ensure to clean visit marks
-  /// before running algorithms.
-  /// However, cleaning after finishing algorithms is not mandatory.
-  ///
-  /// @warning If the marks have not been assigned in a top-down traversal,
-  ///          this function will fail silently.
-  void ClearGateMarks();
-
-  /// Sets the visit marks of descendant gates to False
-  /// starting from the given gate as a root.
-  /// The top-down traversal marking is assumed.
-  ///
-  /// @param[in,out] gate The root gate to be traversed and marks.
-  ///
-  /// @warning If the marks have not been assigned in a top-down traversal,
-  ///          starting from the given gate,
-  ///          this function will fail silently.
-  void ClearGateMarks(const IGatePtr& gate);
-
-  /// Clears visit time information from all indexed nodes
-  /// that have been visited or not.
-  /// Any member function updating and using the visit information of nodes
-  /// must ensure to clean visit times
-  /// before running algorithms.
-  /// However, cleaning after finishing algorithms is not mandatory.
-  void ClearNodeVisits();
-
-  /// Clears visit information from descendant nodes
-  /// starting from the given gate as a root.
-  ///
-  /// @param[in,out] gate The root gate to be traversed and cleaned.
-  void ClearNodeVisits(const IGatePtr& gate);
-
-  /// Clears optimization values of nodes.
-  /// The optimization values are set to 0.
-  /// Resets the number of failed arguments of gates.
-  ///
-  /// @param[in,out] gate The root gate to be traversed and cleaned.
-  void ClearOptiValues(const IGatePtr& gate);
 
   BooleanGraph* graph_;  ///< The Boolean graph to preprocess.
   int root_sign_;  ///< The negative or positive sign of the root node.
