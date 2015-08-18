@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file mocus.cc
 /// Implementation of the MOCUS algorithm.
 /// It is assumed that the tree is layered
@@ -60,9 +61,11 @@
 /// and generates only additional supersets.
 ///
 /// The generated sets are kept unique by storing them in a set.
+
 #include "mocus.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 #include "logger.h"
@@ -275,7 +278,7 @@ void Mocus::CreateSimpleTree(const IGatePtr& gate,
 
   assert(gate->constant_args().empty());
   assert(gate->args().size() > 1);
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     assert(it->first > 0);
     IGatePtr child_gate = it->second;
@@ -286,8 +289,8 @@ void Mocus::CreateSimpleTree(const IGatePtr& gate,
       simple_gate->AddChildGate(processed_gates->find(it->first)->second);
     }
   }
-  typedef boost::shared_ptr<Variable> VariablePtr;
-  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  typedef std::shared_ptr<Variable> VariablePtr;
+  std::unordered_map<int, VariablePtr>::const_iterator it_b;
   for (it_b = gate->variable_args().begin();
        it_b != gate->variable_args().end(); ++it_b) {
     simple_gate->InitiateWithBasic(it_b->first);
@@ -318,7 +321,7 @@ void Mocus::FindMcsFromSimpleGate(const SimpleGatePtr& gate,
     if ((*it)->size() == 1) {
       mcs->push_back(**it);
     } else {
-      cut_sets_vector.push_back(&**it);
+      cut_sets_vector.push_back(it->get());
     }
   }
   Mocus::MinimizeCutSets(cut_sets_vector, *mcs, 2, mcs);

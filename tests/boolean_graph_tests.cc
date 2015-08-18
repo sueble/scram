@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "boolean_graph.h"
 
 #include <gtest/gtest.h>
@@ -23,7 +24,8 @@
 #include "model.h"
 #include "settings.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 TEST(BooleanGraphTest, Print) {
   Settings settings;
@@ -38,3 +40,6 @@ TEST(BooleanGraphTest, Print) {
   delete init;
   delete graph;
 }
+
+}  // namespace test
+}  // namespace scram

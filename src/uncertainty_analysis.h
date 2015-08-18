@@ -14,20 +14,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file uncertainty_analysis.h
 /// Provides functionality for uncertainty analysis
 /// with Monte Carlo method.
+
 #ifndef SCRAM_SRC_UNCERTAINTY_ANALYSIS_H_
 #define SCRAM_SRC_UNCERTAINTY_ANALYSIS_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
-#include <boost/unordered_map.hpp>
 
 #include "event.h"
 #include "probability_analysis.h"
@@ -41,7 +42,7 @@ namespace scram {
 /// and probability distributions of basic events.
 class UncertaintyAnalysis : private ProbabilityAnalysis {
  public:
-  typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
+  typedef std::shared_ptr<BasicEvent> BasicEventPtr;
 
   /// The main constructor of Uncertainty Analysis.
   ///
@@ -64,7 +65,7 @@ class UncertaintyAnalysis : private ProbabilityAnalysis {
   /// @note  If not enough information is provided,
   ///        the analysis behavior is undefined.
   void UpdateDatabase(
-      const boost::unordered_map<std::string, BasicEventPtr>& basic_events);
+      const std::unordered_map<std::string, BasicEventPtr>& basic_events);
 
   /// Performs quantitative analysis on minimal cut sets
   /// containing basic events provided in the databases.

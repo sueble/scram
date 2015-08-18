@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "expression.h"
 
 #include <gtest/gtest.h>
 
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 // This mock class is used to specify
 // return values and samples in a hard coded way.
@@ -43,8 +45,8 @@ class OpenExpression : public Expression {
   inline bool IsConstant() { return true; }
 };
 
-typedef boost::shared_ptr<OpenExpression> OpenExpressionPtr;
-typedef boost::shared_ptr<Expression> ExpressionPtr;
+typedef std::shared_ptr<OpenExpression> OpenExpressionPtr;
+typedef std::shared_ptr<Expression> ExpressionPtr;
 
 TEST(ExpressionTest, Exponential) {
   OpenExpressionPtr lambda(new OpenExpression(10, 8));
@@ -573,3 +575,6 @@ TEST(ExpressionTest, DivisionMaxAndMin) {
   EXPECT_DOUBLE_EQ(-1.0 / -4 / 1 / -2, dev->Min());
   EXPECT_DOUBLE_EQ(2.0 / -4 / 1 / -2, dev->Max());
 }
+
+}  // namespace test
+}  // namespace scram

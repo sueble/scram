@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef SCRAM_TESTS_PREPROCESSOR_TESTS_H_
 #define SCRAM_TESTS_PREPROCESSOR_TESTS_H_
 
@@ -21,14 +22,15 @@
 
 #include <gtest/gtest.h>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 /// @class PreprocessorTest
 /// This test fixture is for white-box testing of algorithms
 /// for fault tree preprossing.
 class PreprocessorTest : public ::testing::Test {
  protected:
-  typedef boost::shared_ptr<IGate> IGatePtr;
+  typedef std::shared_ptr<IGate> IGatePtr;
 
   virtual void SetUp() {
   }
@@ -41,4 +43,7 @@ class PreprocessorTest : public ::testing::Test {
   BooleanGraph* fault_tree;
 };
 
-#endif // SCRAM_TESTS_PREPROCESSOR_TESTS_H_
+}  // namespace test
+}  // namespace scram
+
+#endif  // SCRAM_TESTS_PREPROCESSOR_TESTS_H_

@@ -14,9 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for Chinese fault tree from XFTA.
 // Test Minimal cut sets and probability.
@@ -38,3 +42,6 @@ TEST_F(RiskAnalysisTest, ChineseTree) {
   distr[6] = 168;
   EXPECT_EQ(distr, McsDistribution());
 }
+
+}  // namespace test
+}  // namespace scram

@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 #define SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_
 
@@ -27,13 +28,14 @@
 
 #include <gtest/gtest.h>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
-typedef boost::shared_ptr<Event> EventPtr;
-typedef boost::shared_ptr<Gate> GatePtr;
-typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
-typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
-typedef boost::shared_ptr<FaultTree> FaultTreePtr;
+typedef std::shared_ptr<Event> EventPtr;
+typedef std::shared_ptr<Gate> GatePtr;
+typedef std::shared_ptr<HouseEvent> HouseEventPtr;
+typedef std::shared_ptr<BasicEvent> BasicEventPtr;
+typedef std::shared_ptr<FaultTree> FaultTreePtr;
 
 class RiskAnalysisTest : public ::testing::Test {
  protected:
@@ -63,15 +65,15 @@ class RiskAnalysisTest : public ::testing::Test {
     return init->model()->fault_trees().begin()->second;
   }
 
-  const boost::unordered_map<std::string, GatePtr>& gates() {
+  const std::unordered_map<std::string, GatePtr>& gates() {
     return init->model()->gates();
   }
 
-  const boost::unordered_map<std::string, HouseEventPtr>& house_events() {
+  const std::unordered_map<std::string, HouseEventPtr>& house_events() {
     return init->model()->house_events();
   }
 
-  const boost::unordered_map<std::string, BasicEventPtr>& basic_events() {
+  const std::unordered_map<std::string, BasicEventPtr>& basic_events() {
     return init->model()->basic_events();
   }
 
@@ -135,5 +137,8 @@ class RiskAnalysisTest : public ::testing::Test {
   Initializer* init;
   Settings settings;
 };
+
+}  // namespace test
+}  // namespace scram
 
 #endif  // SCRAM_TESTS_RISK_ANALYSIS_TESTS_H_

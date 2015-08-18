@@ -14,12 +14,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "preprocessor_tests.h"
 
 #include <vector>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 // Handle constant children according to the Boolean logic of the parent.
 TEST_F(PreprocessorTest, DISABLED_ProcessConstantChild) {
 }
+
+}  // namespace test
+}  // namespace scram

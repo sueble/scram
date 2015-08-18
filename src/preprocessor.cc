@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file preprocessor.cc
 /// Implementation of preprocessing algorithms.
 /// If a preprocessing algorithm has
@@ -53,6 +54,7 @@
 /// the result or behavior of the algorithm may be undefined.
 /// There is no requirement to check for the broken contract
 /// and to exit gracefully.
+
 #include "preprocessor.h"
 
 #include <algorithm>
@@ -306,7 +308,7 @@ void Preprocessor::RemoveNullGates() {
 void Preprocessor::RemoveConstants() {
   assert(const_gates_.empty());
   assert(!graph_->constants_.empty());
-  std::vector<boost::weak_ptr<Constant> >::iterator it;
+  std::vector<std::weak_ptr<Constant> >::iterator it;
   for (it = graph_->constants_.begin(); it != graph_->constants_.end(); ++it) {
     if (it->expired()) continue;
     Preprocessor::PropagateConstant(it->lock());
@@ -501,7 +503,7 @@ void Preprocessor::NotifyParentsOfNegativeGates(const IGatePtr& gate) {
   if (gate->mark()) return;
   gate->mark(true);
   std::vector<int> to_negate;  // Args to get the negation.
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg = it->second;
     Preprocessor::NotifyParentsOfNegativeGates(arg);
@@ -524,7 +526,7 @@ void Preprocessor::NormalizeGate(const IGatePtr& gate, bool full) {
   assert(gate->state() == kNormalState);
   assert(!gate->args().empty());
   // Depth-first traversal before the arguments may get changed.
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     Preprocessor::NormalizeGate(it->second, full);
   }
@@ -642,7 +644,7 @@ void Preprocessor::PropagateComplements(
   // Keep track of complement gates
   // for optimization of repeated complements.
   std::vector<int> to_swap;  // Args with negation to get swapped.
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg_gate = it->second;
     if (it->first < 0) {
@@ -700,7 +702,7 @@ bool Preprocessor::JoinGates(const IGatePtr& gate, bool common) {
   assert(!gate->args().empty());
   std::vector<IGatePtr> to_join;  // Gate arguments of the same logic.
   bool changed = false;  // Indication if the graph is changed.
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg_gate = it->second;
     if (Preprocessor::JoinGates(arg_gate, common)) changed = true;
@@ -752,12 +754,12 @@ int Preprocessor::AssignTiming(int time, const IGatePtr& gate) {
   if (gate->Visit(++time)) return time;  // Revisited gate.
   assert(gate->constant_args().empty());
 
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     time = Preprocessor::AssignTiming(time, it->second);
   }
 
-  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  std::unordered_map<int, VariablePtr>::const_iterator it_b;
   for (it_b = gate->variable_args().begin();
        it_b != gate->variable_args().end(); ++it_b) {
     it_b->second->Visit(++time);  // Enter the leaf.
@@ -780,7 +782,7 @@ void Preprocessor::FindModules(const IGatePtr& gate) {
   std::vector<std::pair<int, NodePtr> > modular_args;
   std::vector<std::pair<int, NodePtr> > non_modular_args;
 
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg_gate = it->second;
     Preprocessor::FindModules(arg_gate);
@@ -805,7 +807,7 @@ void Preprocessor::FindModules(const IGatePtr& gate) {
     max_time = std::max(max_time, max);
   }
 
-  boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+  std::unordered_map<int, VariablePtr>::const_iterator it_b;
   for (it_b = gate->variable_args().begin();
        it_b != gate->variable_args().end(); ++it_b) {
     VariablePtr arg = it_b->second;
@@ -870,7 +872,7 @@ void Preprocessor::ProcessModularArgs(
   }
 }
 
-boost::shared_ptr<IGate> Preprocessor::CreateNewModule(
+std::shared_ptr<IGate> Preprocessor::CreateNewModule(
     const IGatePtr& gate,
     const std::vector<std::pair<int, NodePtr> >& args) {
   IGatePtr module;  // Empty pointer as an indication of a failure.
@@ -1160,7 +1162,7 @@ void Preprocessor::MarkCommonArgs(const IGatePtr& gate, const Operator& op) {
 
   bool in_group = gate->type() == op ? true : false;
 
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg_gate = it->second;
     assert(arg_gate->state() == kNormalState);
@@ -1170,7 +1172,7 @@ void Preprocessor::MarkCommonArgs(const IGatePtr& gate, const Operator& op) {
 
   if (!in_group) return;  // No need to visit leaf variables.
 
-  boost::unordered_map<int, VariablePtr>::const_iterator it_v;
+  std::unordered_map<int, VariablePtr>::const_iterator it_v;
   for (it_v = gate->variable_args().begin();
        it_v != gate->variable_args().end(); ++it_v) {
     it_v->second->Visit(1);
@@ -1188,7 +1190,7 @@ void Preprocessor::GatherCommonArgs(
   bool in_group = gate->type() == op ? true : false;
 
   std::vector<int> common_args;
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg_gate = it->second;
     assert(arg_gate->state() == kNormalState);
@@ -1198,7 +1200,7 @@ void Preprocessor::GatherCommonArgs(
 
   if (!in_group) return;  // No need to check variables.
 
-  boost::unordered_map<int, VariablePtr>::const_iterator it_v;
+  std::unordered_map<int, VariablePtr>::const_iterator it_v;
   for (it_v = gate->variable_args().begin();
        it_v != gate->variable_args().end(); ++it_v) {
     if (it_v->second->ExitTime()) common_args.push_back(it_v->first);
@@ -1248,7 +1250,7 @@ void Preprocessor::BooleanOptimization() {
   graph_->ClearGateMarks();
 
   std::vector<IGateWeakPtr> common_gates;
-  std::vector<boost::weak_ptr<Variable> > common_variables;
+  std::vector<std::weak_ptr<Variable> > common_variables;
   Preprocessor::GatherCommonNodes(&common_gates, &common_variables);
 
   std::vector<IGateWeakPtr>::iterator it;
@@ -1256,7 +1258,7 @@ void Preprocessor::BooleanOptimization() {
     Preprocessor::ProcessCommonNode(*it);
   }
 
-  std::vector<boost::weak_ptr<Variable> >::iterator it_b;
+  std::vector<std::weak_ptr<Variable> >::iterator it_b;
   for (it_b = common_variables.begin(); it_b != common_variables.end();
        ++it_b) {
     Preprocessor::ProcessCommonNode(*it_b);
@@ -1265,13 +1267,13 @@ void Preprocessor::BooleanOptimization() {
 
 void Preprocessor::GatherCommonNodes(
       std::vector<IGateWeakPtr>* common_gates,
-      std::vector<boost::weak_ptr<Variable> >* common_variables) {
+      std::vector<std::weak_ptr<Variable> >* common_variables) {
   std::queue<IGatePtr> gates_queue;
   gates_queue.push(graph_->root());
   while (!gates_queue.empty()) {
     IGatePtr gate = gates_queue.front();
     gates_queue.pop();
-    boost::unordered_map<int, IGatePtr>::const_iterator it;
+    std::unordered_map<int, IGatePtr>::const_iterator it;
     for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
       IGatePtr arg_gate = it->second;
       assert(arg_gate->state() == kNormalState);
@@ -1281,7 +1283,7 @@ void Preprocessor::GatherCommonNodes(
       if (arg_gate->parents().size() > 1) common_gates->push_back(arg_gate);
     }
 
-    boost::unordered_map<int, VariablePtr>::const_iterator it_b;
+    std::unordered_map<int, VariablePtr>::const_iterator it_b;
     for (it_b = gate->variable_args().begin();
          it_b != gate->variable_args().end(); ++it_b) {
       VariablePtr arg = it_b->second;
@@ -1293,12 +1295,12 @@ void Preprocessor::GatherCommonNodes(
 }
 
 template<class N>
-void Preprocessor::ProcessCommonNode(const boost::weak_ptr<N>& common_node) {
+void Preprocessor::ProcessCommonNode(const std::weak_ptr<N>& common_node) {
   assert(const_gates_.empty());
   assert(null_gates_.empty());
   if (common_node.expired()) return;  // The node has been deleted.
 
-  boost::shared_ptr<N> node = common_node.lock();
+  std::shared_ptr<N> node = common_node.lock();
 
   if (node->parents().size() == 1) return;  // The parent is deleted.
 
@@ -1335,7 +1337,7 @@ void Preprocessor::ProcessCommonNode(const boost::weak_ptr<N>& common_node) {
 int Preprocessor::PropagateFailure(const NodePtr& node) {
   assert(node->opti_value() == 1);
   int mult_tot = 0;
-  boost::unordered_map<int, IGateWeakPtr>::const_iterator it;
+  std::unordered_map<int, IGateWeakPtr>::const_iterator it;
   for (it = node->parents().begin(); it != node->parents().end(); ++it) {
     assert(!it->second.expired());
     IGatePtr parent = it->second.lock();
@@ -1361,7 +1363,7 @@ int Preprocessor::CollectFailureDestinations(
     gate->opti_value(2);
   }
   int num_dest = 0;
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
     IGatePtr arg = it->second;
     if (arg->opti_value() == 0) {
@@ -1379,7 +1381,7 @@ void Preprocessor::ProcessRedundantParents(
     const NodePtr& node,
     std::map<int, IGateWeakPtr>* destinations) {
   std::vector<IGateWeakPtr> redundant_parents;
-  boost::unordered_map<int, IGateWeakPtr>::const_iterator it;
+  std::unordered_map<int, IGateWeakPtr>::const_iterator it;
   for (it = node->parents().begin(); it != node->parents().end(); ++it) {
     assert(!it->second.expired());
     IGatePtr parent = it->second.lock();
@@ -1429,7 +1431,7 @@ void Preprocessor::ProcessRedundantParents(
 
 template<class N>
 void Preprocessor::ProcessFailureDestinations(
-    const boost::shared_ptr<N>& node,
+    const std::shared_ptr<N>& node,
     const std::map<int, IGateWeakPtr>& destinations) {
   std::map<int, IGateWeakPtr>::const_iterator it_d;
   for (it_d = destinations.begin(); it_d != destinations.end(); ++it_d) {
@@ -1461,7 +1463,7 @@ bool Preprocessor::DecomposeCommonNodes() {
 
   graph_->ClearNodeVisits();
   std::vector<IGateWeakPtr> common_gates;
-  std::vector<boost::weak_ptr<Variable> > common_variables;
+  std::vector<std::weak_ptr<Variable> > common_variables;
   Preprocessor::GatherCommonNodes(&common_gates, &common_variables);
   graph_->ClearNodeVisits();
 
@@ -1478,7 +1480,7 @@ bool Preprocessor::DecomposeCommonNodes() {
   // Variables are processed after gates
   // because, if parent gates are removed,
   // there may be no need to process these variables.
-  std::vector<boost::weak_ptr<Variable> >::reverse_iterator it_b;
+  std::vector<std::weak_ptr<Variable> >::reverse_iterator it_b;
   for (it_b = common_variables.rbegin(); it_b != common_variables.rend();
        ++it_b) {
     bool ret = Preprocessor::ProcessDecompositionCommonNode(*it_b);
@@ -1488,19 +1490,19 @@ bool Preprocessor::DecomposeCommonNodes() {
 }
 
 bool Preprocessor::ProcessDecompositionCommonNode(
-    const boost::weak_ptr<Node>& common_node) {
+    const std::weak_ptr<Node>& common_node) {
   assert(const_gates_.empty());
   assert(null_gates_.empty());
   if (common_node.expired()) return false;  // The node has been deleted.
 
-  boost::shared_ptr<Node> node = common_node.lock();
+  NodePtr node = common_node.lock();
 
   if (node->parents().size() < 2) return false;
 
   bool possible = false;  // Possibility in particular setups for decomposition.
 
   // Determine if the decomposition setups are possible.
-  boost::unordered_map<int, IGateWeakPtr>::const_iterator it;
+  std::unordered_map<int, IGateWeakPtr>::const_iterator it;
   for (it = node->parents().begin(); it != node->parents().end(); ++it) {
     assert(!it->second.expired());
     IGatePtr parent = it->second.lock();
@@ -1546,7 +1548,7 @@ bool Preprocessor::ProcessDecompositionCommonNode(
 
 void Preprocessor::MarkDecompositionDestinations(const IGatePtr& parent,
                                                  int index) {
-  boost::unordered_map<int, IGateWeakPtr>::const_iterator it;
+  std::unordered_map<int, IGateWeakPtr>::const_iterator it;
   for (it = parent->parents().begin(); it != parent->parents().end(); ++it) {
     assert(!it->second.expired());
     IGatePtr ancestor = it->second.lock();
@@ -1560,8 +1562,8 @@ void Preprocessor::MarkDecompositionDestinations(const IGatePtr& parent,
 void Preprocessor::ProcessDecompositionDestinations(
     const NodePtr& node,
     const std::vector<IGateWeakPtr>& dest) {
-  boost::unordered_map<int, IGatePtr> clones_true;  // True state propagation.
-  boost::unordered_map<int, IGatePtr> clones_false;  // False state propagation.
+  std::unordered_map<int, IGatePtr> clones_true;  // True state propagation.
+  std::unordered_map<int, IGatePtr> clones_false;  // False state propagation.
   std::vector<IGateWeakPtr>::const_iterator it;
   for (it = dest.begin(); it != dest.end(); ++it) {
     if (it->expired()) continue;  // Removed by constant propagation.
@@ -1584,7 +1586,7 @@ void Preprocessor::ProcessDecompositionDestinations(
     }
     int sign = parent->args().count(node->index()) ? 1 : -1;
     if (sign < 0) state = !state;
-    boost::unordered_map<int, IGatePtr>& clones =
+    std::unordered_map<int, IGatePtr>& clones =
         state ? clones_true : clones_false;
     LOG(DEBUG5) << "Processing decomposition ancestor G" << parent->index();
     Preprocessor::ProcessDecompositionAncestors(parent, node, state, true,
@@ -1600,7 +1602,7 @@ void Preprocessor::ProcessDecompositionAncestors(
     const NodePtr& node,
     bool state,
     bool destination,
-    boost::unordered_map<int, IGatePtr>* clones) {
+    std::unordered_map<int, IGatePtr>* clones) {
   if (!destination && node->parents().count(ancestor->index())) {
     LOG(DEBUG5) << "Reached decomposition sub-parent G" << ancestor->index();
     int sign = ancestor->args().count(node->index()) ? 1 : -1;
@@ -1615,7 +1617,7 @@ void Preprocessor::ProcessDecompositionAncestors(
   }
   std::vector<std::pair<int, IGatePtr> > to_swap;  // For common gates.
   std::vector<IGatePtr> ancestors;  // For ancestors to work on.
-  boost::unordered_map<int, IGatePtr>::const_iterator it;
+  std::unordered_map<int, IGatePtr>::const_iterator it;
   for (it = ancestor->gate_args().begin(); it != ancestor->gate_args().end();
        ++it) {
     IGatePtr gate = it->second;
@@ -1654,7 +1656,7 @@ bool Preprocessor::ProcessMultipleDefinitions() {
   assert(null_gates_.empty());
   assert(const_gates_.empty());
   // The original gate and its multiple definitions.
-  boost::unordered_map<IGatePtr, std::vector<IGateWeakPtr> > multi_def;
+  std::unordered_map<IGatePtr, std::vector<IGateWeakPtr> > multi_def;
   std::vector<std::vector<IGatePtr> > orig_gates(kNumOperators,
                                                  std::vector<IGatePtr>());
   graph_->ClearGateMarks();
@@ -1664,7 +1666,7 @@ bool Preprocessor::ProcessMultipleDefinitions() {
   graph_->ClearGateMarks();
 
   if (multi_def.empty()) return false;
-  boost::unordered_map<IGatePtr, std::vector<IGateWeakPtr> >::iterator it;
+  std::unordered_map<IGatePtr, std::vector<IGateWeakPtr> >::iterator it;
   for (it = multi_def.begin(); it != multi_def.end(); ++it) {
     IGatePtr orig_gate = it->first;
     std::vector<IGateWeakPtr>& duplicates = it->second;
@@ -1682,7 +1684,7 @@ bool Preprocessor::ProcessMultipleDefinitions() {
 
 void Preprocessor::DetectMultipleDefinitions(
     const IGatePtr& gate,
-    boost::unordered_map<IGatePtr, std::vector<IGateWeakPtr> >* multi_def,
+    std::unordered_map<IGatePtr, std::vector<IGateWeakPtr> >* multi_def,
     std::vector<std::vector<IGatePtr> >* gates) {
   if (gate->mark()) return;
   gate->mark(true);
@@ -1713,7 +1715,7 @@ void Preprocessor::DetectMultipleDefinitions(
   // No redefinition is found for this gate.
   // In order to avoid a comparison with descendants,
   // this gate is not yet put into original gates container.
-  boost::unordered_map<int, IGatePtr>::const_iterator it_ch;
+  std::unordered_map<int, IGatePtr>::const_iterator it_ch;
   for (it_ch = gate->gate_args().begin(); it_ch != gate->gate_args().end();
        ++it_ch) {
     Preprocessor::DetectMultipleDefinitions(it_ch->second, multi_def, gates);
@@ -1742,7 +1744,7 @@ bool Preprocessor::DetectDistributivity(const IGatePtr& gate) {
   }
   std::vector<IGatePtr> candidates;
   // Collect child gates of distributivity type.
-  boost::unordered_map<int, IGatePtr>::const_iterator it_ch;
+  std::unordered_map<int, IGatePtr>::const_iterator it_ch;
   for (it_ch = gate->gate_args().begin(); it_ch != gate->gate_args().end();
        ++it_ch) {
     IGatePtr child_gate = it_ch->second;

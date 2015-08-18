@@ -14,8 +14,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef SCRAM_TESTS_PERFORMANCE_TESTS_H_
 #define SCRAM_TESTS_PERFORMANCE_TESTS_H_
+
+#include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -24,7 +28,8 @@
 #include "probability_analysis.h"
 #include "risk_analysis.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 class PerformanceTest : public ::testing::Test {
  protected:
@@ -80,5 +85,8 @@ class PerformanceTest : public ::testing::Test {
   Settings settings;
   double delta;  // The range indicator for values.
 };
+
+}  // namespace test
+}  // namespace scram
 
 #endif  // SCRAM_TESTS_PERFORMANCE_TESTS_H_

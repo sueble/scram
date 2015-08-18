@@ -14,21 +14,22 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "event.h"
 
-#include <boost/shared_ptr.hpp>
 #include <gtest/gtest.h>
 
 #include "cycle.h"
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
-typedef boost::shared_ptr<Event> EventPtr;
-typedef boost::shared_ptr<Gate> GatePtr;
-typedef boost::shared_ptr<Formula> FormulaPtr;
-typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
-typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
+typedef std::shared_ptr<Event> EventPtr;
+typedef std::shared_ptr<Gate> GatePtr;
+typedef std::shared_ptr<Formula> FormulaPtr;
+typedef std::shared_ptr<HouseEvent> HouseEventPtr;
+typedef std::shared_ptr<BasicEvent> BasicEventPtr;
 
 // Test for Event base class.
 TEST(EventTest, Id) {
@@ -101,7 +102,7 @@ TEST(GateTest, Cycle) {
   formula_two->AddArgument(bottom);
   formula_three->AddArgument(top);  // Looping here.
   std::vector<std::string> cycle;
-  bool ret = cycle::DetectCycle<Gate, Formula>(&*top, &cycle);
+  bool ret = cycle::DetectCycle<Gate, Formula>(top.get(), &cycle);
   EXPECT_TRUE(ret);
   std::vector<std::string> print_cycle;
   print_cycle.push_back("Top");
@@ -202,8 +203,8 @@ TEST(GateTest, Inhibit) {
   BasicEventPtr C(new BasicEvent("c"));
   // INHIBIT Gate tests.
   Attribute inh_attr;
-  inh_attr.name="flavor";
-  inh_attr.value="inhibit";
+  inh_attr.name = "flavor";
+  inh_attr.value = "inhibit";
   GatePtr top(new Gate("top"));
   FormulaPtr formula(new Formula("and"));
   top->formula(formula);
@@ -243,3 +244,6 @@ TEST(PrimaryEventTest, HouseProbability) {
   EXPECT_NO_THROW(primary->state(false));
   EXPECT_FALSE(primary->state());
 }
+
+}  // namespace test
+}  // namespace scram

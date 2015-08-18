@@ -14,11 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
-#include <boost/assign/list_inserter.hpp>
-
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for [A or B or C] fault tree.
 // Test Minimal cut sets and total probabilty.
@@ -381,44 +383,23 @@ TEST_F(RiskAnalysisTest, BetaFactorCCF) {
   std::string v3 = "[valvethree]";
   std::string pumps = "[pumpone pumpthree pumptwo]";
   std::string valves = "[valveone valvethree valvetwo]";
-  std::set<std::string> cut_set;
-  std::set< std::set<std::string> > mcs;  // For expected min cut sets.
 
   settings.ccf_analysis(true).probability_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
   EXPECT_NEAR(0.04308, p_total(), 1e-5);  // Total prob check.
   // Minimal cut set check.
-  using namespace boost::assign;
-  insert(cut_set) (pumps);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (valves);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (v1) (v2) (v3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p1) (v2) (v3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p2) (v1) (v3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p3) (v1) (v2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p3) (p2) (v1);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p1) (p2) (v3);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p1) (p3) (v2);
-  mcs.insert(cut_set);
-  cut_set.clear();
-  insert(cut_set) (p1) (p2) (p3);
-  mcs.insert(cut_set);
+  std::set< std::set<std::string> > mcs;  // For expected min cut sets.
+  mcs.insert({pumps});
+  mcs.insert({valves});
+  mcs.insert({v1, v2, v3});
+  mcs.insert({p1, v2, v3});
+  mcs.insert({p2, v1, v3});
+  mcs.insert({p3, v1, v2});
+  mcs.insert({p3, p2, v1});
+  mcs.insert({p1, p2, v3});
+  mcs.insert({p1, p3, v2});
+  mcs.insert({p1, p2, p3});
   EXPECT_EQ(10, min_cut_sets().size());
   EXPECT_EQ(mcs, min_cut_sets());
 }
@@ -470,3 +451,6 @@ TEST_F(RiskAnalysisTest, AlphaFactorCCF) {
   distr[3] = 8;
   EXPECT_EQ(distr, McsDistribution());
 }
+
+}  // namespace test
+}  // namespace scram

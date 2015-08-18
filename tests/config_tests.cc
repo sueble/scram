@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "config.h"
 
 #include <gtest/gtest.h>
 
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 // Test with a wrong input.
 TEST(ConfigTest, IOError) {
@@ -55,3 +57,6 @@ TEST(ConfigTest, FullSettings) {
 
   delete config;
 }
+
+}  // namespace test
+}  // namespace scram

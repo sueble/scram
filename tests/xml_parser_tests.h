@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef SCRAM_TESTS_XML_PARSER_TESTS_H_
 #define SCRAM_TESTS_XML_PARSER_TESTS_H_
 
@@ -24,7 +25,8 @@
 
 #include <gtest/gtest.h>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 class XMLParserTests : public ::testing::Test {
  public:
@@ -32,7 +34,7 @@ class XMLParserTests : public ::testing::Test {
   virtual void TearDown();
 
  protected:
-  typedef boost::shared_ptr<XMLParser> XMLParserPtr;
+  typedef std::shared_ptr<XMLParser> XMLParserPtr;
 
   void FillSnippet(std::stringstream& ss);
   void FillBadSnippet(std::stringstream& ss);
@@ -42,5 +44,8 @@ class XMLParserTests : public ::testing::Test {
   std::string inner_node_;
   std::string inner_content_;
 };
+
+}  // namespace test
+}  // namespace scram
 
 #endif  // SCRAM_TESTS_XML_PARSER_TESTS_H_

@@ -14,12 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "risk_analysis_tests.h"
 
 #include <sstream>
 
 #include "fault_tree.h"
 #include "grapher.h"
+
+namespace scram {
+namespace test {
 
 // Test Graphing Intructions
 TEST_F(RiskAnalysisTest, GraphingInstructions) {
@@ -69,3 +73,6 @@ TEST_F(RiskAnalysisTest, GraphingHOUSE_NULL) {
   ASSERT_NO_THROW(gr.GraphFaultTree(fault_tree()->top_events().front(),
                                     true, out));
 }
+
+}  // namespace test
+}  // namespace scram

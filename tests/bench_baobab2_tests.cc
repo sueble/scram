@@ -14,9 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for Baobab 2 fault tree from XFTA.
 // Test Minimal cut sets.
@@ -34,3 +38,6 @@ TEST_F(RiskAnalysisTest, Baobab_2_Test) {
   distr[3] = 121;
   EXPECT_EQ(distr, McsDistribution());
 }
+
+}  // namespace test
+}  // namespace scram

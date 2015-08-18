@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "xml_parser_tests.h"
 
 #include <iostream>
@@ -23,7 +24,8 @@
 #include "error.h"
 #include "relax_ng_validator.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 void XMLParserTests::FillSnippet(std::stringstream& ss) {
   ss << "<" << outer_node_ << ">"
@@ -84,7 +86,7 @@ TEST_F(XMLParserTests, RelaxNGValidator) {
   EXPECT_NO_THROW(parser = XMLParserPtr(new XMLParser(snippet)));
 
   RelaxNGValidator validator;
-  const xmlpp::Document* doc = NULL;
+  const xmlpp::Document* doc = nullptr;
   EXPECT_NO_THROW(validator.ParseMemory(schema.str()));
   EXPECT_THROW(validator.Validate(doc), InvalidArgument);
 
@@ -131,3 +133,6 @@ TEST_F(XMLParserTests, WithError) {
   EXPECT_NO_THROW(parser = XMLParserPtr(new XMLParser(snippet)));
   EXPECT_THROW(parser->Validate(schema), ValidationError);
 }
+
+}  // namespace test
+}  // namespace scram

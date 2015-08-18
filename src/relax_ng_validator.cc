@@ -14,15 +14,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /*
  * libxml++ and this file are copyright (C) 2000 by Ari Johnson,
  * (C) 2002-2004 by the libxml dev team and
  * are covered by the GNU Lesser General Public License, which should be
  * included with libxml++ as the file COPYING.
  */
+
 /// @file relax_ng_validator.cc
 /// Implementation of RelaxNG Validator.
 /// This class is agented off of the schemavalidator in libxml++.
+
 #include "relax_ng_validator.h"
 
 #include <libxml/xmlerror.h>
@@ -31,7 +34,9 @@
 
 namespace scram {
 
-RelaxNGValidator::RelaxNGValidator() : schema_(NULL), valid_context_(NULL) {}
+RelaxNGValidator::RelaxNGValidator()
+    : schema_(nullptr),
+      valid_context_(nullptr) {}
 
 RelaxNGValidator::~RelaxNGValidator() {
   RelaxNGValidator::ReleaseUnderlying();
@@ -85,12 +90,12 @@ void RelaxNGValidator::ParseContext(xmlRelaxNGParserCtxtPtr context) {
 void RelaxNGValidator::ReleaseUnderlying() {
   if (valid_context_) {
     xmlRelaxNGFreeValidCtxt(valid_context_);
-    valid_context_ = NULL;
+    valid_context_ = nullptr;
   }
 
   if (schema_) {
     xmlRelaxNGFree(schema_);
-    schema_ = NULL;
+    schema_ = nullptr;
   }
 }
 

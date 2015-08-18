@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #ifndef SCRAM_TESTS_PROBABILITY_ANALYSIS_TESTS_H_
 #define SCRAM_TESTS_PROBABILITY_ANALYSIS_TESTS_H_
 
@@ -25,7 +26,8 @@
 
 #include <gtest/gtest.h>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 class ProbabilityAnalysisTest : public ::testing::Test {
  protected:
@@ -89,5 +91,8 @@ class ProbabilityAnalysisTest : public ::testing::Test {
   // Members
   ProbabilityAnalysis* prob_analysis;
 };
+
+}  // namespace test
+}  // namespace scram
 
 #endif  // SCRAM_TESTS_PROBABILITY_ANALYSIS_TESTS_H_

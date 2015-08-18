@@ -14,9 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for auto-generated 200 event fault tree.
 // Test Minimal cut sets and probability.
@@ -29,3 +33,6 @@ TEST_F(RiskAnalysisTest, 200Event) {
   // Minimal cut set check.
   EXPECT_EQ(287, min_cut_sets().size());
 }
+
+}  // namespace test
+}  // namespace scram

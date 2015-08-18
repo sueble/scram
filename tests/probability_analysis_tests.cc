@@ -14,9 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "probability_analysis_tests.h"
 
 #include "error.h"
+
+namespace scram {
+namespace test {
 
 TEST_F(ProbabilityAnalysisTest, ProbAndInt) {
   std::set<int> min_cut_set;
@@ -189,3 +193,6 @@ TEST_F(ProbabilityAnalysisTest, Constructor) {
   ASSERT_THROW(ProbabilityAnalysis("no", 1, -1), InvalidArgument);
   ASSERT_THROW(ProbabilityAnalysis("no", 1, 10), InvalidArgument);
 }
+
+}  // namespace test
+}  // namespace scram

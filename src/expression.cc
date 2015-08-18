@@ -14,9 +14,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file expression.cc
 /// Implementation of various expressions
 /// for basic event probability description.
+
 #include "expression.h"
 
 #include <boost/algorithm/string.hpp>
@@ -31,11 +33,11 @@ void Expression::GatherNodesAndConnectors() {
   assert(connectors_.empty());
   std::vector<ExpressionPtr>::iterator it;
   for (it = args_.begin(); it != args_.end(); ++it) {
-    Parameter* ptr = dynamic_cast<Parameter*>(&**it);
+    Parameter* ptr = dynamic_cast<Parameter*>(it->get());
     if (ptr) {
       nodes_.push_back(ptr);
     } else {
-      connectors_.push_back(&**it);
+      connectors_.push_back(it->get());
     }
   }
   gather_ = false;
@@ -300,14 +302,15 @@ double Histogram::Mean() {
 double Histogram::Sample() {
   if (!Expression::sampled_) {
     Expression::sampled_ = true;
-    std::vector<double> b;
-    b.push_back(0);  // The initial point.
-    std::vector<double> w;
+    std::vector<double> sampled_boundaries;
+    sampled_boundaries.push_back(0);  // The initial point.
+    std::vector<double> sampled_weights;
     for (int i = 0; i < boundaries_.size(); ++i) {
-      b.push_back(boundaries_[i]->Sample());
-      w.push_back(weights_[i]->Sample());
+      sampled_boundaries.push_back(boundaries_[i]->Sample());
+      sampled_weights.push_back(weights_[i]->Sample());
     }
-    Expression::sampled_value_ = Random::HistogramGenerator(w, b);
+    Expression::sampled_value_ = Random::HistogramGenerator(sampled_boundaries,
+                                                            sampled_weights);
   }
   return Expression::sampled_value_;
 }

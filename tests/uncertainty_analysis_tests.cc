@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "uncertainty_analysis.h"
 
 #include <gtest/gtest.h>
 
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 TEST(UncertaintyAnalysisTest, Constructor) {
   ASSERT_NO_THROW(UncertaintyAnalysis(1));
@@ -33,3 +35,6 @@ TEST(UncertaintyAnalysisTest, Constructor) {
   ASSERT_NO_THROW(UncertaintyAnalysis(1, 1, 100));
   ASSERT_THROW(UncertaintyAnalysis(1, 1, -1), InvalidArgument);
 }
+
+}  // namespace test
+}  // namespace scram

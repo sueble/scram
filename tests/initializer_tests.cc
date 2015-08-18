@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "initializer.h"
 
 #include <vector>
@@ -23,7 +24,8 @@
 #include "error.h"
 #include "settings.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 // Test if the XML is well formed.
 TEST(InitializerTest, XMLFormatting) {
@@ -234,3 +236,6 @@ TEST(InitializerTest, NonOrphanTopEvent) {
   EXPECT_NO_THROW(init->ProcessInputFiles(input_files));
   delete init;
 }
+
+}  // namespace test
+}  // namespace scram

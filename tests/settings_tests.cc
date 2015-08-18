@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "settings.h"
 
 #include <gtest/gtest.h>
 
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 TEST(SettingsTest, IncorrectSetup) {
   Settings s;
@@ -42,3 +44,6 @@ TEST(SettingsTest, IncorrectSetup) {
   // Incorrect mission time.
   ASSERT_THROW(s.mission_time(-10), InvalidArgument);
 }
+
+}  // namespace test
+}  // namespace scram

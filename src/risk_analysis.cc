@@ -14,14 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file risk_analysis.cc
 /// Implementation of risk analysis handler.
+
 #include "risk_analysis.h"
 
 #include <fstream>
 #include <set>
-
-#include <boost/unordered_map.hpp>
+#include <unordered_map>
 
 #include "error.h"
 #include "event.h"
@@ -42,7 +43,7 @@ RiskAnalysis::RiskAnalysis(const ModelPtr& model, const Settings& settings) {
 void RiskAnalysis::GraphingInstructions() {
   CLOCK(graph_time);
   LOG(DEBUG1) << "Producing graphing instructions";
-  boost::unordered_map<std::string, FaultTreePtr>::const_iterator it;
+  std::unordered_map<std::string, FaultTreePtr>::const_iterator it;
   for (it = model_->fault_trees().begin(); it != model_->fault_trees().end();
        ++it) {
     const std::vector<GatePtr>& top_events = it->second->top_events();
@@ -67,7 +68,7 @@ void RiskAnalysis::Analyze() {
   // Otherwise it defaults to the current time.
   if (settings_.seed_ >= 0) Random::seed(settings_.seed_);
 
-  boost::unordered_map<std::string, FaultTreePtr>::const_iterator it;
+  std::unordered_map<std::string, FaultTreePtr>::const_iterator it;
   for (it = model_->fault_trees().begin(); it != model_->fault_trees().end();
        ++it) {
     const std::vector<GatePtr>* top_events = &it->second->top_events();
@@ -116,16 +117,16 @@ void RiskAnalysis::Report(std::ostream& out) {
   // Container for excess primary events not in the analysis.
   // This container is for warning
   // in case the input is formed not as intended.
-  typedef boost::shared_ptr<PrimaryEvent> PrimaryEventPtr;
-  typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
+  typedef std::shared_ptr<PrimaryEvent> PrimaryEventPtr;
+  typedef std::shared_ptr<BasicEvent> BasicEventPtr;
   std::set<PrimaryEventPtr> orphan_primary_events;
-  boost::unordered_map<std::string, BasicEventPtr>::const_iterator it_b;
+  std::unordered_map<std::string, BasicEventPtr>::const_iterator it_b;
   for (it_b = model_->basic_events().begin();
        it_b != model_->basic_events().end(); ++it_b) {
     if (it_b->second->orphan()) orphan_primary_events.insert(it_b->second);
   }
-  typedef boost::shared_ptr<HouseEvent> HouseEventPtr;
-  boost::unordered_map<std::string, HouseEventPtr>::const_iterator it_h;
+  typedef std::shared_ptr<HouseEvent> HouseEventPtr;
+  std::unordered_map<std::string, HouseEventPtr>::const_iterator it_h;
   for (it_h = model_->house_events().begin();
        it_h != model_->house_events().end(); ++it_h) {
     if (it_h->second->orphan()) orphan_primary_events.insert(it_h->second);
@@ -135,9 +136,9 @@ void RiskAnalysis::Report(std::ostream& out) {
 
   // Container for unused parameters not in the analysis.
   // This container is for warning in case the input is formed not as intended.
-  typedef boost::shared_ptr<Parameter> ParameterPtr;
+  typedef std::shared_ptr<Parameter> ParameterPtr;
   std::set<ParameterPtr> unused_parameters;
-  boost::unordered_map<std::string, ParameterPtr>::const_iterator it_v;
+  std::unordered_map<std::string, ParameterPtr>::const_iterator it_v;
   for (it_v = model_->parameters().begin(); it_v != model_->parameters().end();
        ++it_v) {
     if (it_v->second->unused()) unused_parameters.insert(it_v->second);

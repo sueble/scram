@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "random.h"
 
 #include <algorithm>
@@ -22,10 +23,10 @@
 #include <iostream>
 #include <set>
 
-#include <boost/assign/std/vector.hpp>
 #include <gtest/gtest.h>
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 // Plots the sampled numbers in the range [0, 1].
 void PlotDistribution(const std::multiset<double>& series) {
@@ -99,11 +100,8 @@ TEST(RandomTest, Triangular) {
 }
 
 TEST(RandomTest, PiecewiseLinear) {
-  using namespace boost::assign;
-  std::vector<double> intervals;
-  std::vector<double> weights;
-  intervals += 0, 2, 4, 6, 8, 10;
-  weights += 0, 1, 0, 1, 0, 1;
+  std::vector<double> intervals = {0, 2, 4, 6, 8, 10};
+  std::vector<double> weights = {0, 1, 0, 1, 0, 1};
   std::multiset<double> series;
   int sample_size = 1e5;
   for (int i = 0; i < sample_size; ++i) {
@@ -117,11 +115,8 @@ TEST(RandomTest, PiecewiseLinear) {
 }
 
 TEST(RandomTest, Histogram) {
-  using namespace boost::assign;
-  std::vector<double> intervals;
-  std::vector<double> weights;
-  intervals += 0, 2, 4, 6, 8, 10;
-  weights += 1, 2, 4, 3, 1;
+  std::vector<double> intervals = {0, 2, 4, 6, 8, 10};
+  std::vector<double> weights = {1, 2, 4, 3, 1};
   std::multiset<double> series;
   int sample_size = 1e5;
   for (int i = 0; i < sample_size; ++i) {
@@ -135,11 +130,8 @@ TEST(RandomTest, Histogram) {
 }
 
 TEST(RandomTest, Discrete) {
-  using namespace boost::assign;
-  std::vector<double> values;
-  std::vector<double> weights;
-  values += 0, 2, 4, 6, 8, 9;
-  weights += 1, 2, 4, 3, 1, 4;
+  std::vector<double> values = {0, 2, 4, 6, 8, 9};
+  std::vector<double> weights = {1, 2, 4, 3, 1, 4};
   std::multiset<double> series;
   int sample_size = 1e5;
   for (int i = 0; i < sample_size; ++i) {
@@ -272,7 +264,7 @@ TEST(RandomTest, Poisson) {
   for (int i = 0; i < sample_size; ++i) {
     double sample = 0;
     do {
-      sample = Random::PoissonGenerator(5) / 10;
+      sample = static_cast<double>(Random::PoissonGenerator(5)) / 10;
     } while (sample < 0 || sample >= 1);
     series.insert(sample);
   }
@@ -320,3 +312,6 @@ TEST(RandomTest, LogTriangular) {
       << "    Shifted: -1    Scaled-down: 1/2.7\n" << std::endl;
   PlotDistribution(series);
 }
+
+}  // namespace test
+}  // namespace scram

@@ -14,13 +14,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file expression.h
 /// Expressions that describe basic events.
+
 #ifndef SCRAM_SRC_EXPRESSION_H_
 #define SCRAM_SRC_EXPRESSION_H_
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -28,7 +31,6 @@
 #include <boost/math/special_functions/beta.hpp>
 #include <boost/math/special_functions/erf.hpp>
 #include <boost/math/special_functions/gamma.hpp>
-#include <boost/shared_ptr.hpp>
 
 #include "element.h"
 
@@ -46,7 +48,7 @@ class Parameter;  // This is for cycle detection through expressions.
 /// after validation phases.
 class Expression {
  public:
-  typedef boost::shared_ptr<Expression> ExpressionPtr;
+  typedef std::shared_ptr<Expression> ExpressionPtr;
 
   Expression() : sampled_(false), sampled_value_(0), gather_(true) {}
 

@@ -14,18 +14,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file initializer.cc
 /// Implementation of input file processing into analysis constructs.
+
 #include "initializer.h"
 
 #include <fstream>
+#include <unordered_map>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/assign.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/pointer_cast.hpp>
-#include <boost/unordered_map.hpp>
 
 #include "ccf_group.h"
 #include "cycle.h"
@@ -42,10 +42,9 @@ namespace fs = boost::filesystem;
 namespace scram {
 
 const std::map<std::string, Units> Initializer::kUnits_ =
-    boost::assign::map_list_of("bool", kBool) ("int", kInt) ("float", kFloat)
-                              ("hours", kHours) ("hours-1", kInverseHours)
-                              ("years", kYears) ("years-1", kInverseYears)
-                              ("fit", kFit) ("demands", kDemands);
+    {{"bool", kBool}, {"int", kInt}, {"float", kFloat}, {"hours", kHours},
+     {"hours-1", kInverseHours}, {"years", kYears}, {"years-1", kInverseYears},
+     {"fit", kFit}, {"demands", kDemands}};
 
 const char* const Initializer::kUnitToString_[] = {"unitless", "bool", "int",
                                                    "float", "hours", "hours-1",
@@ -56,7 +55,7 @@ std::stringstream Initializer::schema_;
 
 Initializer::Initializer(const Settings& settings) {
   settings_ = settings;
-  mission_time_ = boost::shared_ptr<MissionTime>(new MissionTime());
+  mission_time_ = std::shared_ptr<MissionTime>(new MissionTime());
   mission_time_->mission_time(settings_.mission_time_);
   if (schema_.str().empty()) {
     std::string schema_path = Env::input_schema();
@@ -115,7 +114,7 @@ void Initializer::ProcessInputFile(const std::string& xml_file) {
   stream << file_stream.rdbuf();
   file_stream.close();
 
-  boost::shared_ptr<XMLParser> parser(new XMLParser(stream));
+  std::shared_ptr<XMLParser> parser(new XMLParser(stream));
   parser->Validate(schema_);
   parsers_.push_back(parser);
 
@@ -241,7 +240,7 @@ void Initializer::DefineFaultTree(const xmlpp::Element* ft_node) {
   Initializer::RegisterFaultTreeData(ft_node, fault_tree, name);
 }
 
-boost::shared_ptr<Component> Initializer::DefineComponent(
+std::shared_ptr<Component> Initializer::DefineComponent(
     const xmlpp::Element* component_node,
     const std::string& base_path,
     bool public_container) {
@@ -343,10 +342,9 @@ void Initializer::ProcessModelData(const xmlpp::Element* model_data) {
   }
 }
 
-boost::shared_ptr<Gate> Initializer::RegisterGate(
-    const xmlpp::Element* gate_node,
-    const std::string& base_path,
-    bool public_container) {
+std::shared_ptr<Gate> Initializer::RegisterGate(const xmlpp::Element* gate_node,
+                                                const std::string& base_path,
+                                                bool public_container) {
   std::string name = gate_node->get_attribute_value("name");
   boost::trim(name);
   std::string role = gate_node->get_attribute_value("role");
@@ -386,7 +384,7 @@ void Initializer::DefineGate(const xmlpp::Element* gate_node,
   }
 }
 
-boost::shared_ptr<Formula> Initializer::GetFormula(
+std::shared_ptr<Formula> Initializer::GetFormula(
     const xmlpp::Element* formula_node,
     const std::string& base_path) {
   std::string type = formula_node->get_name();
@@ -449,12 +447,12 @@ void Initializer::ProcessFormula(const xmlpp::Element* formula_node,
         event->orphan(false);
         std::string type = target.second;
         if (type == "gate") {
-          formula->AddArgument(boost::static_pointer_cast<Gate>(event));
+          formula->AddArgument(std::static_pointer_cast<Gate>(event));
         } else if (type == "basic-event") {
-          formula->AddArgument(boost::static_pointer_cast<BasicEvent>(event));
+          formula->AddArgument(std::static_pointer_cast<BasicEvent>(event));
         } else {
           assert(type == "house-event");
-          formula->AddArgument(boost::static_pointer_cast<HouseEvent>(event));
+          formula->AddArgument(std::static_pointer_cast<HouseEvent>(event));
         }
       } else if (element_type == "gate") {
         GatePtr gate = model_->GetGate(name, base_path);
@@ -491,7 +489,7 @@ void Initializer::ProcessFormula(const xmlpp::Element* formula_node,
   }
 }
 
-boost::shared_ptr<BasicEvent> Initializer::RegisterBasicEvent(
+std::shared_ptr<BasicEvent> Initializer::RegisterBasicEvent(
     const xmlpp::Element* event_node,
     const std::string& base_path,
     bool public_container) {
@@ -529,7 +527,7 @@ void Initializer::DefineBasicEvent(const xmlpp::Element* event_node,
   }
 }
 
-boost::shared_ptr<HouseEvent> Initializer::DefineHouseEvent(
+std::shared_ptr<HouseEvent> Initializer::DefineHouseEvent(
     const xmlpp::Element* event_node,
     const std::string& base_path,
     bool public_container) {
@@ -566,7 +564,7 @@ boost::shared_ptr<HouseEvent> Initializer::DefineHouseEvent(
   return house_event;
 }
 
-boost::shared_ptr<Parameter> Initializer::RegisterParameter(
+std::shared_ptr<Parameter> Initializer::RegisterParameter(
     const xmlpp::Element* param_node,
     const std::string& base_path,
     bool public_container) {
@@ -612,7 +610,7 @@ void Initializer::DefineParameter(const xmlpp::Element* param_node,
   parameter->expression(expression);
 }
 
-boost::shared_ptr<Expression> Initializer::GetExpression(
+std::shared_ptr<Expression> Initializer::GetExpression(
     const xmlpp::Element* expr_element,
     const std::string& base_path) {
   using scram::Initializer;
@@ -631,7 +629,7 @@ boost::shared_ptr<Expression> Initializer::GetExpression(
 
 bool Initializer::GetConstantExpression(const xmlpp::Element* expr_element,
                                         ExpressionPtr& expression) {
-  typedef boost::shared_ptr<ConstantExpression> ConstantExpressionPtr;
+  typedef std::shared_ptr<ConstantExpression> ConstantExpressionPtr;
   assert(expr_element);
   std::string expr_name = expr_element->get_name();
   if (expr_name == "float" || expr_name == "int") {
@@ -705,8 +703,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[1]);
     ExpressionPtr max = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<UniformDeviate>(
-        new UniformDeviate(min, max));
+    expression = std::shared_ptr<UniformDeviate>(new UniformDeviate(min, max));
 
   } else if (expr_name == "normal-deviate") {
     assert(args.size() == 2);
@@ -716,8 +713,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[1]);
     ExpressionPtr sigma = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<NormalDeviate>(
-        new NormalDeviate(mean, sigma));
+    expression = std::shared_ptr<NormalDeviate>(new NormalDeviate(mean, sigma));
 
   } else if (expr_name == "lognormal-deviate") {
     assert(args.size() == 3);
@@ -730,7 +726,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[2]);
     ExpressionPtr level = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<LogNormalDeviate>(
+    expression = std::shared_ptr<LogNormalDeviate>(
         new LogNormalDeviate(mean, ef, level));
 
   } else if (expr_name == "gamma-deviate") {
@@ -741,7 +737,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[1]);
     ExpressionPtr theta = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<GammaDeviate>(new GammaDeviate(k, theta));
+    expression = std::shared_ptr<GammaDeviate>(new GammaDeviate(k, theta));
 
   } else if (expr_name == "beta-deviate") {
     assert(args.size() == 2);
@@ -751,7 +747,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[1]);
     ExpressionPtr beta = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<BetaDeviate>(new BetaDeviate(alpha, beta));
+    expression = std::shared_ptr<BetaDeviate>(new BetaDeviate(alpha, beta));
 
   } else if (expr_name == "histogram") {
     std::vector<ExpressionPtr> boundaries;
@@ -770,8 +766,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
       ExpressionPtr weight = GetExpression(element, base_path);
       weights.push_back(weight);
     }
-    expression = boost::shared_ptr<Histogram>(
-        new Histogram(boundaries, weights));
+    expression = std::shared_ptr<Histogram>(new Histogram(boundaries, weights));
 
   } else if (expr_name == "exponential") {
     assert(args.size() == 2);
@@ -781,7 +776,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[1]);
     ExpressionPtr time = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<ExponentialExpression>(
+    expression = std::shared_ptr<ExponentialExpression>(
         new ExponentialExpression(lambda, time));
 
   } else if (expr_name == "GLM") {
@@ -798,7 +793,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[3]);
     ExpressionPtr time = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<GlmExpression>(
+    expression = std::shared_ptr<GlmExpression>(
         new GlmExpression(gamma, lambda, mu, time));
 
   } else if (expr_name == "Weibull") {
@@ -815,7 +810,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
     element = static_cast<const xmlpp::Element*>(args[3]);
     ExpressionPtr time = GetExpression(element, base_path);
 
-    expression = boost::shared_ptr<WeibullExpression>(
+    expression = std::shared_ptr<WeibullExpression>(
         new WeibullExpression(alpha, beta, t0, time));
   } else {
     return false;
@@ -823,7 +818,7 @@ bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
   return true;
 }
 
-boost::shared_ptr<CcfGroup> Initializer::RegisterCcfGroup(
+std::shared_ptr<CcfGroup> Initializer::RegisterCcfGroup(
     const xmlpp::Element* ccf_node,
     const std::string& base_path,
     bool public_container) {
@@ -972,10 +967,10 @@ void Initializer::ValidateInitialization() {
 
 void Initializer::CheckFirstLayer() {
   // Check if all gates have no cycles.
-  boost::unordered_map<std::string, GatePtr>::const_iterator it;
+  std::unordered_map<std::string, GatePtr>::const_iterator it;
   for (it = model_->gates().begin(); it != model_->gates().end(); ++it) {
     std::vector<std::string> cycle;
-    if (cycle::DetectCycle<Gate, Formula>(&*it->second, &cycle)) {
+    if (cycle::DetectCycle<Gate, Formula>(it->second.get(), &cycle)) {
       std::string msg = "Detected a cycle in " + it->second->name() +
                         " gate:\n";
       msg += cycle::PrintCycle(cycle);
@@ -986,12 +981,12 @@ void Initializer::CheckFirstLayer() {
   // Check if all primary events have expressions for probability analysis.
   if (settings_.probability_analysis_) {
     std::string msg = "";
-    boost::unordered_map<std::string, BasicEventPtr>::const_iterator it_b;
+    std::unordered_map<std::string, BasicEventPtr>::const_iterator it_b;
     for (it_b = model_->basic_events().begin();
          it_b != model_->basic_events().end(); ++it_b) {
       if (!it_b->second->has_expression()) msg += it_b->second->name() + "\n";
     }
-    boost::unordered_map<std::string, HouseEventPtr>::const_iterator it_h;
+    std::unordered_map<std::string, HouseEventPtr>::const_iterator it_h;
     for (it_h = model_->house_events().begin();
          it_h != model_->house_events().end(); ++it_h) {
       if (!it_h->second->has_expression()) msg += it_h->second->name() + "\n";
@@ -1011,7 +1006,7 @@ void Initializer::CheckFirstLayer() {
 
 void Initializer::CheckSecondLayer() {
   if (!model_->ccf_groups().empty()) {
-    boost::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
+    std::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
     for (it = model_->ccf_groups().begin(); it != model_->ccf_groups().end();
          ++it) {
       it->second->Validate();
@@ -1022,11 +1017,11 @@ void Initializer::CheckSecondLayer() {
 void Initializer::ValidateExpressions() {
   // Check for cycles in parameters. This must be done before expressions.
   if (!model_->parameters().empty()) {
-    boost::unordered_map<std::string, ParameterPtr>::const_iterator it;
+    std::unordered_map<std::string, ParameterPtr>::const_iterator it;
     for (it = model_->parameters().begin(); it != model_->parameters().end();
          ++it) {
       std::vector<std::string> cycle;
-      if (cycle::DetectCycle<Parameter, Expression>(&*it->second, &cycle)) {
+      if (cycle::DetectCycle<Parameter, Expression>(it->second.get(), &cycle)) {
         std::string msg = "Detected a cycle in " + it->second->name() +
                           " parameter:\n";
         msg += cycle::PrintCycle(cycle);
@@ -1052,7 +1047,7 @@ void Initializer::ValidateExpressions() {
     std::stringstream msg;
     msg << "";
     if (!model_->ccf_groups().empty()) {
-      boost::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
+      std::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
       for (it = model_->ccf_groups().begin(); it != model_->ccf_groups().end();
            ++it) {
         try {
@@ -1062,7 +1057,7 @@ void Initializer::ValidateExpressions() {
         }
       }
     }
-    boost::unordered_map<std::string, BasicEventPtr>::const_iterator it;
+    std::unordered_map<std::string, BasicEventPtr>::const_iterator it;
     for (it = model_->basic_events().begin();
          it != model_->basic_events().end(); ++it) {
       try {
@@ -1081,7 +1076,7 @@ void Initializer::ValidateExpressions() {
 void Initializer::SetupForAnalysis() {
   // Collecting top events of fault trees.
   if (!model_->fault_trees().empty()) {
-    boost::unordered_map<std::string, FaultTreePtr>::const_iterator it;
+    std::unordered_map<std::string, FaultTreePtr>::const_iterator it;
     for (it = model_->fault_trees().begin(); it != model_->fault_trees().end();
          ++it) {
       it->second->CollectTopEvents();
@@ -1090,7 +1085,7 @@ void Initializer::SetupForAnalysis() {
 
   // CCF groups must apply models to basic event members.
   if (!model_->ccf_groups().empty()) {
-    boost::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
+    std::unordered_map<std::string, CcfGroupPtr>::const_iterator it;
     for (it = model_->ccf_groups().begin(); it != model_->ccf_groups().end();
          ++it) {
       it->second->ApplyModel();

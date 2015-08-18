@@ -14,13 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "element.h"
 
 #include <gtest/gtest.h>
 
 #include "error.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
 class TestElement : public Element {};
 
@@ -44,3 +46,6 @@ TEST(ElementTest, Attribute) {
   ASSERT_TRUE(el.HasAttribute(attr.name));
   ASSERT_NO_THROW(el.GetAttribute(attr.name));
 }
+
+}  // namespace test
+}  // namespace scram

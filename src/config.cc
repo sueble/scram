@@ -14,11 +14,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file config.cc
 /// Implementation of configuration facilities.
+
 #include "config.h"
 
+#include <cassert>
 #include <fstream>
+#include <memory>
 #include <sstream>
 
 #include <boost/lexical_cast.hpp>
@@ -39,9 +43,9 @@ Config::Config(const std::string& config_file) : output_path_("") {
   stream << file_stream.rdbuf();
   file_stream.close();
 
-  boost::shared_ptr<XMLParser> parser;
+  std::shared_ptr<XMLParser> parser;
   try {
-    parser = boost::shared_ptr<XMLParser>(new XMLParser(stream));
+    parser = std::shared_ptr<XMLParser>(new XMLParser(stream));
     std::stringstream schema;
     std::string schema_path = Env::config_schema();
     std::ifstream schema_stream(schema_path.c_str());

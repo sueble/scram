@@ -14,19 +14,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "ccf_group.h"
 
-#include <boost/shared_ptr.hpp>
 #include <gtest/gtest.h>
 
 #include "error.h"
 #include "event.h"
 #include "expression.h"
 
-using namespace scram;
+namespace scram {
+namespace test {
 
-typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
-typedef boost::shared_ptr<Expression> ExpressionPtr;
+typedef std::shared_ptr<BasicEvent> BasicEventPtr;
+typedef std::shared_ptr<Expression> ExpressionPtr;
 
 TEST(CcfGroupTest, AddMemberRepeated) {
   CcfGroup* ccf_group = new BetaFactorModel("general");
@@ -49,3 +50,6 @@ TEST(CcfGroupTest, AddMemberAfterDistribution) {
   EXPECT_THROW(ccf_group->AddMember(member), IllegalOperation);
   delete ccf_group;
 }
+
+}  // namespace test
+}  // namespace scram

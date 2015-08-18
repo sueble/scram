@@ -14,6 +14,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file mocus.h
 /// Fault tree analysis with the MOCUS algorithm.
 /// This algorithm requires a fault tree in negation normal form.
@@ -21,21 +22,21 @@
 /// All gates must be positive;
 /// that is, negations must be pushed down to leaves, basic events.
 /// The fault tree should not contain constants or house events.
+
 #ifndef SCRAM_SRC_MOCUS_H_
 #define SCRAM_SRC_MOCUS_H_
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
-
-#include <boost/shared_ptr.hpp>
 
 #include "boolean_graph.h"
 
 namespace scram {
 
-typedef boost::shared_ptr<std::set<int> > SetPtr;
+typedef std::shared_ptr<std::set<int> > SetPtr;
 
 /// @class SetPtrComp
 /// Functor for set pointer comparison efficiency.
@@ -61,7 +62,7 @@ struct SetPtrComp
 /// All the child gates of this gate must be of opposite type.
 class SimpleGate {
  public:
-  typedef boost::shared_ptr<SimpleGate> SimpleGatePtr;
+  typedef std::shared_ptr<SimpleGate> SimpleGatePtr;
 
   /// @param[in] type The type of this gate. AND or OR types are expected.
   explicit SimpleGate(const Operator& type) : type_(type) {}
@@ -155,8 +156,8 @@ class Mocus {
   }
 
  private:
-  typedef boost::shared_ptr<SimpleGate> SimpleGatePtr;
-  typedef boost::shared_ptr<IGate> IGatePtr;
+  typedef std::shared_ptr<SimpleGate> SimpleGatePtr;
+  typedef std::shared_ptr<IGate> IGatePtr;
 
   /// Traverses the fault tree to convert gates into simple gates.
   ///

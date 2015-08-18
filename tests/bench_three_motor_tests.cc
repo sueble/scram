@@ -14,9 +14,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for the ThreeMotor fault tree from OpenFTA.
 TEST_F(RiskAnalysisTest, ThreeMotor) {
@@ -127,3 +131,6 @@ TEST_F(RiskAnalysisTest, ThreeMotor) {
   EXPECT_EQ(12, min_cut_sets().size());
   EXPECT_EQ(mcs, min_cut_sets());
 }
+
+}  // namespace test
+}  // namespace scram

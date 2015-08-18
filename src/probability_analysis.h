@@ -14,34 +14,36 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file probability_analysis.h
 /// Contains functionality to do numerical analysis
 /// of probabilities and importance factors.
+
 #ifndef SCRAM_SRC_PROBABILITY_ANALYSIS_H_
 #define SCRAM_SRC_PROBABILITY_ANALYSIS_H_
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <boost/container/flat_set.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/unordered_map.hpp>
 
 #include "event.h"
 
-class ProbabilityAnalysisTest;
-
 namespace scram {
+
+namespace test { class ProbabilityAnalysisTest; }
 
 /// @class ProbabilityAnalysis
 /// Main quantitative analysis.
 class ProbabilityAnalysis {
-  friend class ::ProbabilityAnalysisTest;
+  friend class test::ProbabilityAnalysisTest;
 
  public:
-  typedef boost::shared_ptr<BasicEvent> BasicEventPtr;
+  typedef std::shared_ptr<BasicEvent> BasicEventPtr;
 
   /// The main constructor of Probability Analysis.
   ///
@@ -69,7 +71,7 @@ class ProbabilityAnalysis {
   /// @note  If not enough information is provided,
   ///        the analysis behavior is undefined.
   void UpdateDatabase(
-      const boost::unordered_map<std::string, BasicEventPtr>& basic_events);
+      const std::unordered_map<std::string, BasicEventPtr>& basic_events);
 
   /// Performs quantitative analysis on minimal cut sets
   /// containing basic events provided in the databases.
@@ -108,7 +110,7 @@ class ProbabilityAnalysis {
   inline const std::string warnings() const { return warnings_; }
 
   /// @returns The container of basic events of supplied for the analysis.
-  inline const boost::unordered_map<std::string, BasicEventPtr>&
+  inline const std::unordered_map<std::string, BasicEventPtr>&
       basic_events() const {
     return basic_events_;
   }
@@ -207,11 +209,11 @@ class ProbabilityAnalysis {
   std::string approx_;  ///< Approximations for probability calculations.
 
   /// Container for basic events.
-  boost::unordered_map<std::string, BasicEventPtr> basic_events_;
+  std::unordered_map<std::string, BasicEventPtr> basic_events_;
 
   std::vector<BasicEventPtr> int_to_basic_;  ///< Indices to basic events.
   /// Indices of basic events.
-  boost::unordered_map<std::string, int> basic_to_int_;
+  std::unordered_map<std::string, int> basic_to_int_;
   std::vector<double> iprobs_;  ///< Holds probabilities of basic events.
 
   /// Minimal cut sets passed for analysis.

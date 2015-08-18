@@ -14,8 +14,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 /// @file reporter.cc
 /// Implements Reporter class.
+
 #include "reporter.h"
 
 #include <map>
@@ -23,7 +25,6 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time.hpp>
-#include <boost/pointer_cast.hpp>
 
 #include "ccf_group.h"
 #include "error.h"
@@ -185,8 +186,8 @@ void Reporter::ReportUnusedParameters(
 
 void Reporter::ReportFta(
     std::string ft_name,
-    const boost::shared_ptr<const FaultTreeAnalysis>& fta,
-    const boost::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
+    const std::shared_ptr<const FaultTreeAnalysis>& fta,
+    const std::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
     xmlpp::Document* doc) {
   xmlpp::Node* root = doc->get_root_node();
   xmlpp::NodeSet res = root->find("./results");
@@ -268,7 +269,7 @@ void Reporter::ReportFta(
 
 void Reporter::ReportImportance(
     std::string ft_name,
-    const boost::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
+    const std::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
     xmlpp::Document* doc) {
   xmlpp::Node* root = doc->get_root_node();
   xmlpp::NodeSet res = root->find("./results");
@@ -307,7 +308,7 @@ void Reporter::ReportImportance(
 
 void Reporter::ReportUncertainty(
     std::string ft_name,
-    const boost::shared_ptr<const UncertaintyAnalysis>& uncert_analysis,
+    const std::shared_ptr<const UncertaintyAnalysis>& uncert_analysis,
     xmlpp::Document* doc) {
   xmlpp::Node* root = doc->get_root_node();
   xmlpp::NodeSet res = root->find("./results");
@@ -358,8 +359,8 @@ void Reporter::ReportUncertainty(
 xmlpp::Element* Reporter::ReportBasicEvent(const BasicEventPtr& basic_event,
                                            xmlpp::Element* parent) {
   xmlpp::Element* element;
-  boost::shared_ptr<CcfEvent> ccf_event =
-      boost::dynamic_pointer_cast<CcfEvent>(basic_event);
+  std::shared_ptr<CcfEvent> ccf_event =
+      std::dynamic_pointer_cast<CcfEvent>(basic_event);
   std::string prefix =
         basic_event->is_public() ? "" : basic_event->base_path() + ".";
   if (!ccf_event) {

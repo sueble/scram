@@ -14,16 +14,20 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 #include <gtest/gtest.h>
 
 #include "risk_analysis_tests.h"
+
+namespace scram {
+namespace test {
 
 // Benchmark Tests for CEA9601 fault tree from XFTA.
 // Test Minimal cut sets.
 // This test is disabled
 // becuase of the current handling of non-coherent trees
 // with minimal cut sets instead of prime implicants.
-// TODO: Enable when prime implicants are introduced.
+/// @todo Enable when prime implicants are introduced.
 TEST_F(RiskAnalysisTest, DISABLED_CEA9601_Test) {
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/CEA9601/CEA9601.xml");
@@ -38,3 +42,6 @@ TEST_F(RiskAnalysisTest, DISABLED_CEA9601_Test) {
   distr[4] = 1874;
   EXPECT_EQ(distr, McsDistribution());
 }
+
+}  // namespace test
+}  // namespace scram
