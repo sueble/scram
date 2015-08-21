@@ -76,15 +76,7 @@ class Event : public Element, public Role {
 /// This class represents Base, House, Undeveloped, and other events.
 class PrimaryEvent : public Event {
  public:
-  /// Constructs with id name and probability.
-  ///
-  /// @param[in] name The identifying name of this primary event.
-  /// @param[in] base_path The series of containers to get this event.
-  /// @param[in] is_public Whether or not the event is public.
-  explicit PrimaryEvent(const std::string& name,
-                        const std::string& base_path = "",
-                        bool is_public = true);
-
+  using Event::Event;  // Construction with unique identification.
   virtual ~PrimaryEvent() = 0;  ///< Abstract class.
 
   /// @returns A flag indicating if the event's expression is set.
@@ -92,21 +84,14 @@ class PrimaryEvent : public Event {
 
  protected:
   /// Flag to notify that expression for the event is defined.
-  bool has_expression_;
+  bool has_expression_ = false;
 };
 
 /// @class HouseEvent
 /// Representation of a house event in a fault tree.
 class HouseEvent : public PrimaryEvent {
  public:
-  /// Constructs with id name.
-  ///
-  /// @param[in] name The identifying name of this house event.
-  /// @param[in] base_path The series of containers to get this event.
-  /// @param[in] is_public Whether or not the event is public.
-  explicit HouseEvent(const std::string& name,
-                      const std::string& base_path = "",
-                      bool is_public = true);
+  using PrimaryEvent::PrimaryEvent;  // Construction with unique identification.
 
   /// Sets the state for House event.
   ///
@@ -122,7 +107,7 @@ class HouseEvent : public PrimaryEvent {
  private:
   /// Represents the state of the house event.
   /// Implies On or Off for True or False values of the probability.
-  bool state_;
+  bool state_ = false;
 };
 
 class Gate;
@@ -134,14 +119,7 @@ class BasicEvent : public PrimaryEvent {
   typedef std::shared_ptr<Expression> ExpressionPtr;
   typedef std::shared_ptr<Gate> GatePtr;
 
-  /// Constructs with id name.
-  ///
-  /// @param[in] name The identifying name of this basic event.
-  /// @param[in] base_path The series of containers to get this event.
-  /// @param[in] is_public Whether or not the event is public.
-  explicit BasicEvent(const std::string& name,
-                      const std::string& base_path = "",
-                      bool is_public = true);
+  using PrimaryEvent::PrimaryEvent;  // Construction with unique identification.
 
   virtual ~BasicEvent() {}
 
@@ -160,7 +138,7 @@ class BasicEvent : public PrimaryEvent {
   ///       that the returned value is acceptable for calculations.
   ///
   /// @warning Undefined behavior if the expression is not set.
-  inline double p() const {
+  inline double p() const noexcept {
     assert(expression_);
     return expression_->Mean();
   }
@@ -173,16 +151,16 @@ class BasicEvent : public PrimaryEvent {
   ///       that the returned value is acceptable for calculations.
   ///
   /// @warning Undefined behavior if the expression is not set.
-  inline double SampleProbability() {
+  inline double SampleProbability() noexcept {
     assert(expression_);
     return expression_->Sample();
   }
 
   /// Resets the sampling.
-  inline void Reset() { expression_->Reset(); }
+  inline void Reset() noexcept { expression_->Reset(); }
 
   /// @returns Indication if this event does not have uncertainty.
-  inline bool IsConstant() { return expression_->IsConstant(); }
+  inline bool IsConstant() noexcept { return expression_->IsConstant(); }
 
   /// Validates the probability expressions for the primary event.
   ///
@@ -271,15 +249,9 @@ class Formula;  // To describe a gate's formula.
 /// A representation of a gate in a fault tree.
 class Gate : public Event {
  public:
-  typedef std::shared_ptr<Formula> FormulaPtr;
+  typedef std::unique_ptr<Formula> FormulaPtr;
 
-  /// Constructs with an id and a gate.
-  ///
-  /// @param[in] name The identifying name with caps preserved.
-  /// @param[in] base_path The series of containers to get this event.
-  /// @param[in] is_public Whether or not the event is public.
-  explicit Gate(const std::string& name, const std::string& base_path = "",
-                bool is_public = true);
+  using Event::Event;  // Construction with unique identification.
 
   /// @returns The formula of this gate.
   inline const FormulaPtr& formula() const { return formula_; }
@@ -287,9 +259,9 @@ class Gate : public Event {
   /// Sets the formula of this gate.
   ///
   /// @param[in] formula Boolean formula of this gate.
-  inline void formula(const FormulaPtr& formula) {
+  inline void formula(FormulaPtr formula) {
     assert(!formula_);
-    formula_ = formula;
+    formula_ = std::move(formula);
   }
 
   /// This function is for cycle detection.
@@ -311,7 +283,7 @@ class Gate : public Event {
 
  private:
   FormulaPtr formula_;  ///< Boolean formula of this gate.
-  std::string mark_;  ///< The mark for traversal or toposort.
+  std::string mark_ = "";  ///< The mark for traversal or toposort.
 };
 
 /// @class Formula
@@ -323,7 +295,7 @@ class Formula {
   typedef std::shared_ptr<HouseEvent> HouseEventPtr;
   typedef std::shared_ptr<BasicEvent> BasicEventPtr;
   typedef std::shared_ptr<Gate> GatePtr;
-  typedef std::shared_ptr<Formula> FormulaPtr;
+  typedef std::unique_ptr<Formula> FormulaPtr;
 
   /// Constructs a formula.
   ///
@@ -372,7 +344,7 @@ class Formula {
   }
 
   /// @returns The formula arguments of this formula.
-  inline const std::set<FormulaPtr>& formula_args() const {
+  inline const std::vector<FormulaPtr>& formula_args() const {
     return formula_args_;
   }
 
@@ -403,11 +375,10 @@ class Formula {
   void AddArgument(const GatePtr& gate);
 
   /// Adds a formula into the arguments list.
+  /// Formulas are unique.
   ///
   /// @param[in] formula A pointer to an argument formula.
-  ///
-  /// @throws LogicError The formula is being re-inserted.
-  void AddArgument(const FormulaPtr& formula);
+  void AddArgument(FormulaPtr formula);
 
   /// Checks if a formula is initialized correctly with the number of arguments.
   ///
@@ -441,8 +412,9 @@ class Formula {
   std::vector<HouseEventPtr> house_event_args_;  ///< House event arguments.
   std::vector<BasicEventPtr> basic_event_args_;  ///< Basic event arguments.
   std::vector<GatePtr> gate_args_;  ///< Arguments that are gates.
-  /// Arguments that are formulas if this formula is nested.
-  std::set<FormulaPtr> formula_args_;
+  /// Arguments that are formulas
+  /// if this formula is nested.
+  std::vector<FormulaPtr> formula_args_;
   std::vector<Gate*> nodes_;  ///< Gate arguments as nodes.
   std::vector<Formula*> connectors_;  ///< Formulae as connectors.
   bool gather_;  ///< A flag to gather nodes and connectors.

@@ -42,7 +42,7 @@ class Model;
 /// Main system that performs analyses.
 class RiskAnalysis {
  public:
-  typedef std::shared_ptr<Model> ModelPtr;
+  typedef std::shared_ptr<const Model> ModelPtr;
   typedef std::shared_ptr<FaultTreeAnalysis> FaultTreeAnalysisPtr;
   typedef std::shared_ptr<ProbabilityAnalysis> ProbabilityAnalysisPtr;
   typedef std::shared_ptr<UncertaintyAnalysis> UncertaintyAnalysisPtr;
@@ -118,10 +118,10 @@ class RiskAnalysis {
 
  private:
   typedef std::shared_ptr<Gate> GatePtr;
-  typedef std::shared_ptr<FaultTree> FaultTreePtr;
+  typedef std::unique_ptr<FaultTree> FaultTreePtr;
 
   ModelPtr model_;  ///< Analysis model with constructs.
-  Settings settings_;  ///< Settings for analysis.
+  const Settings kSettings_;  ///< Settings for all analysis.
 
   /// Fault tree analyses that are performed on a specific fault tree.
   std::map<std::string, FaultTreeAnalysisPtr> fault_tree_analyses_;

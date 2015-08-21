@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "event.h"
+#include "settings.h"
 
 namespace scram {
 
@@ -64,10 +65,7 @@ class FaultTreeAnalysis {
   /// and its events must be fully initialized.
   ///
   /// @param[in] root The top event of the fault tree to analyze.
-  /// @param[in] limit_order The maximum limit on minimal cut sets' order.
-  /// @param[in] ccf_analysis Whether or not expand CCF group basic events.
-  ///
-  /// @throws InvalidArgument One of the parameters is invalid.
+  /// @param[in] settings Analysis settings for all calculations.
   ///
   /// @note It is assumed that analysis is done only once.
   ///
@@ -75,8 +73,8 @@ class FaultTreeAnalysis {
   ///          this analysis does not incorporate the changed structure.
   ///          Moreover, the analysis results may get corrupted.
   /// @warning The gates' visit marks must be clean.
-  explicit FaultTreeAnalysis(const GatePtr& root, int limit_order = 20,
-                             bool ccf_analysis = false);
+  explicit FaultTreeAnalysis(const GatePtr& root,
+                             const Settings& settings = Settings());
 
   /// Analyzes the fault tree and performs computations.
   /// This function must be called
@@ -92,7 +90,7 @@ class FaultTreeAnalysis {
   ///          since the construction of the analysis,
   ///          the analysis will be invalid or fail.
   /// @warning The gates' visit marks must be clean.
-  void Analyze();
+  void Analyze() noexcept;
 
   /// @returns The top gate that is passed to the analysis.
   inline const GatePtr& top_event() const { return top_event_; }
@@ -156,7 +154,7 @@ class FaultTreeAnalysis {
 
  private:
   typedef std::shared_ptr<Event> EventPtr;
-  typedef std::shared_ptr<Formula> FormulaPtr;
+  typedef std::unique_ptr<Formula> FormulaPtr;
 
   /// Gathers information about the correctly initialized fault tree.
   /// Databases for events are manipulated
@@ -171,18 +169,18 @@ class FaultTreeAnalysis {
   /// The mark is checked to prevent revisiting.
   ///
   /// @param[in] gate The gate to start traversal from.
-  void GatherEvents(const GatePtr& gate);
+  void GatherEvents(const GatePtr& gate) noexcept;
 
   /// Traverses formulas recursively to find all events.
   ///
   /// @param[in] formula The formula to get events from.
-  void GatherEvents(const FormulaPtr& formula);
+  void GatherEvents(const FormulaPtr& formula) noexcept;
 
   /// Cleans marks from gates that were traversed.
   /// Marks are set to empty strings.
   /// This is important
   /// because other code may assume that marks are empty.
-  void CleanMarks();
+  void CleanMarks() noexcept;
 
   /// Converts minimal cut sets from indices to strings
   /// for future reporting.
@@ -191,13 +189,10 @@ class FaultTreeAnalysis {
   /// @param[in] imcs Min cut sets with indices of events.
   /// @param[in] ft Indexed fault tree with basic event indices and pointers.
   void SetsToString(const std::vector< std::set<int> >& imcs,
-                    const BooleanGraph* ft);
-
-  /// Limit on the size of the minimal cut sets for performance reasons.
-  int limit_order_;
-  bool ccf_analysis_;  ///< A flag to include CCF groups in fault trees.
+                    const BooleanGraph* ft) noexcept;
 
   GatePtr top_event_;  ///< Top event of this fault tree.
+  const Settings kSettings_;  ///< All settings for analysis.
 
   /// Container for intermediate events.
   std::unordered_map<std::string, GatePtr> inter_events_;

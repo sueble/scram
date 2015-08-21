@@ -38,11 +38,11 @@ class OpenExpression : public Expression {
   double sample;
   double min;  // This value is used only if explicitly set non-zero.
   double max;  // This value is used only if explicitly set non-zero.
-  inline double Mean() { return mean; }
-  inline double Sample() { return sample; }
-  inline double Max() { return max ? max : sample; }
-  inline double Min() { return min ? min : sample; }
-  inline bool IsConstant() { return true; }
+  inline double Mean() noexcept { return mean; }
+  inline double Sample() noexcept { return sample; }
+  inline double Max() noexcept { return max ? max : sample; }
+  inline double Min() noexcept { return min ? min : sample; }
+  inline bool IsConstant() noexcept { return true; }
 };
 
 typedef std::shared_ptr<OpenExpression> OpenExpressionPtr;
@@ -277,11 +277,14 @@ TEST(ExpressionTest, NormalDeviate) {
 TEST(ExpressionTest, LogNormalDeviate) {
   OpenExpressionPtr mean(new OpenExpression(10, 5));
   OpenExpressionPtr ef(new OpenExpression(5, 3));
-  OpenExpressionPtr level(new OpenExpression(0.95));
+  OpenExpressionPtr level(new OpenExpression(0.95, 0.95, 0.6, 0.9));
   ExpressionPtr dev;
   ASSERT_NO_THROW(dev = ExpressionPtr(new LogNormalDeviate(mean, ef, level)));
 
-  level->mean = 0.5;  // Unsupported level.
+  ASSERT_NO_THROW(dev->Validate());
+  level->mean = -0.5;
+  EXPECT_THROW(dev->Validate(), InvalidArgument);
+  level->mean = 2;
   EXPECT_THROW(dev->Validate(), InvalidArgument);
   level->mean = 0.95;
   ASSERT_NO_THROW(dev->Validate());

@@ -40,33 +40,13 @@ Event::Event(const std::string& name, const std::string& base_path,
 
 Event::~Event() {}  // Empty body for pure virtual destructor.
 
-PrimaryEvent::PrimaryEvent(const std::string& name,
-                           const std::string& base_path,
-                           bool is_public)
-      : Event(name, base_path, is_public),
-        has_expression_(false) {}
-
 PrimaryEvent::~PrimaryEvent() {}  // Empty body for pure virtual destructor.
-
-HouseEvent::HouseEvent(const std::string& name, const std::string& base_path,
-                       bool is_public)
-      : PrimaryEvent(name, base_path, is_public),
-        state_(false) {}
-
-BasicEvent::BasicEvent(const std::string& name, const std::string& base_path,
-                       bool is_public)
-      : PrimaryEvent(name, base_path, is_public) {}
 
 CcfEvent::CcfEvent(const std::string& name, const CcfGroup* ccf_group,
                    const std::vector<std::string>& member_names)
     : BasicEvent(name, ccf_group->base_path(), ccf_group->is_public()),
       ccf_group_(ccf_group),
       member_names_(member_names) {}
-
-Gate::Gate(const std::string& name, const std::string& base_path,
-           bool is_public)
-    : Event(name, base_path, is_public),
-      mark_("") {}
 
 void Gate::Validate() {
   // Detect inhibit flavor.
@@ -161,11 +141,8 @@ void Formula::AddArgument(const GatePtr& gate) {
   gate_args_.push_back(gate);
 }
 
-void Formula::AddArgument(const FormulaPtr& formula) {
-  if (formula_args_.count(formula)) {
-    throw LogicError("Trying to re-insert a formula as an argument");
-  }
-  formula_args_.insert(formula);
+void Formula::AddArgument(FormulaPtr formula) {
+  formula_args_.emplace_back(std::move(formula));
 }
 
 void Formula::Validate() {
@@ -203,7 +180,7 @@ void Formula::GatherNodesAndConnectors() {
   for (it_g = gate_args_.begin(); it_g != gate_args_.end(); ++it_g) {
     nodes_.push_back(it_g->get());
   }
-  std::set<std::shared_ptr<Formula> >::iterator it_f;
+  std::vector<FormulaPtr>::iterator it_f;
   for (it_f = formula_args_.begin(); it_f != formula_args_.end(); ++it_f) {
     connectors_.push_back(it_f->get());
   }
