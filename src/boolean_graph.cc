@@ -19,8 +19,8 @@
 /// Implementation of indexed nodes, variables, gates, and the Boolean graph.
 /// The implementation caters other algorithms like preprocessing.
 /// The main goal is
-/// to make manipulations and transformations of the graph easier
-/// to achieve for graph algorithms.
+/// to make manipulations and transformations of the graph
+/// easier to achieve for graph algorithms.
 
 #include "boolean_graph.h"
 
@@ -35,7 +35,11 @@ int Node::next_index_ = 1e6;  // 1 million basic events per fault tree is crazy!
 
 Node::Node() noexcept : Node::Node(next_index_++) {}
 
-Node::Node(int index) noexcept : index_(index), opti_value_(0) {
+Node::Node(int index) noexcept
+    : index_(index),
+      opti_value_(0),
+      pos_count_(0),
+      neg_count_(0) {
   std::fill(visits_, visits_ + 3, 0);
 }
 
@@ -256,6 +260,12 @@ void IGate::ProcessDuplicateArg(int index) noexcept {
       // This is a very special handling of K/N duplicates.
       // @(k, [x, x, y_i]) = x & @(k-2, [y_i]) | @(k, [y_i])
       assert(vote_number_ > 1);
+      if (args_.size() == 2) {
+        assert(vote_number_ == 2);
+        this->EraseArg(index);
+        this->type_ = kNullGate;
+        return;
+      }
       assert(args_.size() > 2);
       IGatePtr clone_one = IGate::Clone();  // @(k, [y_i])
 
@@ -265,21 +275,23 @@ void IGate::ProcessDuplicateArg(int index) noexcept {
       if (vote_number_ == 2) {  // No need for the second K/N gate.
         clone_one->TransferArg(index, shared_from_this());  // Transfered the x.
         assert(this->args_.size() == 2);
-        return;
+      } else {
+        // Create the AND gate to combine with the duplicate node.
+        IGatePtr and_gate(new IGate(kAndGate));
+        this->AddArg(and_gate->index(), and_gate);
+        clone_one->TransferArg(index, and_gate);  // Transfered the x.
+
+        // Have to create the second K/N for vote_number > 2.
+        IGatePtr clone_two = clone_one->Clone();
+        clone_two->vote_number(vote_number_ - 2);  // @(k-2, [y_i])
+        if (clone_two->vote_number() == 1) clone_two->type(kOrGate);
+        and_gate->AddArg(clone_two->index(), clone_two);
+
+        assert(and_gate->args().size() == 2);
+        assert(this->args_.size() == 2);
       }
-      // Create the AND gate to combine with the duplicate node.
-      IGatePtr and_gate(new IGate(kAndGate));
-      this->AddArg(and_gate->index(), and_gate);
-      clone_one->TransferArg(index, and_gate);  // Transfered the x.
-
-      // Have to create the second K/N for vote_number > 2.
-      IGatePtr clone_two = clone_one->Clone();
-      clone_two->vote_number(vote_number_ - 2);  // @(k-2, [y_i])
-      if (clone_two->vote_number() == 1) clone_two->type(kOrGate);
-      and_gate->AddArg(clone_two->index(), clone_two);
-
-      assert(and_gate->args().size() == 2);
-      assert(this->args_.size() == 2);
+      if (clone_one->args().size() == clone_one->vote_number())
+        clone_one->type(kAndGate);
   }
   if (args_.size() == 1) {
     switch (type_) {
@@ -473,9 +485,8 @@ void BooleanGraph::ClearGateMarks() noexcept {
 void BooleanGraph::ClearGateMarks(const IGatePtr& gate) noexcept {
   if (!gate->mark()) return;
   gate->mark(false);
-  std::unordered_map<int, IGatePtr>::const_iterator it;
-  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
-    BooleanGraph::ClearGateMarks(it->second);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearGateMarks(arg.second);
   }
 }
 
@@ -493,19 +504,14 @@ void BooleanGraph::ClearNodeVisits(const IGatePtr& gate) noexcept {
 
   if (gate->Visited()) gate->ClearVisits();
 
-  std::unordered_map<int, IGatePtr>::const_iterator it;
-  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
-    BooleanGraph::ClearNodeVisits(it->second);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearNodeVisits(arg.second);
   }
-  std::unordered_map<int, VariablePtr>::const_iterator it_b;
-  for (it_b = gate->variable_args().begin();
-       it_b != gate->variable_args().end(); ++it_b) {
-    if (it_b->second->Visited()) it_b->second->ClearVisits();
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    if (arg.second->Visited()) arg.second->ClearVisits();
   }
-  std::unordered_map<int, ConstantPtr>::const_iterator it_c;
-  for (it_c = gate->constant_args().begin();
-       it_c != gate->constant_args().end(); ++it_c) {
-    if (it_c->second->Visited()) it_c->second->ClearVisits();
+  for (const std::pair<int, ConstantPtr>& arg : gate->constant_args()) {
+    if (arg.second->Visited()) arg.second->ClearVisits();
   }
 }
 
@@ -523,14 +529,66 @@ void BooleanGraph::ClearOptiValues(const IGatePtr& gate) noexcept {
 
   gate->opti_value(0);
   gate->ResetArgFailure();
-  std::unordered_map<int, IGatePtr>::const_iterator it;
-  for (it = gate->gate_args().begin(); it != gate->gate_args().end(); ++it) {
-    BooleanGraph::ClearOptiValues(it->second);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearOptiValues(arg.second);
   }
-  std::unordered_map<int, VariablePtr>::const_iterator it_b;
-  for (it_b = gate->variable_args().begin();
-       it_b != gate->variable_args().end(); ++it_b) {
-    it_b->second->opti_value(0);
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    arg.second->opti_value(0);
+  }
+  assert(gate->constant_args().empty());
+}
+
+void BooleanGraph::ClearOptiValuesFast(const IGatePtr& gate) noexcept {
+  if (!gate->opti_value()) return;
+  gate->opti_value(0);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearOptiValuesFast(arg.second);
+  }
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    if (arg.second->opti_value()) {
+      arg.second->opti_value(0);
+      break;  // Only one variable is dirty.
+    }
+  }
+  assert(gate->constant_args().empty());
+}
+
+void BooleanGraph::ClearNodeCounts() noexcept {
+  LOG(DEBUG5) << "Clearing node counts...";
+  BooleanGraph::ClearGateMarks();
+  BooleanGraph::ClearNodeCounts(root_);
+  BooleanGraph::ClearGateMarks();
+  LOG(DEBUG5) << "Node counts are clear!";
+}
+
+void BooleanGraph::ClearNodeCounts(const IGatePtr& gate) noexcept {
+  if (gate->mark()) return;
+  gate->mark(true);
+
+  gate->ResetCount();
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearNodeCounts(arg.second);
+  }
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    arg.second->ResetCount();
+  }
+  assert(gate->constant_args().empty());
+}
+
+void BooleanGraph::TestGateMarks(const IGatePtr& gate) noexcept {
+  assert(!gate->mark());
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::TestGateMarks(arg.second);
+  }
+}
+
+void BooleanGraph::TestOptiValues(const IGatePtr& gate) noexcept {
+  assert(!gate->opti_value());
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::TestOptiValues(arg.second);
+  }
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    assert(!arg.second->opti_value());
   }
   assert(gate->constant_args().empty());
 }

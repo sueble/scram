@@ -18,7 +18,7 @@
 /// @file boolean_graph.h
 /// Classes and facilities to represent simplified fault trees
 /// as Boolean graphs with event and gate indices instead of ID names.
-/// This facilities are designed to work
+/// These facilities are designed to work
 /// with FaultTreeAnalysis and Preprocessor classes.
 ///
 /// The terminologies of the graphs and Boolean logic are mixed
@@ -30,14 +30,20 @@
 #ifndef SCRAM_SRC_BOOLEAN_GRAPH_H_
 #define SCRAM_SRC_BOOLEAN_GRAPH_H_
 
+#include <array>
 #include <cassert>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
+
+#include <boost/functional/hash.hpp>
 
 namespace scram {
 
@@ -118,7 +124,7 @@ class Node {
   /// @returns The last time this node was visited.
   /// @returns 0 if no last time is registered.
   inline int LastVisit() const {
-    return visits_[2] ? visits_[2] : visits_[1] ? visits_[1] : visits_[0];
+    return visits_[2] ? visits_[2] : visits_[1];
   }
 
   /// @returns The minimum time of the visit.
@@ -140,6 +146,25 @@ class Node {
   /// Clears all the visit information. Resets the visit times to 0s.
   inline void ClearVisits() { return std::fill(visits_, visits_ + 3, 0); }
 
+  /// @returns The positive count of this node.
+  inline int pos_count() const { return pos_count_; }
+
+  /// @returns The negative count of this node.
+  inline int neg_count() const { return neg_count_; }
+
+  /// Increases the count of this node.
+  ///
+  /// @param[in] positive Indication of a positive node.
+  inline void AddCount(bool positive) {
+    positive ? ++pos_count_ : ++neg_count_;
+  }
+
+  /// Resets positive and negative counts of this node.
+  inline void ResetCount() {
+    pos_count_ = 0;
+    neg_count_ = 0;
+  }
+
  private:
   static int next_index_;  ///< Automatic indexation of the next new node.
   int index_;  ///< Index of this node.
@@ -147,6 +172,8 @@ class Node {
   int visits_[3];
   std::unordered_map<int, std::weak_ptr<IGate> > parents_;  ///< Parents.
   int opti_value_;  ///< Failure propagation optimization value.
+  int pos_count_;  ///< The number of occurances as a positive node.
+  int neg_count_;  ///< The number of occurances as a negative node.
 };
 
 /// @class Constant
@@ -356,6 +383,39 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   /// @returns true if this gate is set to be a module.
   /// @returns false if it is not yet set to be a module.
   inline bool IsModule() const { return module_; }
+
+  /// Helper funciton to use the sign of the argument.
+  ///
+  /// @param[in] arg One of the arguments of this gate.
+  ///
+  /// @returns 1 if the argument is positive.
+  /// @returns -1 if the argument is negative (complement).
+  ///
+  /// @warning The function assumes that the argument exists.
+  ///          If it doesn't, the return value is invalid.
+  inline int GetArgSign(const NodePtr& arg) const noexcept {
+    assert(arg->parents().count(this->index()));
+    return args_.count(arg->index()) ? 1 : -1;
+  }
+
+  /// Helper function for algorithms
+  /// to get nodes from argument indices.
+  ///
+  /// @param[in] index Positive or negative index of the existing argument.
+  ///
+  /// @returns Pointer to the argument node of this gate.
+  ///
+  /// @warning The function assumes that the argument exists.
+  ///          If it doesn't, the behavior is undefined.
+  /// @warning Never try to use dynamic casts to find the type of the node.
+  ///          There are other gate's helper functions
+  ///          that will avoid any need for the RTTI or other hacks.
+  inline NodePtr GetArg(int index) const noexcept {
+    assert(args_.count(index));
+    if (gate_args_.count(index)) return gate_args_.find(index)->second;
+    if (variable_args_.count(index)) return variable_args_.find(index)->second;
+    return constant_args_.find(index)->second;
+  }
 
   /// Adds an argument gate to this gate.
   /// Before adding the argument,
@@ -592,6 +652,69 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   int num_failed_args_;
 };
 
+/// @class GateSet
+/// Container of unique gates.
+/// This container acts like an unordered set of gates.
+/// The gates are equivalent
+/// if they have the same semantics.
+/// However, this set does not test
+/// for the isomorphism of the gates' Boolean formulas.
+class GateSet {
+ public:
+  typedef std::shared_ptr<IGate> IGatePtr;
+
+  /// Inserts a gate into the set
+  /// if it is semantically unique.
+  ///
+  /// @param[in] gate The gate to insert.
+  ///
+  /// @returns A pair of the unique gate and
+  ///          the insertion success flag.
+  inline std::pair<IGatePtr, bool> insert(const IGatePtr& gate) noexcept {
+    auto result = table_[gate->type()].insert(gate);
+    return {*result.first, result.second};
+  }
+
+ private:
+  /// @struct Hash
+  /// Functor for hashing gates by their arguments.
+  ///
+  /// @note The hashing discards the logic of the gate.
+  struct Hash
+      : public std::unary_function<const IGatePtr, std::size_t> {
+    /// Operator overload for hashing.
+    ///
+    /// @param[in] gate The gate which hash must be calculated.
+    ///
+    /// @returns Hash value of the gate
+    ///          from its arguments but not logic.
+    std::size_t operator()(const IGatePtr& gate) const noexcept {
+      return boost::hash_value(gate->args());
+    }
+  };
+  /// @struct Equal
+  /// Functor for equality test for gates by their arguments.
+  ///
+  /// @note The equality discards the logic of the gate.
+  struct Equal
+      : public std::binary_function<const IGatePtr, const IGatePtr, bool> {
+    /// Operator overload for gate argument equality test.
+    ///
+    /// @param[in] lhs The first gate.
+    /// @param[in] rhs The second gate.
+    ///
+    /// @returns true if the gate arguments are equal.
+    bool operator()(const IGatePtr& lhs, const IGatePtr& rhs) const noexcept {
+      if (lhs->args() != rhs->args()) return false;
+      if (lhs->type() == kAtleastGate &&
+          lhs->vote_number() != rhs->vote_number()) return false;
+      return true;
+    }
+  };
+  /// Container of gates grouped by their types.
+  std::array<std::unordered_set<IGatePtr, Hash, Equal>, kNumOperators> table_;
+};
+
 class BasicEvent;
 class HouseEvent;
 class Gate;
@@ -798,6 +921,45 @@ class BooleanGraph {
   ///
   /// @note Gate marks are used for linear time traversal.
   void ClearOptiValues(const IGatePtr& gate) noexcept;
+
+  /// Clears optimization values only for a part of the graph.
+  /// This is the fastest way to clean
+  /// contiguously marked optimization values.
+  ///
+  /// @param[in,out] gate The root gate to be traversed and cleaned.
+  ///
+  /// @note The logic is coupled with Boolean optimization.
+  ///       The "dirty" nodes are marked anything but 0,
+  ///       and there is only one dirty variable argument at most.
+  void ClearOptiValuesFast(const IGatePtr& gate) noexcept;
+
+  /// Clears counts of all nodes in the graph.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeCounts() noexcept;
+
+  /// Clears counts of nodes.
+  ///
+  /// @param[in,out] gate The root gate to be traversed and cleaned.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeCounts(const IGatePtr& gate) noexcept;
+
+  /// Helper function to find discontinuous gate marking.
+  /// Assertion failes if any gate is still marked.
+  ///
+  /// @param[in] gate The starting gate to traverse.
+  ///
+  /// @note This functions is not linear and for debugging only.
+  void TestGateMarks(const IGatePtr& gate) noexcept;
+
+  /// Helper function to find uncleared optimization values.
+  /// Assertion failes if any node has non-zero optimization value.
+  ///
+  /// @param[in] gate The starting gate to traverse.
+  ///
+  /// @note This functions is not linear and for debugging only.
+  void TestOptiValues(const IGatePtr& gate) noexcept;
 
   IGatePtr root_;  ///< The root gate of this graph.
   std::vector<BasicEventPtr> basic_events_;  ///< Mapping for basic events.
