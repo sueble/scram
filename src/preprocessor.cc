@@ -1112,6 +1112,30 @@ void Preprocessor::CreateNewModules(
   }
 }
 
+void Preprocessor::GatherModules(std::vector<IGateWeakPtr>* modules) noexcept {
+  graph_->ClearGateMarks();
+  std::queue<IGatePtr> gates_queue;
+  IGatePtr root = graph_->root();
+  assert(!root->mark());
+  assert(root->IsModule());
+  root->mark(true);
+  modules->push_back(root);
+  gates_queue.push(root);
+  while (!gates_queue.empty()) {
+    IGatePtr gate = gates_queue.front();
+    gates_queue.pop();
+    assert(gate->mark());
+    for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+      IGatePtr arg_gate = arg.second;
+      assert(arg_gate->state() == kNormalState);
+      if (arg_gate->mark()) continue;
+      arg_gate->mark(true);
+      gates_queue.push(arg_gate);
+      if (arg_gate->IsModule()) modules->push_back(arg_gate);
+    }
+  }
+}
+
 bool Preprocessor::MergeCommonArgs() noexcept {
   assert(null_gates_.empty());
   assert(const_gates_.empty());
@@ -1140,23 +1164,33 @@ bool Preprocessor::MergeCommonArgs(const Operator& op) noexcept {
   // by their operator types and common arguments.
   Preprocessor::MarkCommonArgs(graph_->root(), op);
   graph_->ClearGateMarks();
-  MergeTable::Candidates group;
-  Preprocessor::GatherCommonArgs(graph_->root(), op, &group);
-  // Finding common parents for the common arguments.
-  MergeTable::Collection parents;
-  Preprocessor::GroupCommonParents(2, group, &parents);
-  if (parents.empty()) return false;  // No candidates for merging.
-
-  LOG(DEBUG4) << "Merging " << parents.size() << " groups...";
-  MergeTable table;
-  Preprocessor::GroupCommonArgs(parents, &table);
-
-  for (MergeTable::MergeGroup& group : table.groups) {
-    Preprocessor::TransformCommonArgs(&group);
+  std::vector<IGateWeakPtr> modules;
+  Preprocessor::GatherModules(&modules);
+  graph_->ClearGateMarks();
+  LOG(DEBUG4) << "Working with " << modules.size() << " modules...";
+  bool changed = false;
+  for (const auto& module : modules) {
+    if (module.expired()) continue;
+    IGatePtr root = module.lock();
+    MergeTable::Candidates group;
+    Preprocessor::GatherCommonArgs(root, op, &group);
+    graph_->ClearGateMarks(root);
+    // Finding common parents for the common arguments.
+    MergeTable::Collection parents;
+    Preprocessor::GroupCommonParents(2, group, &parents);
+    if (parents.empty()) continue;  // No candidates for merging.
+    changed = true;
+    LOG(DEBUG4) << "Merging " << parents.size() << " groups...";
+    MergeTable table;
+    Preprocessor::GroupCommonArgs(parents, &table);
+    LOG(DEBUG4) << "Transforming " << table.groups.size() << " table groups...";
+    for (MergeTable::MergeGroup& group : table.groups) {
+      Preprocessor::TransformCommonArgs(&group);
+    }
+    assert(const_gates_.empty());
+    Preprocessor::ClearNullGates();
   }
-  assert(const_gates_.empty());
-  Preprocessor::ClearNullGates();
-  return true;
+  return changed;
 }
 
 void Preprocessor::MarkCommonArgs(const IGatePtr& gate,
@@ -1192,7 +1226,8 @@ void Preprocessor::GatherCommonArgs(const IGatePtr& gate, const Operator& op,
   for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
     IGatePtr arg_gate = arg.second;
     assert(arg_gate->state() == kNormalState);
-    Preprocessor::GatherCommonArgs(arg_gate, op, group);
+    if (!arg_gate->IsModule())
+      Preprocessor::GatherCommonArgs(arg_gate, op, group);
     if (!in_group) continue;
     int count = arg.first > 0 ? arg_gate->pos_count() : arg_gate->neg_count();
     if (count > 1) common_args.push_back(arg.first);
@@ -1209,7 +1244,7 @@ void Preprocessor::GatherCommonArgs(const IGatePtr& gate, const Operator& op,
 
   if (common_args.size() < 2) return;  // Can't be merged anyway.
 
-  std::sort(common_args.begin(), common_args.end());
+  std::sort(common_args.begin(), common_args.end());  // Unique and stable.
   group->emplace_back(gate, common_args);
 }
 
@@ -1217,8 +1252,7 @@ void Preprocessor::GroupCommonParents(
     int num_common_args,
     const MergeTable::Candidates& group,
     MergeTable::Collection* parents) noexcept {
-  if (group.empty()) return;
-  for (int i = 0; i < group.size() - 1; ++i) {
+  for (int i = 0; i < group.size(); ++i) {
     const std::vector<int>& args_gate = group[i].second;
     assert(args_gate.size() > 1);
     int j = i;
@@ -1245,7 +1279,7 @@ void Preprocessor::GroupCommonArgs(const MergeTable::Collection& options,
   // Sorting in descending size of common arguments.
   std::stable_sort(all_options.begin(), all_options.end(),
                    [](const MergeTable::Option& lhs,
-                     const MergeTable::Option& rhs) {
+                      const MergeTable::Option& rhs) {
                      return lhs.first.size() < rhs.first.size();
                    });
 
@@ -1452,7 +1486,7 @@ void Preprocessor::GroupDistributiveArgs(const MergeTable::Collection& options,
   // Sorting in descending size of common arguments.
   std::stable_sort(all_options.begin(), all_options.end(),
                    [](const MergeTable::Option& lhs,
-                     const MergeTable::Option& rhs) {
+                      const MergeTable::Option& rhs) {
                      return lhs.first.size() < rhs.first.size();
                    });
 
@@ -1553,8 +1587,10 @@ void Preprocessor::TransformDistributiveArgs(
     MergeTable::Option& super = *it;
     MergeTable::CommonArgs& super_args = super.first;
     for (int index : args) {
-      super_args.erase(std::lower_bound(super_args.begin(), super_args.end(),
-                                        index));
+      std::vector<int>::iterator it_index =
+          std::lower_bound(super_args.begin(), super_args.end(), index);
+      assert(it_index != super_args.end());  // The index should exist.
+      super_args.erase(it_index);
     }
   }
   group->erase(group->begin());
