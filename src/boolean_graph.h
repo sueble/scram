@@ -68,8 +68,8 @@ class Node {
   /// @warning The index is not validated upon instantiation.
   explicit Node(int index) noexcept;
 
-  Node(const Node&) = delete;  ///< Restrict copy construction.
-  Node& operator=(const Node&) = delete;  ///< Restrict copy assignment.
+  Node(const Node&) = delete;
+  Node& operator=(const Node&) = delete;
 
   virtual ~Node() = 0;  ///< Abstract class.
 
@@ -172,8 +172,8 @@ class Node {
   int visits_[3];
   std::unordered_map<int, std::weak_ptr<IGate> > parents_;  ///< Parents.
   int opti_value_;  ///< Failure propagation optimization value.
-  int pos_count_;  ///< The number of occurances as a positive node.
-  int neg_count_;  ///< The number of occurances as a negative node.
+  int pos_count_;  ///< The number of occurrences as a positive node.
+  int neg_count_;  ///< The number of occurrences as a negative node.
 };
 
 /// @class Constant
@@ -185,9 +185,6 @@ class Constant : public Node {
   ///
   /// @param[in] state Binary state of the Boolean constant.
   explicit Constant(bool state) noexcept;
-
-  Constant(const Constant&) = delete;  ///< Restrict copy construction.
-  Constant& operator=(const Constant&) = delete;  ///< Restrict copy assignment.
 
   /// @returns The state of the constant.
   inline bool state() const { return state_; }
@@ -210,9 +207,6 @@ class Variable : public Node {
  public:
   /// Creates a new indexed variable with its index assigned sequentially.
   Variable() noexcept;
-
-  Variable(const Variable&) = delete;  ///< Restrict copy construction.
-  Variable& operator=(const Variable&) = delete;  ///< Restrict copy assignment.
 
   /// Resets the starting index for variables.
   inline static void ResetIndex() { next_variable_ = 1; }
@@ -295,9 +289,6 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   ///          If cloning destroys modules,
   ///          DestroyModule() member function must be called.
   IGatePtr Clone() noexcept;
-
-  IGate(const IGate&) = delete;  ///< Restrict copy construction.
-  IGate& operator=(const IGate&) = delete;  ///< Restrict copy assignment.
 
   /// @returns Type of this gate.
   inline const Operator& type() const { return type_; }
@@ -402,7 +393,7 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
     module_ = false;
   }
 
-  /// Helper funciton to use the sign of the argument.
+  /// Helper function to use the sign of the argument.
   ///
   /// @param[in] arg One of the arguments of this gate.
   ///
@@ -574,30 +565,10 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   ///
   /// @warning The parent gate may become empty or one-argument gate,
   ///          which must be handled by the caller.
-  inline void EraseArg(int arg) noexcept {
-    assert(arg != 0);
-    assert(args_.count(arg));
-    args_.erase(arg);
-    NodePtr node;
-    if (gate_args_.count(arg)) {
-      node = gate_args_.find(arg)->second;
-      gate_args_.erase(arg);
-    } else if (constant_args_.count(arg)) {
-      node = constant_args_.find(arg)->second;
-      constant_args_.erase(arg);
-    } else {
-      node = variable_args_.find(arg)->second;
-      assert(variable_args_.count(arg));
-      variable_args_.erase(arg);
-    }
-    assert(node->parents_.count(Node::index()));
-    node->parents_.erase(Node::index());
-  }
+  void EraseArg(int arg) noexcept;
 
   /// Clears all the arguments of this gate.
-  inline void EraseAllArgs() noexcept {
-    while (!args_.empty()) IGate::EraseArg(*args_.rbegin());
-  }
+  void EraseAllArgs() noexcept;
 
   /// Sets the state of this gate to null
   /// and clears all its arguments.
@@ -755,6 +726,9 @@ class BooleanGraph {
   /// @param[in] root The top gate of the fault tree.
   /// @param[in] ccf Incorporation of CCF gates and events for CCF groups.
   explicit BooleanGraph(const GatePtr& root, bool ccf = false) noexcept;
+
+  BooleanGraph(const BooleanGraph&) = delete;
+  BooleanGraph& operator=(const BooleanGraph&) = delete;
 
   /// @returns true if the fault tree is coherent.
   inline bool coherent() const { return coherent_; }
@@ -944,7 +918,7 @@ class BooleanGraph {
   void ClearNodeCounts(const IGatePtr& gate) noexcept;
 
   /// Helper function to find discontinuous gate marking.
-  /// Assertion failes if any gate is still marked.
+  /// Assertion fails if any gate is still marked.
   ///
   /// @param[in] gate The starting gate to traverse.
   ///
@@ -952,7 +926,7 @@ class BooleanGraph {
   void TestGateMarks(const IGatePtr& gate) noexcept;
 
   /// Helper function to find uncleared optimization values.
-  /// Assertion failes if any node has non-zero optimization value.
+  /// Assertion fails if any node has non-zero optimization value.
   ///
   /// @param[in] gate The starting gate to traverse.
   ///

@@ -840,47 +840,35 @@ void Preprocessor::FindModules(const IGatePtr& gate) noexcept {
     if (arg_gate->IsModule() && !arg_gate->Revisited()) {
       assert(arg_gate->parents().size() == 1);
       assert(arg_gate->parents().count(gate->index()));
-      assert(arg_gate->min_time() > enter_time);
-      assert(arg_gate->max_time() < exit_time);
+      assert(IsSubgraphWithinGraph(arg_gate, enter_time, exit_time));
 
       non_shared_args.push_back(arg);
       continue;  // Sub-graph's visit times are within the Enter and Exit time.
     }
-    int min_arg = arg_gate->min_time();
-    int max_arg = arg_gate->max_time();
-    assert(min_arg > 0);
-    assert(max_arg > 0);
-    assert(max_arg > min_arg);
-    if (min_arg > enter_time && max_arg < exit_time) {
+    if (IsSubgraphWithinGraph(arg_gate, enter_time, exit_time)) {
       modular_args.push_back(arg);
     } else {
       non_modular_args.push_back(arg);
-      min_time = std::min(min_time, min_arg);
-      max_time = std::max(max_time, max_arg);
+      min_time = std::min(min_time, arg_gate->min_time());
+      max_time = std::max(max_time, arg_gate->max_time());
     }
   }
 
   for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
     VariablePtr var = arg.second;
-    int min_arg = var->min_time();
-    int max_arg = var->max_time();
-    assert(min_arg > 0);
-    assert(max_arg > 0);
-    if (min_arg == max_arg) {
-      assert(min_arg > enter_time && max_arg < exit_time);
-      assert(var->parents().size() == 1);
+    if (var->parents().size() == 1) {
+      assert(IsNodeWithinGraph(var, enter_time, exit_time));
       assert(var->parents().count(gate->index()));
 
       non_shared_args.push_back(arg);
       continue;  // The single parent argument.
     }
-    assert(max_arg > min_arg);
-    if (min_arg > enter_time && max_arg < exit_time) {
+    if (IsNodeWithinGraph(var, enter_time, exit_time)) {
       modular_args.push_back(arg);
     } else {
       non_modular_args.push_back(arg);
-      min_time = std::min(min_time, min_arg);
-      max_time = std::max(max_time, max_arg);
+      min_time = std::min(min_time, var->EnterTime());
+      max_time = std::max(max_time, var->LastVisit());
     }
   }
 
@@ -1392,42 +1380,11 @@ void Preprocessor::FindOptionGroup(
     MergeTable::MergeGroup* all_options,
     MergeTable::OptionGroup* best_group) noexcept {
   assert(best_group->empty());
-  bool best_is_found = false;
   // Find the best starting option.
-  MergeTable::MergeGroup::iterator best_option = all_options->end();
-  int best_counts[3] = {0, 0, 0};  // The number of extra parents.
-  auto it = all_options->begin();
-  for (; it != all_options->end(); ++it) {
-    int num_parents = it->second.size();
-    IGatePtr parent = *it->second.begin();  // Representative.
-    const MergeTable::CommonArgs& args = it->first;
-    int cur_counts[3] = {0, 0, 0};
-    for (int index : args) {
-      NodePtr arg = parent->GetArg(index);
-      int extra_count = arg->parents().size() - num_parents;
-      if (extra_count > 2) continue;  // Optimal decision criterion.
-      ++cur_counts[extra_count];  // Logging extra parents.
-      if (cur_counts[0] > 1) break;  // Modular option is found.
-    }
-    if (cur_counts[0] > 1) {  // Special case of modular options.
-      best_option = it;
-      best_is_found = true;
-      break;
-    }
-    if ((cur_counts[0] > best_counts[0]) ||
-        (cur_counts[0] == best_counts[0] && cur_counts[1] > best_counts[1]) ||
-        (cur_counts[0] == best_counts[0] && cur_counts[1] == best_counts[1] &&
-         cur_counts[2] > best_counts[2])) {
-      best_option = it;
-      best_counts[0] = cur_counts[0];
-      best_counts[1] = cur_counts[1];
-      best_counts[2] = cur_counts[2];
-    }
-  }
-  it = best_option;
-  if (!best_is_found) best_is_found = it != all_options->end();
-  if (!best_is_found) it = all_options->begin();
-
+  MergeTable::MergeGroup::iterator best_option;
+  Preprocessor::FindBaseOption(all_options, &best_option);
+  bool best_is_found = best_option != all_options->end();
+  auto it = best_is_found ? best_option : all_options->begin();
   for (; it != all_options->end(); ++it) {
     MergeTable::OptionGroup group = {&*it};
     auto it_next = it;
@@ -1452,6 +1409,39 @@ void Preprocessor::FindOptionGroup(
         *best_group = group;  // The fewer parents, the more room for others.
     }
     if (best_is_found) break;
+  }
+}
+
+void Preprocessor::FindBaseOption(
+    MergeTable::MergeGroup* all_options,
+    MergeTable::MergeGroup::iterator* best_option) noexcept {
+  *best_option = all_options->end();
+  int best_counts[3] = {0, 0, 0};  // The number of extra parents.
+  for (auto it = all_options->begin(); it != all_options->end(); ++it) {
+    int num_parents = it->second.size();
+    IGatePtr parent = *it->second.begin();  // Representative.
+    const MergeTable::CommonArgs& args = it->first;
+    int cur_counts[3] = {0, 0, 0};
+    for (int index : args) {
+      NodePtr arg = parent->GetArg(index);
+      int extra_count = arg->parents().size() - num_parents;
+      if (extra_count > 2) continue;  // Optimal decision criterion.
+      ++cur_counts[extra_count];  // Logging extra parents.
+      if (cur_counts[0] > 1) break;  // Modular option is found.
+    }
+    if (cur_counts[0] > 1) {  // Special case of modular options.
+      *best_option = it;
+      break;
+    }
+    if ((cur_counts[0] > best_counts[0]) ||
+        (cur_counts[0] == best_counts[0] && cur_counts[1] > best_counts[1]) ||
+        (cur_counts[0] == best_counts[0] && cur_counts[1] == best_counts[1] &&
+         cur_counts[2] > best_counts[2])) {
+      *best_option = it;
+      best_counts[0] = cur_counts[0];
+      best_counts[1] = cur_counts[1];
+      best_counts[2] = cur_counts[2];
+    }
   }
 }
 
@@ -1793,17 +1783,13 @@ void Preprocessor::BooleanOptimization() noexcept {
   std::vector<IGateWeakPtr> common_gates;
   std::vector<std::weak_ptr<Variable>> common_variables;
   Preprocessor::GatherCommonNodes(&common_gates, &common_variables);
-  for (const auto& gate : common_gates) {
-    Preprocessor::ProcessCommonNode(gate);
-  }
-  for (const auto& var : common_variables) {
-    Preprocessor::ProcessCommonNode(var);
-  }
+  for (const auto& gate : common_gates) Preprocessor::ProcessCommonNode(gate);
+  for (const auto& var : common_variables) Preprocessor::ProcessCommonNode(var);
 }
 
 void Preprocessor::GatherCommonNodes(
       std::vector<IGateWeakPtr>* common_gates,
-      std::vector<std::weak_ptr<Variable> >* common_variables) noexcept {
+      std::vector<std::weak_ptr<Variable>>* common_variables) noexcept {
   graph_->ClearNodeVisits();
   std::queue<IGatePtr> gates_queue;
   gates_queue.push(graph_->root());
@@ -1847,7 +1833,7 @@ void Preprocessor::ProcessCommonNode(
 
   int mult_tot = node->parents().size();  // Total multiplicity.
   assert(mult_tot > 1);
-  mult_tot += Preprocessor::PropagateFailure(root);
+  mult_tot += Preprocessor::PropagateFailure(root, node);
   assert(!root->mark());
 
   // The results of the failure propagation.
@@ -1896,56 +1882,69 @@ void Preprocessor::MarkAncestors(const NodePtr& node,
   }
 }
 
-int Preprocessor::PropagateFailure(const IGatePtr& gate) noexcept {
+int Preprocessor::PropagateFailure(const IGatePtr& gate,
+                                   const NodePtr& node) noexcept {
   if (!gate->mark()) return 0;
   gate->mark(false);  // Cleaning up the marks of the ancestors.
   assert(!gate->opti_value());
   int mult_tot = 0;  // The total multiplicity of the subgraph.
-  int num_failures = 0;  // The number of failed arguments.
+  int num_failure = 0;  // The number of failed arguments.
   int num_success = 0;  // The number of success arguments.
   for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
     IGatePtr arg_gate = arg.second;
-    mult_tot += Preprocessor::PropagateFailure(arg_gate);
+    mult_tot += Preprocessor::PropagateFailure(arg_gate, node);
     assert(!arg_gate->mark());
     int failed = arg_gate->opti_value() * (arg.first > 0 ? 1 : -1);
     assert(!failed || failed == -1 || failed == 1);
     if (failed == 1) {
-      ++num_failures;
+      ++num_failure;
     } else if (failed == -1) {
       ++num_success;
-    } // Ignore when 0.
+    }  // Ignore when 0.
   }
-  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
-    int failed = arg.second->opti_value() * (arg.first > 0 ? 1 : -1);
-    if (failed == 1) {
-      ++num_failures;
-      break;  // Should be only one variable.
-    } else if (failed == -1) {
-      ++num_success;
-      break;  /// @todo Find the only one variable faster.
-    } // Ignore when 0.
+  if (node->parents().count(gate->index())) {  // Try to find the basic event.
+    assert(node->opti_value() == 1);
+    int failed = gate->variable_args().count(node->index());
+    if (!failed) failed = -gate->variable_args().count(-node->index());
+    switch (failed) {
+      case 1:
+        ++num_failure;
+        break;
+      case -1:
+        ++num_success;
+        break;
+    }  // Ignore when 0.
   }
   assert(gate->constant_args().empty());
   assert(gate->opti_value() == 0);
-  assert((num_success + num_failures) > 0);
+  assert((num_success + num_failure) > 0);
+  Preprocessor::DetermineGateFailure(gate, num_failure, num_success);
+  int mult_add = gate->parents().size();
+  if (gate->opti_value() != 1 || mult_add < 2 ) mult_add = 0;
+  return mult_tot + mult_add;
+}
+
+void Preprocessor::DetermineGateFailure(const IGatePtr& gate, int num_failure,
+                                        int num_success) noexcept {
+  assert(num_failure >= 0);
+  assert(num_success >= 0);
+  assert((num_success + num_failure) > 0);
   gate->opti_value(-1);  // The default assumption of not failing.
   switch (gate->type()) {
-    case kNotGate:
-      if (num_failures == 0) gate->opti_value(1);
-      break;
     case kNullGate:
     case kOrGate:
-      if (num_failures > 0) gate->opti_value(1);
+      if (num_failure > 0) gate->opti_value(1);
       break;
     case kAndGate:
-      if (num_failures == gate->args().size()) gate->opti_value(1);
+      if (num_failure == gate->args().size()) gate->opti_value(1);
       break;
     case kAtleastGate:
-      if (num_failures >= gate->vote_number()) gate->opti_value(1);
+      if (num_failure >= gate->vote_number()) gate->opti_value(1);
       break;
     case kXorGate:
-      if (num_failures == 1)  gate->opti_value(1);
+      if (num_failure == 1)  gate->opti_value(1);
       break;
+    case kNotGate:
     case kNandGate:
       if (num_success > 0) gate->opti_value(1);
       break;
@@ -1953,9 +1952,6 @@ int Preprocessor::PropagateFailure(const IGatePtr& gate) noexcept {
       if (num_success == gate->args().size()) gate->opti_value(1);
       break;
   }
-  int mult_add = gate->parents().size();
-  if (gate->opti_value() != 1 || mult_add < 2 ) mult_add = 0;
-  return mult_tot + mult_add;
 }
 
 int Preprocessor::CollectFailureDestinations(
@@ -1973,7 +1969,7 @@ int Preprocessor::CollectFailureDestinations(
     if (arg->index() == index) continue;  // This is the failure source.
     if (arg->opti_value() != 1) continue;  // Not a failure destination.
     if (member.first < 0) continue;  // Complement of failure is success.
-    ++num_dest;                      /// @todo Complement is destination?
+    ++num_dest;                      /// @todo Is complement a destination?
     destinations->emplace(arg->index(), arg);
   }
   return num_dest;
@@ -2087,24 +2083,23 @@ bool Preprocessor::ProcessDecompositionCommonNode(
 
   if (node->parents().size() < 2) return false;
 
-  bool possible = false;  // Possibility in particular setups for decomposition.
-
+  auto IsDecompositionType = [](Operator type) {  // Possible types for setups.
+                               switch (type) {
+                                 case kAndGate:
+                                 case kNandGate:
+                                 case kOrGate:
+                                 case kNorGate:
+                                   return true;
+                               }
+                               return false;
+                             };
   // Determine if the decomposition setups are possible.
-  for (const std::pair<int, IGateWeakPtr>& member : node->parents()) {
-    assert(!member.second.expired());
-    IGatePtr parent = member.second.lock();
-    assert(parent->opti_value() != node->index());
-    switch (parent->type()) {
-      case kAndGate:
-      case kNandGate:
-      case kOrGate:
-      case kNorGate:
-        possible = true;
-    }
-    if (possible) break;
-  }
-
-  if (!possible) return false;
+  auto it =
+      std::find_if(node->parents().begin(), node->parents().end(),
+                   [&](const std::pair<int, IGateWeakPtr>& member) {
+                     return IsDecompositionType(member.second.lock()->type());
+                   });
+  if (it == node->parents().end()) return false;  // No setups possible.
 
   // Mark parents and ancestors.
   for (const std::pair<int, IGateWeakPtr>& member : node->parents()) {
@@ -2120,13 +2115,7 @@ bool Preprocessor::ProcessDecompositionCommonNode(
     assert(!member.second.expired());
     IGatePtr parent = member.second.lock();
     if (parent->opti_value() == node->index()) {
-      switch (parent->type()) {
-        case kAndGate:
-        case kNandGate:
-        case kOrGate:
-        case kNorGate:
-          dest.push_back(parent);
-      }
+      if (IsDecompositionType(parent->type())) dest.push_back(parent);
     } else {  // Mark for processing by destinations.
       parent->opti_value(node->index());
     }
@@ -2219,9 +2208,10 @@ bool Preprocessor::ProcessDecompositionAncestors(
         to_swap.emplace_back(arg.first, clone);
         changed = true;
         continue;  // Clones are already processed.
-      } else if (gate->parents().size() == 1) {  // Pass-through.
-      } else if ((gate->EnterTime() < visit_bounds.first) ||  // Non-cloned.
-                 (gate->LastVisit() > visit_bounds.second)) {  // Shared parent.
+      }
+      if (gate->parents().size() != 1 &&
+          !IsNodeWithinGraph(gate, visit_bounds.first,  // Non-cloned.
+                             visit_bounds.second)) {    // Shared parent.
         assert(gate->parents().size() > 1);
         assert(!clones->count(gate->index()));
         IGatePtr clone = gate->Clone();
@@ -2238,9 +2228,9 @@ bool Preprocessor::ProcessDecompositionAncestors(
         continue;  // No subgraph to process here.
       }
       if (gate->type() == kNullGate) null_gates_.push_back(gate);
-    } else {
-      if (gate->EnterTime() < visit_bounds.first) continue;  // Shared gate.
-      if (gate->LastVisit() > visit_bounds.second) continue;  // Shared gate.
+    } else if (!IsNodeWithinGraph(gate, visit_bounds.first,
+                                  visit_bounds.second)) {
+        continue;  // Shared non-parent gate.
     }
 
     bool ret = Preprocessor::ProcessDecompositionAncestors(gate, node, state,
