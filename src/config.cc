@@ -91,11 +91,14 @@ void Config::GatherOptions(const xmlpp::Node* root) {
     const xmlpp::Element* option_group =
         static_cast<const xmlpp::Element*>(node);
     std::string name = option_group->get_name();
-    if (name == "analysis") {
+    if (name == "algorithm") {
+      Config::SetAlgorithm(option_group);
+
+    } else if (name == "analysis") {
       Config::SetAnalysis(option_group);
 
-    } else if (name == "approximations") {
-      Config::SetApprox(option_group);
+    } else if (name == "approximation") {
+      Config::SetApproximation(option_group);
 
     } else if (name == "limits") {
       Config::SetLimits(option_group);
@@ -112,11 +115,12 @@ void Config::GetOutputPath(const xmlpp::Node* root) {
   output_path_ = element->get_child_text()->get_content();
 }
 
+void Config::SetAlgorithm(const xmlpp::Element* analysis) {
+  settings_.algorithm(analysis->get_attribute_value("name"));
+}
+
 void Config::SetAnalysis(const xmlpp::Element* analysis) {
-  const xmlpp::Element::AttributeList attr = analysis->get_attributes();
-  xmlpp::Element::AttributeList::const_iterator it;
-  for (it = attr.begin(); it != attr.end(); ++it) {
-    const xmlpp::Attribute* type = *it;
+  for (const xmlpp::Attribute* type : analysis->get_attributes()) {
     std::string name = type->get_name();
     bool flag = Config::GetBoolFromString(type->get_value());
     if (name == "probability") {
@@ -134,22 +138,13 @@ void Config::SetAnalysis(const xmlpp::Element* analysis) {
   }
 }
 
-void Config::SetApprox(const xmlpp::Element* approx) {
-  xmlpp::NodeSet elements = approx->find("./*");
-  assert(elements.size() == 1);
-  xmlpp::NodeSet::iterator it;
-  for (it = elements.begin(); it != elements.end(); ++it) {
-    std::string name = (*it)->get_name();
-    assert(name == "rare-event" || name == "mcub");
-    settings_.approx(name);
-  }
+void Config::SetApproximation(const xmlpp::Element* approx) {
+  settings_.approximation(approx->get_attribute_value("name"));
 }
 
 void Config::SetLimits(const xmlpp::Element* limits) {
-  xmlpp::NodeSet elements = limits->find("./*");
-  xmlpp::NodeSet::iterator it;
-  for (it = elements.begin(); it != elements.end(); ++it) {
-    const xmlpp::Element* limit = static_cast<const xmlpp::Element*>(*it);
+  for (const xmlpp::Node* node : limits->find("./*")) {
+    const xmlpp::Element* limit = static_cast<const xmlpp::Element*>(node);
     std::string name = limit->get_name();
     std::string content = limit->get_child_text()->get_content();
     if (name == "limit-order") {
@@ -157,9 +152,6 @@ void Config::SetLimits(const xmlpp::Element* limits) {
 
     } else if (name == "cut-off") {
       settings_.cut_off(boost::lexical_cast<double>(content));
-
-    } else if (name == "number-of-sums") {
-      settings_.num_sums(boost::lexical_cast<int>(content));
 
     } else if (name == "mission-time") {
       settings_.mission_time(boost::lexical_cast<double>(content));

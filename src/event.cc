@@ -50,34 +50,31 @@ CcfEvent::CcfEvent(const std::string& name, const CcfGroup* ccf_group,
 
 void Gate::Validate() {
   // Detect inhibit flavor.
-  if (formula_->type() == "and" && this->HasAttribute("flavor")) {
-    const Attribute* attr = &this->GetAttribute("flavor");
+  if (formula_->type() == "and" && Element::HasAttribute("flavor")) {
+    const Attribute* attr = &Element::GetAttribute("flavor");
     if (attr->value == "inhibit") {
       if (formula_->num_args() != 2) {
-        throw ValidationError(this->name() +
+        throw ValidationError(Event::name() +
                               "INHIBIT gate must have only 2 children");
       }
       std::stringstream msg;
       msg << "";
       bool conditional_found = false;
-      typedef std::shared_ptr<BasicEvent> BasicEventPtr;
-      std::vector<BasicEventPtr>::const_iterator it;
-      for (it = formula_->basic_event_args().begin();
-           it != formula_->basic_event_args().end(); ++it) {
-        BasicEventPtr event = *it;
+      using BasicEventPtr = std::shared_ptr<BasicEvent>;
+      for (const BasicEventPtr& event : formula_->basic_event_args()) {
         if (!event->HasAttribute("flavor")) continue;
         std::string type = event->GetAttribute("flavor").value;
         if (type != "conditional") continue;
         if (!conditional_found) {
           conditional_found = true;
         } else {
-          msg << this->name() << " : " << "INHIBIT"
-              << " gate must have exactly one conditional event.\n";
+          msg << Event::name() << " : INHIBIT gate must have"
+              << " exactly one conditional event.\n";
         }
       }
       if (!conditional_found) {
-        msg << this->name() << " : " << "INHIBIT"
-            << " gate is missing a conditional event.\n";
+        msg << Event::name()
+            << " : INHIBIT gate is missing a conditional event.\n";
       }
       if (!msg.str().empty()) throw ValidationError(msg.str());
     }
@@ -121,24 +118,24 @@ void Formula::AddArgument(const HouseEventPtr& house_event) {
   if (event_args_.count(house_event->id())) {
     throw DuplicateArgumentError("Duplicate argument " + house_event->name());
   }
-  event_args_.insert(std::make_pair(house_event->id(), house_event));
-  house_event_args_.push_back(house_event);
+  event_args_.emplace(house_event->id(), house_event);
+  house_event_args_.emplace_back(house_event);
 }
 
 void Formula::AddArgument(const BasicEventPtr& basic_event) {
   if (event_args_.count(basic_event->id())) {
     throw DuplicateArgumentError("Duplicate argument " + basic_event->name());
   }
-  event_args_.insert(std::make_pair(basic_event->id(), basic_event));
-  basic_event_args_.push_back(basic_event);
+  event_args_.emplace(basic_event->id(), basic_event);
+  basic_event_args_.emplace_back(basic_event);
 }
 
 void Formula::AddArgument(const GatePtr& gate) {
   if (event_args_.count(gate->id())) {
     throw DuplicateArgumentError("Duplicate argument " + gate->name());
   }
-  event_args_.insert(std::make_pair(gate->id(), gate));
-  gate_args_.push_back(gate);
+  event_args_.emplace(gate->id(), gate);
+  gate_args_.emplace_back(gate);
 }
 
 void Formula::AddArgument(FormulaPtr formula) {
@@ -176,13 +173,11 @@ void Formula::Validate() {
 void Formula::GatherNodesAndConnectors() {
   assert(nodes_.empty());
   assert(connectors_.empty());
-  std::vector<GatePtr>::iterator it_g;
-  for (it_g = gate_args_.begin(); it_g != gate_args_.end(); ++it_g) {
-    nodes_.push_back(it_g->get());
+  for (const GatePtr& gate : gate_args_) {
+    nodes_.push_back(gate.get());
   }
-  std::vector<FormulaPtr>::iterator it_f;
-  for (it_f = formula_args_.begin(); it_f != formula_args_.end(); ++it_f) {
-    connectors_.push_back(it_f->get());
+  for (const FormulaPtr& formula : formula_args_) {
+    connectors_.push_back(formula.get());
   }
   gather_ = false;
 }

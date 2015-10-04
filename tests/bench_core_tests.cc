@@ -108,7 +108,7 @@ TEST_F(RiskAnalysisTest, A_AND_NOT_B) {
   settings.probability_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  EXPECT_DOUBLE_EQ(0.08, p_total());
+  EXPECT_NEAR(0.08, p_total(), 1e-5);
 
   std::set< std::set<std::string> > mcs = {{"a", "not b"}};
   EXPECT_EQ(1, min_cut_sets().size());
@@ -287,10 +287,10 @@ TEST_F(RiskAnalysisTest, BetaFactorCCF) {
 // Test Minimal cut sets and total probabilty.
 TEST_F(RiskAnalysisTest, PhiFactorCCF) {
   std::string tree_input = "./share/scram/input/core/phi_factor_ccf.xml";
-  settings.ccf_analysis(true).num_sums(3).probability_analysis(true);
+  settings.ccf_analysis(true).probability_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  EXPECT_NEAR(0.04109, p_total(), 1e-5);
+  EXPECT_NEAR(0.04104, p_total(), 1e-5);
   EXPECT_EQ(34, min_cut_sets().size());
   std::vector<int> distr = {0, 2, 24, 8};
   EXPECT_EQ(distr, McsDistribution());
@@ -300,10 +300,10 @@ TEST_F(RiskAnalysisTest, PhiFactorCCF) {
 // Test Minimal cut sets and total probability.
 TEST_F(RiskAnalysisTest, MGLFactorCCF) {
   std::string tree_input = "./share/scram/input/core/mgl_ccf.xml";
-  settings.ccf_analysis(true).num_sums(3).probability_analysis(true);
+  settings.ccf_analysis(true).probability_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  EXPECT_NEAR(0.01631, p_total(), 1e-5);
+  EXPECT_NEAR(0.01630, p_total(), 1e-5);
   EXPECT_EQ(34, min_cut_sets().size());
   std::vector<int> distr = {0, 2, 24, 8};
   EXPECT_EQ(distr, McsDistribution());
@@ -313,10 +313,10 @@ TEST_F(RiskAnalysisTest, MGLFactorCCF) {
 // Test Minimal cut sets and total probability.
 TEST_F(RiskAnalysisTest, AlphaFactorCCF) {
   std::string tree_input = "./share/scram/input/core/alpha_factor_ccf.xml";
-  settings.ccf_analysis(true).num_sums(3).probability_analysis(true);
+  settings.ccf_analysis(true).probability_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  EXPECT_NEAR(0.03093, p_total(), 1e-5);
+  EXPECT_NEAR(0.03092, p_total(), 1e-5);
   EXPECT_EQ(34, min_cut_sets().size());
   std::vector<int> distr = {0, 2, 24, 8};
   EXPECT_EQ(distr, McsDistribution());

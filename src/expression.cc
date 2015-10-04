@@ -46,13 +46,12 @@ bool Expression::IsConstant() noexcept {
 void Expression::GatherNodesAndConnectors() {
   assert(nodes_.empty());
   assert(connectors_.empty());
-  std::vector<ExpressionPtr>::iterator it;
-  for (it = args_.begin(); it != args_.end(); ++it) {
-    Parameter* ptr = dynamic_cast<Parameter*>(it->get());
+  for (const ExpressionPtr& arg : args_) {
+    Parameter* ptr = dynamic_cast<Parameter*>(arg.get());
     if (ptr) {
       nodes_.push_back(ptr);
     } else {
-      connectors_.push_back(it->get());
+      connectors_.push_back(arg.get());
     }
   }
   gather_ = false;
@@ -60,7 +59,8 @@ void Expression::GatherNodesAndConnectors() {
 
 Parameter::Parameter(const std::string& name, const std::string& base_path,
                      bool is_public)
-      : Role::Role(is_public, base_path),
+      : Expression::Expression({}),
+        Role::Role(is_public, base_path),
         name_(name),
         unit_(kUnitless),
         mark_(""),
@@ -85,8 +85,8 @@ void ExponentialExpression::Validate() {
 double ExponentialExpression::Sample() noexcept {
   if (!Expression::sampled_) {
     Expression::sampled_ = true;
-    Expression::sampled_value_ =  1 - std::exp(-(lambda_->Sample() *
-                                                 time_->Sample()));
+    Expression::sampled_value_ =
+        1 - std::exp(-(lambda_->Sample() * time_->Sample()));
   }
   return Expression::sampled_value_;
 }
@@ -119,8 +119,8 @@ double GlmExpression::Sample() noexcept {
     double mu = mu_->Sample();
     double time = time_->Sample();
     double r = lambda + mu;
-    Expression::sampled_value_ =  (lambda - (lambda - gamma * r) *
-                                   std::exp(-r * time)) / r;
+    Expression::sampled_value_ =
+        (lambda - (lambda - gamma * r) * std::exp(-r * time)) / r;
   }
   return Expression::sampled_value_;
 }
@@ -161,8 +161,8 @@ double WeibullExpression::Sample() noexcept {
     double beta = beta_->Sample();
     double t0 = t0_->Sample();
     double time = time_->Sample();
-    Expression::sampled_value_ =  1 - std::exp(-std::pow((time - t0) /
-                                                         alpha, beta));
+    Expression::sampled_value_ =
+        1 - std::exp(-std::pow((time - t0) / alpha, beta));
   }
 
   return Expression::sampled_value_;
@@ -292,22 +292,21 @@ double BetaDeviate::Sample() noexcept {
 }
 
 Histogram::Histogram(const std::vector<ExpressionPtr>& boundaries,
-                     const std::vector<ExpressionPtr>& weights) {
+                     const std::vector<ExpressionPtr>& weights)
+    : RandomDeviate::RandomDeviate(boundaries) {
   if (weights.size() != boundaries.size()) {
     throw InvalidArgument("The number of weights is not equal to the number"
                           " of boundaries.");
   }
   boundaries_ = boundaries;
   weights_ = weights;
-  Expression::args_.insert(Expression::args_.end(), boundaries.begin(),
-                           boundaries.end());
   Expression::args_.insert(Expression::args_.end(), weights.begin(),
                            weights.end());
 }
 
 void Histogram::Validate() {
-  CheckBoundaries(boundaries_);
-  CheckWeights(weights_);
+  Histogram::CheckBoundaries(boundaries_);
+  Histogram::CheckWeights(weights_);
 }
 
 double Histogram::Mean() noexcept {
@@ -315,8 +314,7 @@ double Histogram::Mean() noexcept {
   double sum_product = 0;
   double lower_bound = 0;
   for (int i = 0; i < boundaries_.size(); ++i) {
-    sum_product += (boundaries_[i]->Mean() - lower_bound) *
-                    weights_[i]->Mean();
+    sum_product += (boundaries_[i]->Mean() - lower_bound) * weights_[i]->Mean();
     sum_weights += weights_[i]->Mean();
     lower_bound = boundaries_[i]->Mean();
   }
@@ -363,6 +361,16 @@ void Histogram::CheckWeights(const std::vector<ExpressionPtr>& weights) {
     } else if (weights[i]->Min() < 0) {
       throw InvalidArgument("Histogram sampled weights are negative.");
     }
+  }
+}
+
+void Div::Validate() {
+  assert(!args_.empty());
+  std::vector<ExpressionPtr>::iterator it = args_.begin();
+  for (++it; it != args_.end(); ++it) {
+    const auto& expr = *it;
+    if (!expr->Mean() || !expr->Max() || !expr->Min())
+      throw InvalidArgument("Division by 0.");
   }
 }
 

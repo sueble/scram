@@ -51,15 +51,15 @@ TEST(ConfigTest, FullSettings) {
   EXPECT_EQ("temp_results.xml", config->output_path());
 
   const Settings& settings = config->settings();
+  EXPECT_EQ("bdd", settings.algorithm());
   EXPECT_EQ(true, settings.probability_analysis());
   EXPECT_EQ(true, settings.importance_analysis());
   EXPECT_EQ(true, settings.uncertainty_analysis());
   EXPECT_EQ(true, settings.ccf_analysis());
-  EXPECT_EQ("rare-event", settings.approx());
+  EXPECT_EQ("rare-event", settings.approximation());
   EXPECT_EQ(11, settings.limit_order());
   EXPECT_EQ(48, settings.mission_time());
   EXPECT_EQ(0.009, settings.cut_off());
-  EXPECT_EQ(42, settings.num_sums());
   EXPECT_EQ(777, settings.num_trials());
   EXPECT_EQ(13, settings.num_quantiles());
   EXPECT_EQ(31, settings.num_bins());

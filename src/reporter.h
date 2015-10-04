@@ -39,15 +39,16 @@ class PrimaryEvent;
 class BasicEvent;
 class FaultTreeAnalysis;
 class ProbabilityAnalysis;
+class ImportanceAnalysis;
 class UncertaintyAnalysis;
 
 /// @class Reporter
 /// This class reports the results of the analyses.
 class Reporter {
  public:
-  typedef std::shared_ptr<const Model> ModelPtr;
-  typedef std::shared_ptr<const PrimaryEvent> PrimaryEventPtr;
-  typedef std::shared_ptr<const Parameter> ParameterPtr;
+  using ModelPtr = std::shared_ptr<const Model>;
+  using PrimaryEventPtr = std::shared_ptr<const PrimaryEvent>;
+  using ParameterPtr = std::shared_ptr<const Parameter>;
 
   /// Sets up XML report document according to a specific standards.
   /// This function populates information
@@ -56,19 +57,19 @@ class Reporter {
   /// of the overall report for use by other reporting functions.
   /// This function must be called before other reporting functions.
   ///
-  /// @param[in] model The main model container.
-  /// @param[in] settings Configured settings for analysis.
-  /// @param[in,out] doc An empty document.
+  /// @param[in] model  The main model container.
+  /// @param[in] settings  Configured settings for analysis.
+  /// @param[in,out] doc  An empty document.
   ///
-  /// @throws LogicError The document is not empty.
+  /// @throws LogicError  The document is not empty.
   void SetupReport(const ModelPtr& model, const Settings& settings,
                    xmlpp::Document* doc);
 
   /// Reports orphan primary events
   /// as warnings of the top information level.
   ///
-  /// @param[in] orphan_primary_events Container of orphan events.
-  /// @param[in,out] doc Pre-formatted XML document.
+  /// @param[in] orphan_primary_events  Container of orphan events.
+  /// @param[in,out] doc  Pre-formatted XML document.
   void ReportOrphanPrimaryEvents(
       const std::vector<PrimaryEventPtr>& orphan_primary_events,
       xmlpp::Document* doc);
@@ -76,8 +77,8 @@ class Reporter {
   /// Reports unused parameters
   /// as warnings of the top information level.
   ///
-  /// @param[in] unused_parameters Container of unused parameters.
-  /// @param[in,out] doc Pre-formatted XML document.
+  /// @param[in] unused_parameters  Container of unused parameters.
+  /// @param[in,out] doc  Pre-formatted XML document.
   void ReportUnusedParameters(
       const std::vector<ParameterPtr>& unused_parameters,
       xmlpp::Document* doc);
@@ -85,79 +86,51 @@ class Reporter {
   /// Reports the results of analysis
   /// to a specified output destination.
   ///
-  /// @param[in] ft_name The original name of a fault tree.
-  /// @param[in] fta Fault Tree Analysis with results.
-  /// @param[in] prob_analysis ProbabilityAnalysis with results.
-  ///                          Null pointer for no probability analysis.
-  /// @param[in,out] doc Pre-formatted XML document.
+  /// @param[in] ft_name  The original name of a fault tree.
+  /// @param[in] fta  Fault Tree Analysis with results.
+  /// @param[in] prob_analysis  ProbabilityAnalysis with results.
+  ///                           Null pointer for no probability analysis.
+  /// @param[in,out] doc  Pre-formatted XML document.
   ///
   /// @note This function must be called only after analysis is done.
-  void ReportFta(
-      std::string ft_name,
-      const std::shared_ptr<const FaultTreeAnalysis>& fta,
-      const std::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
-      xmlpp::Document* doc);
+  void ReportFta(std::string ft_name, const FaultTreeAnalysis& fta,
+                 const ProbabilityAnalysis* prob_analysis,
+                 xmlpp::Document* doc);
 
   /// Reports results of importance analysis in probability analysis.
   ///
-  /// @param[in] ft_name The original name of a fault tree.
-  /// @param[in] prob_analysis ProbabilityAnalysis with results.
-  /// @param[in,out] doc Pre-formatted XML document.
+  /// @param[in] ft_name  The original name of a fault tree.
+  /// @param[in] importance_analysis  ImportanceAnalysis with results.
+  /// @param[in,out] doc  Pre-formatted XML document.
   ///
   /// @note This function must be called only after analysis is done.
-  void ReportImportance(
-      std::string ft_name,
-      const std::shared_ptr<const ProbabilityAnalysis>& prob_analysis,
-      xmlpp::Document* doc);
+  void ReportImportance(std::string ft_name,
+                        const ImportanceAnalysis& importance_analysis,
+                        xmlpp::Document* doc);
 
   /// Reports the results of uncertainty analysis with minimal cut sets.
   ///
-  /// @param[in] ft_name The original name of a fault tree.
-  /// @param[in] uncert_analysis UncertaintyAnalysis with results.
-  /// @param[in,out] doc Pre-formatted XML document.
+  /// @param[in] ft_name  The original name of a fault tree.
+  /// @param[in] uncert_analysis  UncertaintyAnalysis with results.
+  /// @param[in,out] doc  Pre-formatted XML document.
   ///
   /// @note This function must be called only after analysis is done.
-  void ReportUncertainty(
-      std::string ft_name,
-      const std::shared_ptr<const UncertaintyAnalysis>& uncert_analysis,
-      xmlpp::Document* doc);
+  void ReportUncertainty(std::string ft_name,
+                         const UncertaintyAnalysis& uncert_analysis,
+                         xmlpp::Document* doc);
 
  private:
-  typedef std::shared_ptr<const BasicEvent> BasicEventPtr;
+  using BasicEventPtr = std::shared_ptr<const BasicEvent>;
 
   /// Detects if a given basic event is a CCF event,
   /// and reports it with specific formatting.
   ///
-  /// @param[in] basic_event A basic event to be reported.
-  /// @param[in,out] parent A parent element node to have this basic event.
+  /// @param[in] basic_event  A basic event to be reported.
+  /// @param[in,out] parent  A parent element node to have this basic event.
   ///
   /// @returns A newly created element node with the event description.
   xmlpp::Element* ReportBasicEvent(const BasicEventPtr& basic_event,
                                    xmlpp::Element* parent);
-
-  /// A generic function to convert numbers to string.
-  ///
-  /// @param[in] num The number to be converted.
-  ///
-  /// @returns Formatted string that represents the number.
-  template<class T>
-  inline std::string ToString(T num) {
-    std::stringstream ss;
-    ss << num;
-    return ss.str();
-  }
-
-  /// A helper function to convert a floating point number to string.
-  ///
-  /// @param[in] num The number to be converted.
-  /// @param[in] precision Decimal precision for reporting.
-  ///
-  /// @returns Formatted string that represents the floating point number.
-  inline std::string ToString(double num, int precision) {
-    std::stringstream ss;
-    ss << std::setprecision(precision) << num;
-    return ss.str();
-  }
 };
 
 }  // namespace scram

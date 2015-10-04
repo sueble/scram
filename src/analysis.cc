@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2015 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,35 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SCRAM_TESTS_PREPROCESSOR_TESTS_H_
-#define SCRAM_TESTS_PREPROCESSOR_TESTS_H_
+/// @file analysis.cc
+/// Implementation of common facilities for all analysis classes.
 
-#include "preprocessor.h"
-
-#include <gtest/gtest.h>
+#include "analysis.h"
 
 namespace scram {
-namespace test {
 
-/// @class PreprocessorTest
-/// This test fixture is for white-box testing of algorithms
-/// for fault tree preprossing.
-class PreprocessorTest : public ::testing::Test {
- protected:
-  typedef std::shared_ptr<IGate> IGatePtr;
+Analysis::Analysis(const Settings& settings)
+    : kSettings_(settings),
+      warnings_(""),
+      analysis_time_(0) {}
 
-  virtual void SetUp() {
-  }
+Analysis::~Analysis() {}  ///< Empty body for pure virtual destructor.
 
-  virtual void TearDown() {
-  }
-
-  // Members for tests.
-  Preprocessor* prep;
-  BooleanGraph* fault_tree;
-};
-
-}  // namespace test
 }  // namespace scram
-
-#endif  // SCRAM_TESTS_PREPROCESSOR_TESTS_H_

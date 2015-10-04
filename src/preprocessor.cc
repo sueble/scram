@@ -24,11 +24,11 @@
 /// its limitations, side-effects, and assumptions,
 /// the documentation in the header file
 /// must contain all the relevant information within
-/// its description, notes, or warnings.
+/// its description, preconditions, postconditions, notes, or warnings.
 /// The default assumption for all algorithms is
 /// that the Boolean graph is valid and well-formed.
 ///
-/// Some suggested Notes/Warnings: (Contract for preprocessing algorithms)
+/// Some suggested contracts/notes for preprocessing algorithms:
 ///
 ///   * Works with coherent graphs only
 ///   * Works with positive gates or nodes only
@@ -46,9 +46,11 @@
 ///   * May introduce new gate clones or subgraphs,
 ///     making the graph more complex.
 ///   * Works on particular cases or setups only
-///   * Has tradeoffs
+///   * Has trade-offs
 ///   * Runs better/More effective before/after some preprocessing step(s)
 ///   * Coupled with another preprocessing algorithms
+///   * Idempotent (consecutive, repeated application doesn't yield any change)
+///   * One-time operation (any repetition is pointless or dangerous)
 ///
 /// Assuming that the Boolean graph is provided
 /// in the state as described in the contract,
@@ -81,52 +83,6 @@ namespace scram {
 Preprocessor::Preprocessor(BooleanGraph* graph) noexcept
     : graph_(graph),
       root_sign_(1) {}
-
-void Preprocessor::ProcessFaultTree() noexcept {
-  assert(graph_->root());
-  assert(graph_->root()->parents().empty());
-  assert(!graph_->root()->mark());
-
-  CLOCK(time_1);
-  LOG(DEBUG2) << "Preprocessing Phase I...";
-  Preprocessor::PhaseOne();
-  LOG(DEBUG2) << "Finished Preprocessing Phase I in " << DUR(time_1);
-  if (Preprocessor::CheckRootGate()) return;
-
-  CLOCK(time_2);
-  LOG(DEBUG2) << "Preprocessing Phase II...";
-  Preprocessor::PhaseTwo();
-  LOG(DEBUG2) << "Finished Preprocessing Phase II in " << DUR(time_2);
-  if (Preprocessor::CheckRootGate()) return;
-
-  if (!graph_->normal_) {
-    CLOCK(time_3);
-    LOG(DEBUG2) << "Preprocessing Phase III...";
-    Preprocessor::PhaseThree();
-    LOG(DEBUG2) << "Finished Preprocessing Phase III in " << DUR(time_3);
-    graph_->normal_ = true;
-    if (Preprocessor::CheckRootGate()) return;
-  }
-
-  if (!graph_->coherent()) {
-    CLOCK(time_4);
-    LOG(DEBUG2) << "Preprocessing Phase IV...";
-    Preprocessor::PhaseFour();
-    LOG(DEBUG2) << "Finished Preprocessing Phase IV in " << DUR(time_4);
-    if (Preprocessor::CheckRootGate()) return;
-  }
-
-  CLOCK(time_5);
-  LOG(DEBUG2) << "Preprocessing Phase V...";
-  Preprocessor::PhaseFive();
-  LOG(DEBUG2) << "Finished Preprocessing Phase V in " << DUR(time_5);
-
-  Preprocessor::CheckRootGate();  // To cleanup.
-
-  assert(const_gates_.empty());
-  assert(null_gates_.empty());
-  assert(graph_->normal_);
-}
 
 void Preprocessor::PhaseOne() noexcept {
   if (!graph_->constants_.empty()) {
@@ -193,7 +149,7 @@ void Preprocessor::PhaseTwo() noexcept {
   LOG(DEBUG3) << "Coalescing gates...";
   graph_changed = true;
   while (graph_changed) graph_changed = Preprocessor::CoalesceGates(false);
-  LOG(DEBUG3) << "Gate coalescense is done!";
+  LOG(DEBUG3) << "Gate coalescence is done!";
 
   if (Preprocessor::CheckRootGate()) return;
 
@@ -207,6 +163,7 @@ void Preprocessor::PhaseThree() noexcept {
   LOG(DEBUG3) << "Full normalization of gates...";
   assert(root_sign_ == 1);
   Preprocessor::NormalizeGates(true);
+  graph_->normal_ = true;
   LOG(DEBUG3) << "Finished the full normalization gates!";
 
   if (Preprocessor::CheckRootGate()) return;
@@ -239,7 +196,7 @@ void Preprocessor::PhaseFive() noexcept {
   LOG(DEBUG3) << "Coalescing gates...";  // Make layered.
   bool graph_changed = true;
   while (graph_changed) graph_changed = Preprocessor::CoalesceGates(true);
-  LOG(DEBUG3) << "Gate coalescense is done!";
+  LOG(DEBUG3) << "Gate coalescence is done!";
 
   if (Preprocessor::CheckRootGate()) return;
   Preprocessor::PhaseTwo();
@@ -248,7 +205,7 @@ void Preprocessor::PhaseFive() noexcept {
   LOG(DEBUG3) << "Coalescing gates...";  // Final coalescing before analysis.
   graph_changed = true;
   while (graph_changed) graph_changed = Preprocessor::CoalesceGates(true);
-  LOG(DEBUG3) << "Gate coalescense is done!";
+  LOG(DEBUG3) << "Gate coalescence is done!";
 }
 
 bool Preprocessor::CheckRootGate() noexcept {
@@ -472,6 +429,7 @@ void Preprocessor::ClearNullGates() noexcept {
 void Preprocessor::NormalizeGates(bool full) noexcept {
   assert(const_gates_.empty());
   assert(null_gates_.empty());
+  if (full) Preprocessor::AssignOrder();  // K/N gates need order.
   // Handle special case for the root gate.
   IGatePtr root_gate = graph_->root();
   Operator type = root_gate->type();
@@ -595,11 +553,13 @@ void Preprocessor::NormalizeAtleastGate(const IGatePtr& gate) noexcept {
     return;
   }
 
-  const std::set<int>& args = gate->args();
-  std::set<int>::const_iterator it = args.begin();
-
+  auto it = std::max_element(gate->args().cbegin(), gate->args().cend(),
+                             [&gate](int lhs, int rhs) {
+    return gate->GetArg(lhs)->opti_value() < gate->GetArg(rhs)->opti_value();
+  });
+  assert(it != gate->args().cend());
   IGatePtr first_arg(new IGate(kAndGate));
-  gate->ShareArg(*it, first_arg);
+  gate->TransferArg(*it, first_arg);
 
   IGatePtr grand_arg(new IGate(kAtleastGate));
   first_arg->AddArg(grand_arg->index(), grand_arg);
@@ -608,7 +568,7 @@ void Preprocessor::NormalizeAtleastGate(const IGatePtr& gate) noexcept {
   IGatePtr second_arg(new IGate(kAtleastGate));
   second_arg->vote_number(vote_number);
 
-  for (++it; it != args.end(); ++it) {
+  for (it = gate->args().cbegin(); it != gate->args().cend(); ++it) {
     gate->ShareArg(*it, grand_arg);
     gate->ShareArg(*it, second_arg);
   }
@@ -752,8 +712,8 @@ bool Preprocessor::ProcessMultipleDefinitions() noexcept {
   if (multi_def.empty()) return false;
   LOG(DEBUG4) << multi_def.size() << " gates are multiply defined.";
   for (const auto& def : multi_def) {
-    LOG(DEBUG5) << "Gate " << def.first->index() << ": "
-        << def.second.size() << " times.";
+    LOG(DEBUG5) << "Gate " << def.first->index() << ": " << def.second.size()
+                << " times.";
     for (const IGateWeakPtr& dup : def.second) {
       if (dup.expired()) continue;
       Preprocessor::ReplaceGate(dup.lock(), def.first);
@@ -942,8 +902,8 @@ std::shared_ptr<IGate> Preprocessor::CreateNewModule(
   }
   gate->AddArg(module->index(), module);
   assert(gate->args().size() > 1);
-  LOG(DEBUG4) << "Created a module G" << module->index()
-      << " with "  << args.size() << " arguments for G" << gate->index();
+  LOG(DEBUG4) << "Created a module G" << module->index() << " with "
+              << args.size() << " arguments for G" << gate->index();
   return module;
 }
 
@@ -951,10 +911,10 @@ namespace {
 
 /// Detects overlap in ranges.
 ///
-/// @param[in] a_min The lower boundary of the first range.
-/// @param[in] a_max The upper boundary of the first range.
-/// @param[in] b_min The lower boundary of the second range.
-/// @param[in] b_max The upper boundary of the second range.
+/// @param[in] a_min  The lower boundary of the first range.
+/// @param[in] a_max  The upper boundary of the first range.
+/// @param[in] b_min  The lower boundary of the second range.
+/// @param[in] b_max  The upper boundary of the second range.
 ///
 /// @returns true if there's overlap in the ranges.
 bool DetectOverlap(int a_min, int a_max, int b_min, int b_max) noexcept {
@@ -1211,11 +1171,11 @@ void Preprocessor::GatherCommonArgs(const IGatePtr& gate, const Operator& op,
 void Preprocessor::FilterMergeCandidates(
     MergeTable::Candidates* candidates) noexcept {
   assert(candidates->size() > 1);
-  std::stable_sort(candidates->begin(), candidates->end(),
-                   [](const MergeTable::Candidate& lhs,
-                      const MergeTable::Candidate& rhs) {
-                     return lhs.second.size() < rhs.second.size();
-                   });
+  std::stable_sort(
+      candidates->begin(), candidates->end(),
+      [](const MergeTable::Candidate& lhs, const MergeTable::Candidate& rhs) {
+        return lhs.second.size() < rhs.second.size();
+      });
   bool cleanup = false;  // Clean constant or NULL type gates.
   for (auto it = candidates->begin(); it != candidates->end(); ++it) {
     IGatePtr gate = it->first;
@@ -1256,14 +1216,13 @@ void Preprocessor::FilterMergeCandidates(
     }
   }
   if (!cleanup) return;
-  candidates->erase(
-      std::remove_if(candidates->begin(), candidates->end(),
-                     [](const MergeTable::Candidate& mem) {
-                       return mem.first->state() != kNormalState ||
-                              mem.first->type() == kNullGate ||
-                              mem.second.size() == 1;
-                     }),
-      candidates->end());
+  candidates->erase(std::remove_if(candidates->begin(), candidates->end(),
+                                   [](const MergeTable::Candidate& mem) {
+                      return mem.first->state() != kNormalState ||
+                             mem.first->type() == kNullGate ||
+                             mem.second.size() == 1;
+                    }),
+                    candidates->end());
 }
 
 void Preprocessor::GroupCandidatesByArgs(
@@ -1338,11 +1297,11 @@ void Preprocessor::GroupCommonArgs(const MergeTable::Collection& options,
                                    MergeTable* table) noexcept {
   assert(!options.empty());
   MergeTable::MergeGroup all_options(options.begin(), options.end());
-  std::stable_sort(all_options.begin(), all_options.end(),
-                   [](const MergeTable::Option& lhs,
-                      const MergeTable::Option& rhs) {
-                     return lhs.first.size() < rhs.first.size();
-                   });
+  std::stable_sort(
+      all_options.begin(), all_options.end(),
+      [](const MergeTable::Option& lhs, const MergeTable::Option& rhs) {
+        return lhs.first.size() < rhs.first.size();
+      });
 
   while (!all_options.empty()) {
     MergeTable::OptionGroup best_group;
@@ -1370,8 +1329,8 @@ void Preprocessor::GroupCommonArgs(const MergeTable::Collection& options,
     }
     all_options.erase(std::remove_if(all_options.begin(), all_options.end(),
                                      [](const MergeTable::Option& option) {
-                                       return option.second.size() < 2;
-                                     }),
+                        return option.second.size() < 2;
+                      }),
                       all_options.end());
   }
 }
@@ -1477,7 +1436,7 @@ void Preprocessor::TransformCommonArgs(MergeTable::MergeGroup* group) noexcept {
     for (++it_rest; it_rest != group->end(); ++it_rest) {
       MergeTable::CommonArgs& set_args = it_rest->first;
       assert(set_args.size() > common_args.size());
-      // Note: it is assummed that common_args is a proper subset of set_args.
+      // Note: it is assumed that common_args is a proper subset of set_args.
       std::vector<int> diff;
       std::set_difference(set_args.begin(), set_args.end(),
                           common_args.begin(), common_args.end(),
@@ -1611,16 +1570,15 @@ bool Preprocessor::FilterDistributiveArgs(
   for (int index : to_erase) {
     gate->EraseArg(index);
     candidates->erase(std::find_if(candidates->begin(), candidates->end(),
-                                   [&](const IGatePtr& candidate) {
-                                     return candidate->index() == index;
-                                   }),
-                      candidates->end());
+                                   [&index](const IGatePtr& candidate) {
+      return candidate->index() == index;
+    }));
   }
   // Sort in descending size of gate arguments.
   std::sort(candidates->begin(), candidates->end(),
             [](const IGatePtr& lhs, const IGatePtr rhs) {
-              return lhs->args().size() > rhs->args().size();
-            });
+    return lhs->args().size() > rhs->args().size();
+  });
   std::vector<IGatePtr> exclusive;  // No candidate is a subset of another.
   while (!candidates->empty()) {
     IGatePtr sub = candidates->back();
@@ -1633,15 +1591,13 @@ bool Preprocessor::FilterDistributiveArgs(
         gate->EraseArg(super->index());
       }
     }
-    candidates->erase(
-        std::remove_if(candidates->begin(), candidates->end(),
-                       [&](const IGatePtr& super) {
-                         return std::includes(super->args().begin(),
-                                              super->args().end(),
-                                              sub->args().begin(),
-                                              sub->args().end());
-                       }),
-        candidates->end());
+    candidates->erase(std::remove_if(candidates->begin(), candidates->end(),
+                                     [&sub](const IGatePtr& super) {
+                        return std::includes(
+                            super->args().begin(), super->args().end(),
+                            sub->args().begin(), sub->args().end());
+                      }),
+                      candidates->end());
   }
   *candidates = exclusive;
   assert(!gate->args().empty());
@@ -1667,11 +1623,11 @@ void Preprocessor::GroupDistributiveArgs(const MergeTable::Collection& options,
                                          MergeTable* table) noexcept {
   assert(!options.empty());
   MergeTable::MergeGroup all_options(options.begin(), options.end());
-  std::stable_sort(all_options.begin(), all_options.end(),
-                   [](const MergeTable::Option& lhs,
-                      const MergeTable::Option& rhs) {
-                     return lhs.first.size() < rhs.first.size();
-                   });
+  std::stable_sort(
+      all_options.begin(), all_options.end(),
+      [](const MergeTable::Option& lhs, const MergeTable::Option& rhs) {
+        return lhs.first.size() < rhs.first.size();
+      });
 
   while (!all_options.empty()) {
     MergeTable::OptionGroup best_group;
@@ -1690,8 +1646,8 @@ void Preprocessor::GroupDistributiveArgs(const MergeTable::Collection& options,
     }
     all_options.erase(std::remove_if(all_options.begin(), all_options.end(),
                                      [](const MergeTable::Option& option) {
-                                       return option.second.size() < 2;
-                                     }),
+                        return option.second.size() < 2;
+                      }),
                       all_options.end());
   }
 }
@@ -1856,8 +1812,8 @@ void Preprocessor::ProcessCommonNode(
     graph_->ClearOptiValuesFast(root);  // Important to call before processing.
     if (redundant_parents.empty()) return;  // No optimization.
     LOG(DEBUG4) << "Node " << node->index() << ": "
-        << redundant_parents.size() << " redundant parent(s) and "
-        << destinations.size() << " failure destination(s)";
+                << redundant_parents.size() << " redundant parent(s) and "
+                << destinations.size() << " failure destination(s)";
     Preprocessor::ProcessRedundantParents(node, redundant_parents);
     Preprocessor::ProcessFailureDestinations(node, destinations);
     Preprocessor::ClearConstGates();
@@ -2084,19 +2040,20 @@ bool Preprocessor::ProcessDecompositionCommonNode(
   if (node->parents().size() < 2) return false;
 
   auto IsDecompositionType = [](Operator type) {  // Possible types for setups.
-                               switch (type) {
-                                 case kAndGate:
-                                 case kNandGate:
-                                 case kOrGate:
-                                 case kNorGate:
-                                   return true;
-                               }
-                               return false;
-                             };
+    switch (type) {
+      case kAndGate:
+      case kNandGate:
+      case kOrGate:
+      case kNorGate:
+        return true;
+    }
+    return false;
+  };
   // Determine if the decomposition setups are possible.
   auto it =
       std::find_if(node->parents().begin(), node->parents().end(),
-                   [&](const std::pair<int, IGateWeakPtr>& member) {
+                   [&IsDecompositionType]
+                   (const std::pair<int, IGateWeakPtr>& member) {
                      return IsDecompositionType(member.second.lock()->type());
                    });
   if (it == node->parents().end()) return false;  // No setups possible.
@@ -2264,6 +2221,97 @@ void Preprocessor::ReplaceGate(const IGatePtr& gate,
       null_gates_.push_back(parent);
     }
   }
+}
+
+void Preprocessor::AssignOrder() noexcept {
+  graph_->ClearOptiValues();
+  Preprocessor::TopologicalOrder(graph_->root(), 0);
+}
+
+int Preprocessor::TopologicalOrder(const IGatePtr& root, int order) noexcept {
+  if (root->opti_value()) return order;
+  for (const std::pair<int, IGatePtr>& arg : root->gate_args()) {
+    order = Preprocessor::TopologicalOrder(arg.second, order);
+  }
+  for (const std::pair<int, VariablePtr>& arg : root->variable_args()) {
+    if (!arg.second->opti_value()) arg.second->opti_value(++order);
+  }
+  assert(root->constant_args().empty());
+  root->opti_value(++order);
+  return order;
+}
+
+void CustomPreprocessor<Mocus>::Run() noexcept {
+  assert(graph_->root());
+  assert(graph_->root()->parents().empty());
+  assert(!graph_->root()->mark());
+
+  CLOCK(time_1);
+  LOG(DEBUG2) << "Preprocessing Phase I...";
+  Preprocessor::PhaseOne();
+  LOG(DEBUG2) << "Finished Preprocessing Phase I in " << DUR(time_1);
+  if (Preprocessor::CheckRootGate()) return;
+
+  CLOCK(time_2);
+  LOG(DEBUG2) << "Preprocessing Phase II...";
+  Preprocessor::PhaseTwo();
+  LOG(DEBUG2) << "Finished Preprocessing Phase II in " << DUR(time_2);
+  if (Preprocessor::CheckRootGate()) return;
+
+  if (!graph_->normal()) {
+    CLOCK(time_3);
+    LOG(DEBUG2) << "Preprocessing Phase III...";
+    Preprocessor::PhaseThree();
+    LOG(DEBUG2) << "Finished Preprocessing Phase III in " << DUR(time_3);
+    if (Preprocessor::CheckRootGate()) return;
+  }
+
+  if (!graph_->coherent()) {
+    CLOCK(time_4);
+    LOG(DEBUG2) << "Preprocessing Phase IV...";
+    Preprocessor::PhaseFour();
+    LOG(DEBUG2) << "Finished Preprocessing Phase IV in " << DUR(time_4);
+    if (Preprocessor::CheckRootGate()) return;
+  }
+
+  CLOCK(time_5);
+  LOG(DEBUG2) << "Preprocessing Phase V...";
+  Preprocessor::PhaseFive();
+  LOG(DEBUG2) << "Finished Preprocessing Phase V in " << DUR(time_5);
+
+  Preprocessor::CheckRootGate();  // To cleanup.
+
+  assert(const_gates_.empty());
+  assert(null_gates_.empty());
+  assert(graph_->normal());
+}
+
+void CustomPreprocessor<Bdd>::Run() noexcept {
+  assert(graph_->root());
+  assert(graph_->root()->parents().empty());
+  assert(!graph_->root()->mark());
+
+  CLOCK(time_1);
+  LOG(DEBUG2) << "Preprocessing Phase I...";
+  Preprocessor::PhaseOne();
+  LOG(DEBUG2) << "Finished Preprocessing Phase I in " << DUR(time_1);
+  if (Preprocessor::CheckRootGate()) return;
+
+  CLOCK(time_2);
+  LOG(DEBUG2) << "Preprocessing Phase II...";
+  Preprocessor::PhaseTwo();
+  LOG(DEBUG2) << "Finished Preprocessing Phase II in " << DUR(time_2);
+  if (Preprocessor::CheckRootGate()) return;
+
+  /// @todo Normalization may require the same ordering as for BDD.
+  if (!graph_->normal()) {
+    CLOCK(time_3);
+    LOG(DEBUG2) << "Preprocessing Phase III...";
+    Preprocessor::PhaseThree();
+    LOG(DEBUG2) << "Finished Preprocessing Phase III in " << DUR(time_3);
+    if (Preprocessor::CheckRootGate()) return;
+  }
+  Preprocessor::AssignOrder();
 }
 
 }  // namespace scram

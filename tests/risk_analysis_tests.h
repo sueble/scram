@@ -31,11 +31,11 @@
 namespace scram {
 namespace test {
 
-typedef std::shared_ptr<Event> EventPtr;
-typedef std::shared_ptr<Gate> GatePtr;
-typedef std::shared_ptr<HouseEvent> HouseEventPtr;
-typedef std::shared_ptr<BasicEvent> BasicEventPtr;
-typedef std::unique_ptr<FaultTree> FaultTreePtr;
+using EventPtr = std::shared_ptr<Event>;
+using GatePtr = std::shared_ptr<Gate>;
+using HouseEventPtr = std::shared_ptr<HouseEvent>;
+using BasicEventPtr = std::shared_ptr<BasicEvent>;
+using FaultTreePtr = std::unique_ptr<FaultTree>;
 
 class RiskAnalysisTest : public ::testing::Test {
  protected:
@@ -105,17 +105,16 @@ class RiskAnalysisTest : public ::testing::Test {
     return ran->probability_analyses().begin()->second->p_total();
   }
 
-  const std::map< std::set<std::string>, double >& prob_of_min_sets() {
-    assert(!ran->probability_analyses().empty());
-    assert(ran->probability_analyses().size() == 1);
-    return ran->probability_analyses().begin()->second->prob_of_min_sets();
+  const std::map<std::set<std::string>, double>& mcs_probability() {
+    assert(!ran->fault_tree_analyses().empty());
+    assert(ran->fault_tree_analyses().size() == 1);
+    return ran->fault_tree_analyses().begin()->second->mcs_probability();
   }
 
-  const std::vector<double>& importance(std::string id) {
-    assert(!ran->probability_analyses().empty());
-    assert(ran->probability_analyses().size() == 1);
-    return ran->probability_analyses().begin()->second
-        ->importance().find(id)->second;
+  const ImportanceFactors& importance(std::string id) {
+    assert(!ran->importance_analyses().empty());
+    assert(ran->importance_analyses().size() == 1);
+    return ran->importance_analyses().begin()->second->importance().at(id);
   }
 
   // Uncertainty analysis.

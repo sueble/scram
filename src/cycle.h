@@ -35,11 +35,14 @@ bool ContinueConnector(C* connector, std::vector<std::string>* cycle);
 /// Interrupts the detection at first cycle.
 /// Nodes get marked.
 ///
-/// @param[in,out] node The node to start with.
-/// @param[out] cycle If a cycle is detected,
-///                   it is given in reverse,
-///                   ending with the input node's original name.
-///                   This is for printing errors and efficiency.
+/// @tparam N  Type of nodes in the graph.
+/// @tparam C  Type of connectors (nodes, edges) in the graph.
+///
+/// @param[in,out] node  The node to start with.
+/// @param[out] cycle  If a cycle is detected,
+///                    it is given in reverse,
+///                    ending with the input node's original name.
+///                    This is for printing errors and efficiency.
 ///
 /// @returns True if a cycle is found.
 template<class N, class C>
@@ -60,22 +63,22 @@ bool DetectCycle(N* node, std::vector<std::string>* cycle) {
 }
 
 /// Helper function to check for cyclic references through connectors.
-/// Connecters may get market upon traversal.
+/// Connectors may get market upon traversal.
 ///
-/// @param[in,out] connector Connector to nodes.
-/// @param[out] cycle The cycle path if detected.
+/// @tparam N  Type of nodes in the graph.
+/// @tparam C  Type of connectors (nodes, edges) in the graph.
+///
+/// @param[in,out] connector  Connector to nodes.
+/// @param[out] cycle  The cycle path if detected.
 ///
 /// @returns True if a cycle is detected.
 template<class N, class C>
 bool ContinueConnector(C* connector, std::vector<std::string>* cycle) {
-  typename std::vector<N*>::const_iterator it;
-  for (it = connector->nodes().begin(); it != connector->nodes().end(); ++it) {
-    if (DetectCycle<N, C>(*it, cycle)) return true;
+  for (N* node : connector->nodes()) {
+    if (DetectCycle<N, C>(node, cycle)) return true;
   }
-  typename std::vector<C*>::const_iterator it_c;
-  for (it_c = connector->connectors().begin();
-       it_c != connector->connectors().end(); ++it_c) {
-    if (ContinueConnector<N, C>(*it_c, cycle)) return true;
+  for (C* link : connector->connectors()) {
+    if (ContinueConnector<N, C>(link, cycle)) return true;
   }
   return false;
 }
@@ -83,7 +86,7 @@ bool ContinueConnector(C* connector, std::vector<std::string>* cycle) {
 /// Prints the detected cycle from the output
 /// produced by cycle detection functions.
 ///
-/// @param[in] cycle Cycle containing names in reverse order.
+/// @param[in] cycle  Cycle containing names in reverse order.
 ///
 /// @returns String representation of the cycle.
 std::string PrintCycle(const std::vector<std::string>& cycle);

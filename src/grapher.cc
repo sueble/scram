@@ -28,14 +28,22 @@
 
 namespace scram {
 
-const std::map<std::string, std::string> Grapher::kGateColors_ =
-    {{"or", "blue"}, {"and", "green"}, {"not", "red"}, {"xor", "brown"},
-     {"inhibit", "yellow"}, {"atleast", "cyan"}, {"null", "gray"},
-     {"nor", "magenta"}, {"nand", "orange"}};
+const std::map<std::string, std::string> Grapher::kGateColors_ = {
+    {"or", "blue"},
+    {"and", "green"},
+    {"not", "red"},
+    {"xor", "brown"},
+    {"inhibit", "yellow"},
+    {"atleast", "cyan"},
+    {"null", "gray"},
+    {"nor", "magenta"},
+    {"nand", "orange"}};
 
-const std::map<std::string, std::string> Grapher::kEventColors_ =
-    {{"basic", "black"}, {"undeveloped", "blue"}, {"house", "green"},
-     {"conditional", "red"}};
+const std::map<std::string, std::string> Grapher::kEventColors_ = {
+    {"basic", "black"},
+    {"undeveloped", "blue"},
+    {"house", "green"},
+    {"conditional", "red"}};
 
 void Grapher::GraphFaultTree(const GatePtr& top_event, bool prob_requested,
                              std::ostream& out) {
@@ -46,7 +54,7 @@ void Grapher::GraphFaultTree(const GatePtr& top_event, bool prob_requested,
 
   out << "digraph " << top_event->name() << " {\n";
 
-  FaultTreeAnalysis* fta = new FaultTreeAnalysis(top_event);
+  FaultTreeDescriptor* fta = new FaultTreeDescriptor(top_event);
 
   // Keep track of nested formulas for future special formatting.
   std::vector<std::pair<std::string, const Formula*> > formulas;

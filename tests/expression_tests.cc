@@ -30,7 +30,8 @@ class OpenExpression : public Expression {
  public:
   explicit OpenExpression(double m = 1, double s = 1, double mn = 0,
                           double mx = 0)
-      : mean(m),
+      : Expression::Expression({}),
+        mean(m),
         sample(s),
         min(mn),
         max(mx) {}
@@ -38,15 +39,15 @@ class OpenExpression : public Expression {
   double sample;
   double min;  // This value is used only if explicitly set non-zero.
   double max;  // This value is used only if explicitly set non-zero.
-  inline double Mean() noexcept { return mean; }
-  inline double Sample() noexcept { return sample; }
-  inline double Max() noexcept { return max ? max : sample; }
-  inline double Min() noexcept { return min ? min : sample; }
-  inline bool IsConstant() noexcept { return true; }
+  double Mean() noexcept { return mean; }
+  double Sample() noexcept { return sample; }
+  double Max() noexcept { return max ? max : sample; }
+  double Min() noexcept { return min ? min : sample; }
+  bool IsConstant() noexcept { return true; }
 };
 
-typedef std::shared_ptr<OpenExpression> OpenExpressionPtr;
-typedef std::shared_ptr<Expression> ExpressionPtr;
+using OpenExpressionPtr = std::shared_ptr<OpenExpression>;
+using ExpressionPtr = std::shared_ptr<Expression>;
 
 TEST(ExpressionTest, Exponential) {
   OpenExpressionPtr lambda(new OpenExpression(10, 8));
@@ -562,6 +563,10 @@ TEST(ExpressionTest, Div) {
   EXPECT_DOUBLE_EQ(2.0 / 4 / 6, dev->Sample());
   EXPECT_DOUBLE_EQ(0.1 / 5 / 6, dev->Min());
   EXPECT_DOUBLE_EQ(10.0 / 1 / 2, dev->Max());
+
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(0, 1, 1, 1)));
+  ASSERT_NO_THROW(dev = ExpressionPtr(new Div(arguments)));
+  EXPECT_THROW(dev->Validate(), InvalidArgument);  // Division by 0.
 }
 
 // Test for the special case of finding maximum and minimum division.
