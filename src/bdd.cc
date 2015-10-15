@@ -46,35 +46,36 @@ ComplementEdge::ComplementEdge() : complement_edge_(false) {}
 
 ComplementEdge::~ComplementEdge() {}  // Default pure virtual destructor.
 
-Bdd::Bdd(const BooleanGraph* fault_tree, const Settings& /*settings*/)
+Bdd::Bdd(const BooleanGraph* fault_tree, const Settings& settings)
     : fault_tree_(fault_tree),
+      kSettings_(settings),
       kOne_(std::make_shared<Terminal>(true)),
-      function_id_(2),
-      zbdd_(nullptr) {
-  root_ = Bdd::IfThenElse(fault_tree_->root());
-  LOG(DEBUG3) << "The number of BDD generated vertices: " << function_id_ - 1;
-}
-
-Bdd::~Bdd() noexcept {
-  if (zbdd_) delete zbdd_;
-}
-
-void Bdd::ClearMarks(const VertexPtr& vertex, bool mark) noexcept {
-  if (vertex->terminal()) return;
-  ItePtr ite = Ite::Ptr(vertex);
-  if (ite->mark() == mark) return;
-  ite->mark(mark);
-  if (ite->module()) {
-    const Bdd::Function& res = gates_.find(ite->index())->second;
-    Bdd::ClearMarks(res.vertex, mark);
+      function_id_(2) {
+  CLOCK(init_time);
+  LOG(DEBUG3) << "Converting Boolean graph into BDD...";
+  if (fault_tree->root()->IsConstant()) {
+    // Constant case should only happen to the top gate.
+    if (fault_tree->root()->state() == kNullState) {
+      root_ = {true, kOne_};
+    } else {
+      root_ = {false, kOne_};
+    }
+  } else {
+    root_ = Bdd::IfThenElse(fault_tree->root());
   }
-  Bdd::ClearMarks(ite->high(), mark);
-  Bdd::ClearMarks(ite->low(), mark);
+  LOG(DEBUG4) << "# of BDD vertices created: " << function_id_ - 1;
+  LOG(DEBUG4) << "# of entries in unique table: " << unique_table_.size();
+  LOG(DEBUG4) << "# of entries in compute table: " << compute_table_.size();
+  Bdd::ClearMarks(false);
+  LOG(DEBUG4) << "# of ITE in BDD: " << Bdd::CountIteNodes(root_.vertex);
+  LOG(DEBUG3) << "Finished Boolean graph conversion in " << DUR(init_time);
+  Bdd::ClearMarks(false);
 }
+
+Bdd::~Bdd() noexcept = default;
 
 void Bdd::Analyze() noexcept {
-  if (zbdd_) delete zbdd_;
-  zbdd_ = new Zbdd(this);
+  zbdd_ = std::unique_ptr<Zbdd>(new Zbdd(this, kSettings_));
   zbdd_->Analyze();
 }
 
@@ -84,18 +85,9 @@ const std::vector<std::vector<int>>& Bdd::cut_sets() const {
 }
 
 const Bdd::Function& Bdd::IfThenElse(const IGatePtr& gate) noexcept {
+  assert(!gate->IsConstant() && "Unexpected constant gate!");
   Function& result = gates_[gate->index()];
   if (result.vertex) return result;
-  if (gate->state() != kNormalState) {
-    // Constant case should only happen to the top gate.
-    assert(gate == fault_tree_->root());
-    if (gate->state() == kNullState) {
-      result = {true, kOne_};
-    } else {
-      result = {false, kOne_};
-    }
-    return result;
-  }
   std::vector<Function> args;
   for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
     args.push_back({arg.first < 0, Bdd::IfThenElse(arg.second)});
@@ -112,9 +104,9 @@ const Bdd::Function& Bdd::IfThenElse(const IGatePtr& gate) noexcept {
   }
   std::sort(args.begin(), args.end(),
             [](const Function& lhs, const Function& rhs) {
-    if (lhs.vertex->terminal()) return false;
-    if (rhs.vertex->terminal()) return true;
-    return Ite::Ptr(lhs.vertex)->order() < Ite::Ptr(rhs.vertex)->order();
+    if (lhs.vertex->terminal()) return true;
+    if (rhs.vertex->terminal()) return false;
+    return Ite::Ptr(lhs.vertex)->order() > Ite::Ptr(rhs.vertex)->order();
   });
   auto it = args.cbegin();
   result.complement = it->complement;
@@ -311,6 +303,33 @@ Triplet Bdd::GetSignature(Operator type,
       assert(false);
   }
   return sig;
+}
+
+int Bdd::CountIteNodes(const VertexPtr& vertex) noexcept {
+  if (vertex->terminal()) return 0;
+  ItePtr ite = Ite::Ptr(vertex);
+  if (ite->mark()) return 0;
+  ite->mark(true);
+  int in_module = 0;
+  if (ite->module()) {
+    const Function& module = gates_.find(ite->index())->second;
+    in_module = Bdd::CountIteNodes(module.vertex);
+  }
+  return 1 + in_module + Bdd::CountIteNodes(ite->high()) +
+         Bdd::CountIteNodes(ite->low());
+}
+
+void Bdd::ClearMarks(const VertexPtr& vertex, bool mark) noexcept {
+  if (vertex->terminal()) return;
+  ItePtr ite = Ite::Ptr(vertex);
+  if (ite->mark() == mark) return;
+  ite->mark(mark);
+  if (ite->module()) {
+    const Bdd::Function& res = gates_.find(ite->index())->second;
+    Bdd::ClearMarks(res.vertex, mark);
+  }
+  Bdd::ClearMarks(ite->high(), mark);
+  Bdd::ClearMarks(ite->low(), mark);
 }
 
 }  // namespace scram

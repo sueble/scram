@@ -25,7 +25,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -460,40 +459,6 @@ class Preprocessor {
   /// @returns The final time of traversing.
   int AssignTiming(int time, const IGatePtr& gate) noexcept;
 
-  /// Checks if a node within a graph enter and exit times.
-  ///
-  /// @param[in] node  The node to be tested.
-  /// @param[in] enter_time  The enter time of the root gate of the graph.
-  /// @param[in] exit_time  The exit time of the root gate of the graph.
-  ///
-  /// @returns true if the node within the graph visit times.
-  bool IsNodeWithinGraph(const NodePtr& node, int enter_time,
-                         int exit_time) noexcept {
-    assert(enter_time > 0);
-    assert(exit_time > enter_time);
-    assert(node->EnterTime() >= 0);
-    assert(node->LastVisit() >= node->EnterTime());
-    return node->EnterTime() > enter_time && node->LastVisit() < exit_time;
-  }
-
-  /// Checks if a subgraph with a root gate is within a subgraph.
-  /// The positive result means
-  /// that all nodes of the subgraph is contained within the main graph.
-  ///
-  /// @param[in] root  The root gate of the subgraph.
-  /// @param[in] enter_time  The enter time of the root gate of the graph.
-  /// @param[in] exit_time  The exit time of the root gate of the graph.
-  ///
-  /// @returns true if the subgraph within the graph visit times.
-  bool IsSubgraphWithinGraph(const IGatePtr& root, int enter_time,
-                             int exit_time) noexcept {
-    assert(enter_time > 0);
-    assert(exit_time > enter_time);
-    assert(root->min_time() > 0);
-    assert(root->max_time() > root->min_time());
-    return root->min_time() > enter_time && root->max_time() < exit_time;
-  }
-
   /// Determines modules from original gates
   /// that have been already timed.
   /// This function can also create new modules from the existing graph.
@@ -867,7 +832,7 @@ class Preprocessor {
   /// @tparam N  Non-Node, concrete (i.e. IGate, etc.) type.
   ///
   /// @param[in] common_node  A node with more than one parent.
-  template<class N>
+  template<typename N>
   void ProcessCommonNode(const std::weak_ptr<N>& common_node) noexcept;
 
   /// Marks ancestor gates true.
@@ -876,6 +841,8 @@ class Preprocessor {
   ///
   /// @param[in] node  The child node.
   /// @param[out] module  The root module gate ancestor.
+  ///
+  /// @pre Gate marks are clear.
   ///
   /// @warning Since very specific branches are marked 'true',
   ///          cleanup must be performed after/with the use of the ancestors.
@@ -893,9 +860,11 @@ class Preprocessor {
   ///
   /// @returns Total multiplicity of the node.
   ///
-  /// @note The optimization value of the main common node must be 1.
-  /// @note The marks of ancestor gates must be 'true'.
-  ///       This function will reset all of them to 'false'.
+  /// @pre The optimization value of the main common node is 1.
+  /// @pre The marks of ancestor gates are 'true'.
+  ///
+  /// @post The marks of all ancestor gates are reset to 'false'.
+  /// @post All ancestor gates are marked with the descendant index.
   int PropagateFailure(const IGatePtr& gate, const NodePtr& node) noexcept;
 
   /// Determines if a gate fails due to failed/succeeded arguments.
@@ -963,10 +932,20 @@ class Preprocessor {
   ///
   /// @warning This function will replace the root gate of the graph
   ///          if it is the failure destination.
-  template<class N>
+  template<typename N>
   void ProcessFailureDestinations(
       const std::shared_ptr<N>& node,
       const std::map<int, IGateWeakPtr>& destinations) noexcept;
+
+  /// Clears all the ancestor marks used in Boolean optimization steps.
+  ///
+  /// @param[in] gate  The top ancestor of the common node.
+  ///
+  /// @pre All ancestor gates are marked with the descendant index.
+  /// @pre The common node itself is not the ancestor.
+  ///
+  /// @warning The common node must be cleaned separately.
+  void ClearFailureMarks(const IGatePtr& gate) noexcept;
 
   /// The Shannon decomposition for common nodes in the Boolean graph.
   /// This procedure is also called "Constant Propagation",
@@ -1007,16 +986,20 @@ class Preprocessor {
       const std::weak_ptr<Node>& common_node) noexcept;
 
   /// Marks destinations for common node decomposition.
-  /// The optimization value of the ancestors of the common node
+  /// The optimization value of some ancestors of the common node
   /// is marked with the index of the common node.
+  /// Parents of the common node may not get marked
+  /// unless they are parents of parents.
   ///
   /// @param[in] parent  The parent or ancestor of the common node.
   /// @param[in] index  The positive index of the common node.
   ///
-  /// @warning The gate optimization value fields are changed.
-  ///          It is expected that no ancestor gate has the specific opti-value
-  ///          before the call of this function.
-  ///          Otherwise, the logic of the algorithm is messed up and invalid.
+  /// @pre No ancestor gate has 'dirty' opti-value with the index
+  ///      before the call of this function.
+  ///      Otherwise, the logic of the algorithm is messed up and invalid.
+  /// @pre Marking is limited by a single root module.
+  ///
+  /// @post The ancestor gate optimization values are set to the index.
   void MarkDecompositionDestinations(const IGatePtr& parent,
                                      int index) noexcept;
 
@@ -1091,6 +1074,7 @@ class Preprocessor {
 
   BooleanGraph* graph_;  ///< The Boolean graph to preprocess.
   int root_sign_;  ///< The negative or positive sign of the root node.
+  bool constant_graph_;  ///< Graph is constant due to constant events.
   /// Container for constant gates to be tracked and cleaned by algorithms.
   /// These constant gates are created
   /// because of complement or constant descendants.
@@ -1102,12 +1086,12 @@ class Preprocessor {
 
 /// @class CustomPreprocessor
 ///
-/// @tparam Algorithm The target algorithm for the preprocessor.
+/// @tparam Algorithm  The target algorithm for the preprocessor.
 ///
-/// Abstract template class for specialization of Preprocessor
+/// Undefined template class for specialization of Preprocessor
 /// for needs of specific analysis algorithms.
 template<typename Algorithm>
-class CustomPreprocessor : public Preprocessor {};
+class CustomPreprocessor;
 
 class Mocus;
 
