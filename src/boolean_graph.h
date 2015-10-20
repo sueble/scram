@@ -104,11 +104,20 @@ class Node : public NodeParentManager {
 
   virtual ~Node() = 0;  ///< Abstract class.
 
+  /// Resets the starting index.
+  static void ResetIndex() { next_index_ = 1e6; }
+
   /// @returns The index of this node.
   int index() const { return index_; }
 
-  /// Resets the starting index.
-  static void ResetIndex() { next_index_ = 1e6; }
+  /// @returns Assigned order for this node.
+  int order() const { return order_; }
+
+  /// Sets the order number for this node.
+  /// The order is interpreted by the assigner.
+  ///
+  /// @param[in] val  Positive integer.
+  void order(int val) { order_ = val; }
 
   /// @returns Optimization value for failure propagation.
   int opti_value() const { return opti_value_; }
@@ -189,6 +198,7 @@ class Node : public NodeParentManager {
  private:
   static int next_index_;  ///< Automatic indexation of the next new node.
   int index_;  ///< Index of this node.
+  int order_;  ///< Ordering of nodes in the graph.
   int visits_[3];  ///< Traversal array with first, second, and last visits.
   int opti_value_;  ///< Failure propagation optimization value.
   int pos_count_;  ///< The number of occurrences as a positive node.
@@ -433,7 +443,7 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   /// @warning The function assumes that the argument exists.
   ///          If it doesn't, the return value is invalid.
   int GetArgSign(const NodePtr& arg) const noexcept {
-    assert(arg->parents().count(Node::index()));
+    assert(arg->parents().count(Node::index()) && "Invalid argument.");
     return args_.count(arg->index()) ? 1 : -1;
   }
 
@@ -551,6 +561,21 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   /// @param[in] index  Positive or negative index of the argument gate.
   void JoinNullGate(int index) noexcept;
 
+  /// Changes the state of a gate
+  /// or removes a constant argument.
+  /// The function determines its actions depending on
+  /// the type of a gate and state of an argument.
+  ///
+  /// @param[in] arg  The pointer the argument of this gate.
+  /// @param[in] state  False or True constant state of the argument.
+  ///
+  /// @note This is a helper function that propagates constants.
+  /// @note This function takes into account the sign of the index
+  ///       to properly assess the Boolean constant argument.
+  /// @note This function may change the state of the gate.
+  /// @note This function may change type and parameters of the gate.
+  void ProcessConstantArg(const NodePtr& arg, bool state) noexcept;
+
   /// Removes an argument from the arguments container.
   /// The passed argument index must be
   /// in this gate's arguments container and initialized.
@@ -617,11 +642,49 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
   /// @param[in] index  Positive or negative index of the argument.
   void ProcessComplementArg(int index) noexcept;
 
+  /// Processes Boolean constant argument with True value.
+  ///
+  /// @param[in] index  The positive or negative index of the argument.
+  ///
+  /// @note This is a helper function that propagates constants.
+  /// @note This function may change the state of the gate.
+  /// @note This function may change type and parameters of the gate.
+  void ProcessTrueArg(int index) noexcept;
+
+  /// Processes Boolean constant argument with False value.
+  ///
+  /// @param[in] index  The positive or negative index of the argument.
+  ///
+  /// @note This is a helper function that propagates constants.
+  /// @note This function may change the state of the gate.
+  /// @note This function may change type and parameters of the gate.
+  void ProcessFalseArg(int index) noexcept;
+
+  /// Removes Boolean constant arguments from a gate
+  /// taking into account the logic.
+  /// This is a helper function
+  /// for NULL and UNITY set or constant propagation for the graph.
+  /// If the final gate is empty,
+  /// its state is turned into NULL or UNITY
+  /// depending on the logic of the gate
+  /// and the logic of the Boolean constant propagation.
+  ///
+  /// @param[in] index  The positive or negative index of the argument.
+  ///
+  /// @note This is a helper function that propagates constants,
+  ///       so it is coupled with the logic of
+  ///       the constant propagation algorithms.
+  ///
+  /// @warning This function does not handle complex K/N gate parents.
+  ///          The logic is not simple for K/N gates,
+  ///          so it must be handled by the caller.
+  void RemoveConstantArg(int index) noexcept;
+
   Operator type_;  ///< Type of this gate.
   State state_;  ///< Indication if this gate's state is normal, null, or unity.
   int vote_number_;  ///< Vote number for ATLEAST gate.
   bool mark_;  ///< Marking for linear traversal of a graph.
-  int descendant_;  //< Mark by descendant indices.
+  int descendant_;  ///< Mark by descendant indices.
   int min_time_;  ///< Minimum time of visits of the sub-graph of the gate.
   int max_time_;  ///< Maximum time of visits of the sub-graph of the gate.
   bool module_;  ///< Indication of an independent module gate.
@@ -701,7 +764,6 @@ class HouseEvent;
 class Gate;
 class Formula;
 class Preprocessor;
-class Bdd;
 
 /// @class BooleanGraph
 /// BooleanGraph is a propositional directed acyclic graph (PDAG).
@@ -921,6 +983,34 @@ class BooleanGraph {
   ///
   /// @note Gate marks are used for linear time traversal.
   void ClearNodeCounts(const IGatePtr& gate) noexcept;
+
+  /// Clears descendant indices of all gates in the graph.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearDescendantMarks() noexcept;
+
+  /// Clears descendant marks of gates.
+  ///
+  /// @param[in,out] gate  The root gate to be traversed and cleaned.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearDescendantMarks(const IGatePtr& gate) noexcept;
+
+  /// Clears ordering marks of nodes in the graph.
+  ///
+  /// @post Node order marks are set to 0.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeOrders() noexcept;
+
+  /// Clears ordering marks of descendant nodes of a gate.
+  ///
+  /// @param[in,out] gate  The root gate to be traversed and cleaned.
+  ///
+  /// @post The root and descendant node order marks are set to 0.
+  ///
+  /// @note Gate marks are used for linear time traversal.
+  void ClearNodeOrders(const IGatePtr& gate) noexcept;
 
   IGatePtr root_;  ///< The root gate of this graph.
   std::vector<BasicEventPtr> basic_events_;  ///< Mapping for basic events.

@@ -187,63 +187,6 @@ class Preprocessor {
   ///       to clean the results of the propagation.
   void PropagateConstant(const ConstantPtr& constant) noexcept;
 
-  /// Changes the state of a gate
-  /// or removes a constant argument.
-  /// The function determines its actions depending on
-  /// the type of a gate and state of an argument.
-  ///
-  /// @param[in,out] gate  The parent gate that contains the arguments.
-  /// @param[in] arg  The positive or negative index of the argument.
-  /// @param[in] state  False or True constant state of the argument.
-  ///
-  /// @note This is a helper function that propagates constants.
-  /// @note This function takes into account the sign of the index
-  ///       to properly assess the Boolean constant argument.
-  /// @note This function may change the state of the gate.
-  /// @note This function may change type and parameters of the gate.
-  void ProcessConstantArg(const IGatePtr& gate, int arg, bool state) noexcept;
-
-  /// Processes Boolean constant argument with True value.
-  ///
-  /// @param[in,out] gate  The parent gate that contains the arguments.
-  /// @param[in] arg  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants.
-  /// @note This function may change the state of the gate.
-  /// @note This function may change type and parameters of the gate.
-  void ProcessTrueArg(const IGatePtr& gate, int arg) noexcept;
-
-  /// Processes Boolean constant argument with False value.
-  ///
-  /// @param[in,out] gate  The parent gate that contains the arguments.
-  /// @param[in] arg  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants.
-  /// @note This function may change the state of the gate.
-  /// @note This function may change type and parameters of the gate.
-  void ProcessFalseArg(const IGatePtr& gate, int arg) noexcept;
-
-  /// Removes Boolean constant arguments from a gate
-  /// taking into account the logic.
-  /// This is a helper function
-  /// for NULL and UNITY set or constant propagation for the graph.
-  /// If the final gate is empty,
-  /// its state is turned into NULL or UNITY
-  /// depending on the logic of the gate
-  /// and the logic of the Boolean constant propagation.
-  ///
-  /// @param[in,out] gate  The gate that contains the arguments to be removed.
-  /// @param[in] arg  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants,
-  ///       so it is coupled with the logic of
-  ///       the constant propagation algorithms.
-  ///
-  /// @warning This function does not handle complex K/N gate parents.
-  ///          The logic is not simple for K/N gates,
-  ///          so it must be handled by the caller.
-  void RemoveConstantArg(const IGatePtr& gate, int arg) noexcept;
-
   /// Propagates constant gates bottom-up.
   /// This is a helper function for algorithms
   /// that may produce and need to remove constant gates.
@@ -257,7 +200,7 @@ class Preprocessor {
   /// @warning All parents of the gate will be removed,
   ///          so the gate itself may get deleted
   ///          unless it is the top gate.
-  void PropagateConstGate(const IGatePtr& gate) noexcept;
+  void PropagateConstant(const IGatePtr& gate) noexcept;
 
   /// Propagate NULL type gates bottom-up.
   /// This is a helper function for algorithms
@@ -302,7 +245,7 @@ class Preprocessor {
   ///
   /// @warning The root get may still be NULL type.
   /// @warning Gate marks are used.
-  /// @warning Optimization values are used.
+  /// @warning Node ordering may be used for full normalization.
   /// @warning Node visit information is used.
   void NormalizeGates(bool full) noexcept;
 
@@ -356,11 +299,12 @@ class Preprocessor {
   /// to other preprocessing and analysis techniques
   /// than the alternative,
   /// which is OR of AND gates of combinations.
+  /// Normalization of K/N gates is aware of variable ordering.
   ///
   /// @param[in,out] gate  The ATLEAST gate to normalize.
   ///
-  /// @note This is a helper function for NormalizeGate.
-  /// @note Normalization of K/N gates is aware of variable ordering.
+  /// @pre Variable ordering is assigned to arguments.
+  /// @pre This helper function is called from NormalizeGate.
   void NormalizeAtleastGate(const IGatePtr& gate) noexcept;
 
   /// Propagates complements of argument gates down to leafs
@@ -850,60 +794,56 @@ class Preprocessor {
   ///          the default global contract of clean marks will be broken.
   void MarkAncestors(const NodePtr& node, IGatePtr* module) noexcept;
 
-  /// Propagates failure of a common node
-  /// by setting its ancestors' optimization values to 1
-  /// if they fail according to their Boolean logic.
-  /// The failure of an argument is similar to propagating constant TRUE.
+  /// Propagates failure or success of a common node
+  /// by setting its ancestors' optimization values to 1 or -1
+  /// if they fail or succeed according to their Boolean logic.
+  /// The failure of an argument is similar to propagating constant TRUE/1.
+  /// The success of an argument is similar to propagating constant FALSE/-1.
   ///
-  /// @param[in,out] gate  The ancestor gate that may fail.
+  /// @param[in,out] gate  The root gate under consideration.
   /// @param[in] node  The node that is the source of failure.
   ///
   /// @returns Total multiplicity of the node.
   ///
-  /// @pre The optimization value of the main common node is 1.
+  /// @pre The optimization value of the main common node is 1 or -1.
   /// @pre The marks of ancestor gates are 'true'.
   ///
   /// @post The marks of all ancestor gates are reset to 'false'.
   /// @post All ancestor gates are marked with the descendant index.
-  int PropagateFailure(const IGatePtr& gate, const NodePtr& node) noexcept;
+  int PropagateState(const IGatePtr& gate, const NodePtr& node) noexcept;
 
-  /// Determines if a gate fails due to failed/succeeded arguments.
+  /// Determines if a gate fails or succeeds
+  /// due to failed/succeeded arguments.
   /// If gates fails, its optimization value is set to 1.
-  /// If it doesn't, its optimization value is -1;
+  /// If it succeeds, its optimization value is -1.
+  /// If the state is indeterminate, the optimization value is 0.
   ///
-  /// @param[in,out] gate  The ancestor gate that may fail.
-  /// @param[in] num_failure  The number of failure (TRUE) arguments.
-  /// @param[in] num_success  The number of success (FALSE) arguments.
-  void DetermineGateFailure(const IGatePtr& gate, int num_failure,
-                            int num_success) noexcept;
+  /// @param[in,out] gate  The gate with the arguments.
+  /// @param[in] num_failure  The number of failure (TRUE/1) arguments.
+  /// @param[in] num_success  The number of success (FALSE/-1) arguments.
+  void DetermineGateState(const IGatePtr& gate, int num_failure,
+                          int num_success) noexcept;
 
-  /// Collects failure destinations
+  /// Collects failure or success destinations
   /// and marks non-redundant nodes.
   /// The optimization value for non-redundant gates are set to 2.
   ///
   /// @param[in] gate  The non-failed gate which sub-graph is to be traversed.
-  /// @param[in] index  The index of the main failure-source common node.
+  /// @param[in] index  The index of the main state-source common node.
   /// @param[in,out] destinations  Destinations of the failure.
   ///
   /// @returns The number of encounters with the destinations.
-  int CollectFailureDestinations(
+  int CollectStateDestinations(
       const IGatePtr& gate,
       int index,
       std::map<int, IGateWeakPtr>* destinations) noexcept;
 
   /// Detects if parents of a node are redundant.
-  /// If there are redundant parents,
-  /// depending on the logic of the parent,
-  /// the node is removed from the parent
-  /// unless it is also in the destination set with specific logic.
-  /// In the latter case, the parent is removed from the destinations.
   ///
   /// @param[in] node  The common node.
-  /// @param[in,out] destinations  A set of destination gates.
   /// @param[out] redundant_parents  A set of redundant parents.
   void CollectRedundantParents(
       const NodePtr& node,
-      std::map<int, IGateWeakPtr>* destinations,
       std::vector<IGateWeakPtr>* redundant_parents) noexcept;
 
   /// Detects if parents of a node are redundant.
@@ -922,18 +862,18 @@ class Preprocessor {
       const NodePtr& node,
       const std::vector<IGateWeakPtr>& redundant_parents) noexcept;
 
-  /// Transforms failure destination
+  /// Transforms failure or success destination
   /// according to the logic and the common node.
   ///
   /// @tparam N  Non-Node, concrete (i.e. IGate, etc.) type.
   ///
   /// @param[in] node  The common node.
-  /// @param[in] destinations  Destination gates for failure.
+  /// @param[in] destinations  Destination gates for the state.
   ///
   /// @warning This function will replace the root gate of the graph
-  ///          if it is the failure destination.
+  ///          if it is the destination.
   template<typename N>
-  void ProcessFailureDestinations(
+  void ProcessStateDestinations(
       const std::shared_ptr<N>& node,
       const std::map<int, IGateWeakPtr>& destinations) noexcept;
 
@@ -945,7 +885,7 @@ class Preprocessor {
   /// @pre The common node itself is not the ancestor.
   ///
   /// @warning The common node must be cleaned separately.
-  void ClearFailureMarks(const IGatePtr& gate) noexcept;
+  void ClearStateMarks(const IGatePtr& gate) noexcept;
 
   /// The Shannon decomposition for common nodes in the Boolean graph.
   /// This procedure is also called "Constant Propagation",
@@ -965,82 +905,82 @@ class Preprocessor {
   ///       which may increase the size of the graph
   ///       and complicate application and performance of other algorithms.
   ///
-  /// @warning Gate optimization values are used.
+  /// @warning Gate descendant marks are used.
   /// @warning Node visit information is used.
   /// @warning Gate marks are used.
   bool DecomposeCommonNodes() noexcept;
 
-  /// Processes common nodes in decomposition setups.
-  /// This function only works with DecomposeCommonNodes()
-  /// because it requires a specific setup of
-  /// optimization values and visit information of nodes.
-  /// These setups are assumed
-  /// to be provided by the DecomposeCommonNodes().
-  ///
-  /// @param[in] common_node  The common node.
-  ///
-  /// @returns true if the decomposition setups are found and processed.
-  ///
-  /// @warning Gate optimization values are manipulated.
-  bool ProcessDecompositionCommonNode(
-      const std::weak_ptr<Node>& common_node) noexcept;
+  /// @class DecompositionProcessor
+  /// Functor for processing of decomposition setups with common nodes.
+  class DecompositionProcessor {
+   public:
+    /// Launches the processing of decomposition setups in preprocessing.
+    /// Processes common nodes in decomposition setups.
+    /// This function only works with DecomposeCommonNodes()
+    /// because it requires a specific setup of
+    /// descendant marks and visit information of nodes.
+    /// These setups are assumed
+    /// to be provided by the DecomposeCommonNodes().
+    ///
+    /// @param[in,out] common_node  Common node to be processed.
+    /// @param[in,out] preprocessor  The host preprocessor with state.
+    ///
+    /// @returns true if the decomposition setups are found and processed.
+    bool operator()(const std::weak_ptr<Node>& common_node,
+                    Preprocessor* preprocessor) noexcept;
 
-  /// Marks destinations for common node decomposition.
-  /// The optimization value of some ancestors of the common node
-  /// is marked with the index of the common node.
-  /// Parents of the common node may not get marked
-  /// unless they are parents of parents.
-  ///
-  /// @param[in] parent  The parent or ancestor of the common node.
-  /// @param[in] index  The positive index of the common node.
-  ///
-  /// @pre No ancestor gate has 'dirty' opti-value with the index
-  ///      before the call of this function.
-  ///      Otherwise, the logic of the algorithm is messed up and invalid.
-  /// @pre Marking is limited by a single root module.
-  ///
-  /// @post The ancestor gate optimization values are set to the index.
-  void MarkDecompositionDestinations(const IGatePtr& parent,
-                                     int index) noexcept;
+   private:
+    /// Marks destinations for common node decomposition.
+    /// The descendant mark of some ancestors of the common node
+    /// is set to the index of the common node.
+    /// Parents of the common node may not get marked
+    /// unless they are parents of parents.
+    ///
+    /// @param[in] parent  The parent or ancestor of the common node.
+    ///
+    /// @pre No ancestor gate has 'dirty' descendant marks with the index
+    ///      before the call of this function.
+    ///      Otherwise, the logic of the algorithm is messed up and invalid.
+    /// @pre Marking is limited by a single root module.
+    ///
+    /// @post The ancestor gate descendant marks are set to the index.
+    void MarkDestinations(const IGatePtr& parent) noexcept;
 
-  /// Processes decomposition destinations
-  /// with the decomposition setups.
-  ///
-  /// @param[in] node  The common node under consideration.
-  /// @param[in] dest  The set of destination parents.
-  ///
-  /// @returns true if the graph is changed by processing.
-  ///
-  /// @warning Gate marks are used to traverse subgraphs in linear time.
-  /// @warning Gate optimization values are used to detect ancestor.
-  /// @warning Gate visit time information is used to detect shared nodes.
-  bool ProcessDecompositionDestinations(
-      const NodePtr& node,
-      const std::vector<IGateWeakPtr>& dest) noexcept;
+    /// Processes decomposition destinations
+    /// with the decomposition setups.
+    ///
+    /// @param[in] dest  The set of destination parents.
+    ///
+    /// @returns true if the graph is changed by processing.
+    ///
+    /// @warning Gate marks are used to traverse subgraphs in linear time.
+    /// @warning Gate descendant marks are used to detect ancestor.
+    /// @warning Gate visit time information is used to detect shared nodes.
+    bool ProcessDestinations(const std::vector<IGateWeakPtr>& dest) noexcept;
 
-  /// Processes decomposition ancestors
-  /// in the link to the decomposition destinations.
-  /// Common node's parents shared outside of the subgraph
-  /// may get cloned to not mess the whole graph.
-  ///
-  /// @param[in] ancestor  The parent or ancestor of the common node.
-  /// @param[in] node  The common node under consideration.
-  /// @param[in] state  The constant state to be propagated.
-  /// @param[in] visit_bounds  The main graph's visit enter and exit times.
-  /// @param[in,out] clones  Clones of common parents in the subgraph.
-  ///
-  /// @returns true if the parent is reached and processed.
-  ///
-  /// @warning Gate marks are used to traverse subgraphs in linear time.
-  ///          Gate marks must be clear for the subgraph for the first call.
-  /// @warning Gate optimization values are used to detect ancestor.
-  /// @warning Gate visit time information is used to detect shared nodes.
-  bool ProcessDecompositionAncestors(
-      const IGatePtr& ancestor,
-      const NodePtr& node,
-      bool state,
-      const std::pair<int, int>& visit_bounds,
-      std::unordered_map<int, IGatePtr>* clones) noexcept;
+    /// Processes decomposition ancestors
+    /// in the link to the decomposition destinations.
+    /// Common node's parents shared outside of the subgraph
+    /// may get cloned not to mess the whole graph.
+    ///
+    /// @param[in] ancestor  The parent or ancestor of the common node.
+    /// @param[in] state  The constant state to be propagated.
+    /// @param[in] visit_bounds  The main graph's visit enter and exit times.
+    ///
+    /// @returns true if the parent is reached and processed.
+    ///
+    /// @warning Gate marks are used to traverse subgraphs in linear time.
+    ///          Gate marks must be clear for the subgraph for the first call.
+    /// @warning Gate descendant marks are used to detect ancestors.
+    /// @warning Gate visit time information is used to detect shared nodes.
+    bool ProcessAncestors(const IGatePtr& ancestor, bool state,
+                          const std::pair<int, int>& visit_bounds) noexcept;
+
+    std::shared_ptr<Node> node_;  ///< The common node to process.
+    Preprocessor* preprocessor_;  ///< The host preprocessor.
+    std::unordered_map<int, IGatePtr> clones_true_;  ///< True state clones.
+    std::unordered_map<int, IGatePtr> clones_false_;  ///< False state clones.
+  };
 
   /// Replaces one gate in the graph with another.
   ///
@@ -1056,20 +996,22 @@ class Preprocessor {
 
   /// Assigns order for Boolean graph variables.
   ///
-  /// @note Optimization values are used for ordering.
+  /// @pre Old node order marks are allowed to get cleaned.
+  ///
+  /// @post Node order marks contain the ordering.
   void AssignOrder() noexcept;
 
   /// Assigns topological ordering to nodes of the Boolean Graph.
-  /// The ordering is assigned to the optimization value of the nodes.
+  /// The ordering is assigned to the node order marks.
   /// The nodes are sorted in descending optimization value.
-  /// The highest optimization value belongs to the root.
+  /// The highest order value belongs to the root.
   ///
   /// @param[in] root  The root or current parent gate of the graph.
   /// @param[in] order  The current order value.
   ///
   /// @returns The final order value.
   ///
-  /// @note Optimization values must be clear before the assignment.
+  /// @post The root and descendant node order marks contain the ordering.
   int TopologicalOrder(const IGatePtr& root, int order) noexcept;
 
   BooleanGraph* graph_;  ///< The Boolean graph to preprocess.

@@ -41,6 +41,7 @@ Node::Node() noexcept : Node::Node(next_index_++) {}
 
 Node::Node(int index) noexcept
     : index_(index),
+      order_(0),
       opti_value_(0),
       pos_count_(0),
       neg_count_(0) {
@@ -222,6 +223,89 @@ void IGate::JoinNullGate(int index) noexcept {
     assert(!null_gate->constant_args_.empty());
     IGate::AddArg(arg_index, null_gate->constant_args_.begin()->second);
   }
+}
+
+void IGate::ProcessConstantArg(const NodePtr& arg, bool state) noexcept {
+  int index = IGate::GetArgSign(arg) * arg->index();
+  if (index < 0) state = !state;
+  if (state) {  // Unity state or True index.
+    IGate::ProcessTrueArg(index);
+  } else {  // Null state or False index.
+    IGate::ProcessFalseArg(index);
+  }
+}
+
+void IGate::ProcessTrueArg(int index) noexcept {
+  switch (type_) {
+    case kNullGate:
+    case kOrGate:
+      IGate::MakeUnity();
+      break;
+    case kNandGate:
+    case kAndGate:
+      IGate::RemoveConstantArg(index);
+      break;
+    case kNorGate:
+    case kNotGate:
+      IGate::Nullify();
+      break;
+    case kXorGate:  // Special handling due to its internal negation.
+      assert(args_.size() == 2);
+      IGate::EraseArg(index);
+      assert(args_.size() == 1);
+      type_ = kNotGate;
+      break;
+    case kAtleastGate:  // (K - 1) / (N - 1).
+      assert(args_.size() > 2);
+      IGate::EraseArg(index);
+      assert(vote_number_ > 0);
+      --vote_number_;
+      if (vote_number_ == 1) type_ = kOrGate;
+      break;
+  }
+}
+
+void IGate::ProcessFalseArg(int index) noexcept {
+  switch (type_) {
+    case kNorGate:
+    case kXorGate:
+    case kOrGate:
+      IGate::RemoveConstantArg(index);
+      break;
+    case kNullGate:
+    case kAndGate:
+      IGate::Nullify();
+      break;
+    case kNandGate:
+    case kNotGate:
+      IGate::MakeUnity();
+      break;
+    case kAtleastGate:  // K / (N - 1).
+      assert(args_.size() > 2);
+      IGate::EraseArg(index);
+      if (vote_number_ == args_.size()) type_ = kAndGate;
+      break;
+  }
+}
+
+void IGate::RemoveConstantArg(int index) noexcept {
+  assert(args_.size() > 1 && "One-arg gate must have become constant.");
+  IGate::EraseArg(index);
+  if (args_.size() == 1) {
+    switch (type_) {
+      case kXorGate:
+      case kOrGate:
+      case kAndGate:
+        type_ = kNullGate;
+        break;
+      case kNorGate:
+      case kNandGate:
+        type_ = kNotGate;
+        break;
+      default:
+        assert(false && "NULL/NOT one-arg gates should not appear.");
+    }
+  }  // More complex cases with K/N gates are handled by the caller functions.
 }
 
 void IGate::EraseArg(int index) noexcept {
@@ -574,6 +658,44 @@ void BooleanGraph::ClearNodeCounts(const IGatePtr& gate) noexcept {
   }
   for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
     arg.second->ResetCount();
+  }
+  assert(gate->constant_args().empty());
+}
+
+void BooleanGraph::ClearDescendantMarks() noexcept {
+  LOG(DEBUG5) << "Clearing gate descendant marks...";
+  BooleanGraph::ClearGateMarks();
+  BooleanGraph::ClearDescendantMarks(root_);
+  BooleanGraph::ClearGateMarks();
+  LOG(DEBUG5) << "Descendant marks are clear!";
+}
+
+void BooleanGraph::ClearDescendantMarks(const IGatePtr& gate) noexcept {
+  if (gate->mark()) return;
+  gate->mark(true);
+  gate->descendant(0);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearDescendantMarks(arg.second);
+  }
+}
+
+void BooleanGraph::ClearNodeOrders() noexcept {
+  LOG(DEBUG5) << "Clearing node order marks...";
+  BooleanGraph::ClearGateMarks();
+  BooleanGraph::ClearNodeOrders(root_);
+  BooleanGraph::ClearGateMarks();
+  LOG(DEBUG5) << "Node order marks are clear!";
+}
+
+void BooleanGraph::ClearNodeOrders(const IGatePtr& gate) noexcept {
+  if (gate->mark()) return;
+  gate->mark(true);
+  if (gate->order()) gate->order(0);
+  for (const std::pair<int, IGatePtr>& arg : gate->gate_args()) {
+    BooleanGraph::ClearNodeOrders(arg.second);
+  }
+  for (const std::pair<int, VariablePtr>& arg : gate->variable_args()) {
+    if (arg.second->order()) arg.second->order(0);
   }
   assert(gate->constant_args().empty());
 }
