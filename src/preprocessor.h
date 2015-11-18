@@ -336,7 +336,6 @@ class Preprocessor {
   ///                    These gates may be important for other algorithms.
   ///
   /// @returns true if the graph has been changed.
-  /// @returns false if no change has been made.
   ///
   /// @note Module gates are omitted from coalescing to preserve them.
   ///
@@ -1072,6 +1071,17 @@ class CustomPreprocessor<Bdd> : public Preprocessor {
   /// Performs preprocessing for analyses with Binary Decision Diagrams.
   /// This preprocessing assigns the order for variables for BDD construction.
   void Run() noexcept override;
+};
+
+class Zbdd;
+
+/// @class CustomPreprocessor<Zbdd>
+/// Specialization of preprocessing for ZBDD based analyses.
+template<>
+class CustomPreprocessor<Zbdd> : public CustomPreprocessor<Bdd> {
+ public:
+  /// Constructor with a Boolean graph.
+  using CustomPreprocessor<Bdd>::CustomPreprocessor;
 };
 
 }  // namespace scram

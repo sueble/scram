@@ -213,12 +213,12 @@ class Ite : public NonTerminal, public ComplementEdge {
   using NonTerminal::NonTerminal;  ///< Constructor with index and order.
 
   /// @returns The probability of the function graph.
-  double prob() const { return prob_; }
+  double p() const { return p_; }
 
   /// Sets the probability of the function graph.
   ///
   /// @param[in] value  Calculated value for the probability.
-  void prob(double value) { prob_ = value; }
+  void p(double value) { p_ = value; }
 
   /// @returns Saved results of importance factor calculations.
   double factor() const { return factor_; }
@@ -238,7 +238,7 @@ class Ite : public NonTerminal, public ComplementEdge {
   }
 
  private:
-  double prob_ = 0;  ///< Probability of the function graph.
+  double p_ = 0;  ///< Probability of the function graph.
   double factor_ = 0;  ///< Importance factor calculation results.
 };
 
@@ -422,7 +422,7 @@ class Bdd {
   Function Apply(Operator type, const VertexPtr& single_arg,
                  bool complement_one, bool complement_two) noexcept;
 
-  /// Applies Boolean operation to BDD graph non-terminal verteices.
+  /// Applies Boolean operation to BDD graph non-terminal vertices.
   ///
   /// @param[in] type  The operator or type of the gate.
   /// @param[in] arg_one  First argument if-then-else vertex.
@@ -433,8 +433,6 @@ class Bdd {
   /// @returns High and Low BDD functions as a result of operation.
   ///
   /// @pre Argument if-then-else vertices must be ordered.
-  ///
-  /// @note The order of arguments does not matter for two variable operators.
   std::pair<Function, Function> Apply(Operator type,
                                       const ItePtr& arg_one,
                                       const ItePtr& arg_two,
@@ -479,7 +477,6 @@ class Bdd {
   /// @note Marks will propagate to modules as well.
   void ClearMarks(const VertexPtr& vertex, bool mark) noexcept;
 
-  const BooleanGraph* fault_tree_;  ///< The main fault tree.
   const Settings kSettings_;  ///< Analysis settings.
   Function root_;  ///< The root function of this BDD.
 

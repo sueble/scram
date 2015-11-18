@@ -106,6 +106,18 @@ TEST_F(RiskAnalysisTest, AnalyzeDefaultBdd) {
   EXPECT_EQ(mcs, min_cut_sets());
 }
 
+TEST_F(RiskAnalysisTest, AnalyzeDefaultZbdd) {
+  std::string tree_input = "./share/scram/input/fta/correct_tree_input.xml";
+  settings.algorithm("zbdd");
+  ASSERT_NO_THROW(ProcessInputFile(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  std::set<std::set<std::string>> mcs = {{"pumpone", "pumptwo"},
+                                         {"pumpone", "valvetwo"},
+                                         {"pumptwo", "valveone"},
+                                         {"valveone", "valvetwo"}};
+  EXPECT_EQ(mcs, min_cut_sets());
+}
+
 TEST_F(RiskAnalysisTest, AnalyzeWithProbability) {
   std::string with_prob =
       "./share/scram/input/fta/correct_tree_input_with_probs.xml";
@@ -288,8 +300,8 @@ TEST_F(RiskAnalysisTest, ReportDefaultMCS) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -309,8 +321,29 @@ TEST_F(RiskAnalysisTest, ReportDefaultBdd) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
+  ASSERT_NO_THROW(parser->Validate(schema));
+}
+
+TEST_F(RiskAnalysisTest, ReportDefaultZbdd) {
+  std::string tree_input = "./share/scram/input/fta/correct_tree_input.xml";
+
+  std::stringstream schema;
+  std::string schema_path = Env::report_schema();
+  std::ifstream schema_stream(schema_path.c_str());
+  schema << schema_stream.rdbuf();
+  schema_stream.close();
+
+  settings.algorithm("zbdd");
+  ASSERT_NO_THROW(ProcessInputFile(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+
+  std::stringstream output;
+  ASSERT_NO_THROW(ran->Report(output));
+
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -332,8 +365,8 @@ TEST_F(RiskAnalysisTest, ReportProbability) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -355,8 +388,8 @@ TEST_F(RiskAnalysisTest, ReportImportanceFactors) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -378,8 +411,8 @@ TEST_F(RiskAnalysisTest, ReportUncertaintyResults) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -400,8 +433,8 @@ TEST_F(RiskAnalysisTest, ReportCCF) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -422,8 +455,8 @@ TEST_F(RiskAnalysisTest, ReportNegativeEvent) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -446,8 +479,8 @@ TEST_F(RiskAnalysisTest, ReportAll) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -467,8 +500,8 @@ TEST_F(RiskAnalysisTest, ReportRoles) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -488,8 +521,8 @@ TEST_F(RiskAnalysisTest, ReportOrphanPrimaryEvents) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 
@@ -509,8 +542,8 @@ TEST_F(RiskAnalysisTest, ReportUnusedParameters) {
   std::stringstream output;
   ASSERT_NO_THROW(ran->Report(output));
 
-  std::unique_ptr<XMLParser> parser;
-  ASSERT_NO_THROW(parser = std::unique_ptr<XMLParser>(new XMLParser(output)));
+  std::unique_ptr<XmlParser> parser;
+  ASSERT_NO_THROW(parser = std::unique_ptr<XmlParser>(new XmlParser(output)));
   ASSERT_NO_THROW(parser->Validate(schema));
 }
 

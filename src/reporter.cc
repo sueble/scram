@@ -98,12 +98,14 @@ void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
   xmlpp::Element* methods = information->add_child("calculation-method");
   if (settings.algorithm() == "bdd") {
     methods->set_attribute("name", "Binary Decision Diagram");
+  } else if (settings.algorithm() == "zbdd") {
+    methods->set_attribute("name", "Zero-Suppressed Binary Decision Diagram");
   } else {
     assert(settings.algorithm() == "mocus");
     methods->set_attribute("name", "MOCUS");
-    methods->add_child("limits")->add_child("number-of-basic-events")
-        ->add_child_text(ToString(settings.limit_order()));
   }
+  methods->add_child("limits")->add_child("number-of-basic-events")
+      ->add_child_text(ToString(settings.limit_order()));
 
   // Report the setup for CCF analysis.
   if (settings.ccf_analysis()) {
@@ -154,13 +156,13 @@ void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
 
   // Report the setup for optional uncertainty analysis.
   if (settings.uncertainty_analysis()) {
-    xmlpp::Element* quant = information->add_child("calculated-quantity");
+    quant = information->add_child("calculated-quantity");
     quant->set_attribute("name", "Uncertainty Analysis");
     quant->set_attribute(
         "definition",
         "Calculation of uncertainties with the Monte Carlo method");
 
-    xmlpp::Element* methods = information->add_child("calculation-method");
+    methods = information->add_child("calculation-method");
     methods->set_attribute("name", "Monte Carlo");
     xmlpp::Element* limits = methods->add_child("limits");
     limits->add_child("number-of-trials")

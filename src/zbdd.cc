@@ -42,8 +42,29 @@ Zbdd::Zbdd(const Bdd* bdd, const Settings& settings) noexcept
   LOG(DEBUG2) << "Created ZBDD from BDD in " << DUR(init_time);
 
   Zbdd::ClearMarks(root_);
-  int64_t number = Zbdd::CountCutSets(root_);
-  LOG(DEBUG3) << "There are " << number << " cut sets in total.";
+  LOG(DEBUG3) << "There are " << Zbdd::CountCutSets(root_) << " cut sets.";
+  Zbdd::ClearMarks(root_);
+}
+
+Zbdd::Zbdd(const BooleanGraph* fault_tree, const Settings& settings) noexcept
+    : Zbdd::Zbdd(settings) {
+  CLOCK(init_time);
+  LOG(DEBUG2) << "Creating ZBDD from Boolean Graph...";
+  if (fault_tree->root()->IsConstant()) {
+    if (fault_tree->root()->state() == kNullState) {
+      root_ = kEmpty_;
+    } else {
+      root_ = kBase_;
+    }
+  } else {
+    root_ = Zbdd::ConvertGraph(fault_tree->root());
+  }
+  LOG(DEBUG4) << "# of ZBDD nodes created: " << set_id_ - 1;
+  LOG(DEBUG4) << "# of SetNodes in ZBDD: " << Zbdd::CountSetNodes(root_);
+  LOG(DEBUG2) << "Created ZBDD from BDD in " << DUR(init_time);
+
+  Zbdd::ClearMarks(root_);
+  LOG(DEBUG3) << "There are " << Zbdd::CountCutSets(root_) << " cut sets.";
   Zbdd::ClearMarks(root_);
 }
 
@@ -110,6 +131,180 @@ std::shared_ptr<Vertex> Zbdd::ConvertBdd(const VertexPtr& vertex,
   }
   result = in_table;
   return result;
+}
+
+std::shared_ptr<Vertex> Zbdd::ConvertGraph(const IGatePtr& gate) noexcept {
+  assert(!gate->IsConstant() && "Unexpected constant gate!");
+  VertexPtr& result = gates_[gate->index()];
+  if (result) return result;
+  std::vector<VertexPtr> args;
+  for (const std::pair<const int, VariablePtr>& arg : gate->variable_args()) {
+    assert(arg.first > 0 && "Cannot handle non-coherent graphs.");
+    args.push_back(Zbdd::ConvertGraph(arg.second));
+  }
+  for (const std::pair<const int, IGatePtr>& arg : gate->gate_args()) {
+    assert(arg.first > 0 && "Cannot handle non-coherent graphs.");
+    VertexPtr res = Zbdd::ConvertGraph(arg.second);
+    if (arg.second->IsModule()) {
+      args.push_back(Zbdd::CreateModuleProxy(arg.second));
+      modules_.emplace(arg.second->index(), res);
+    } else {
+      args.push_back(res);
+    }
+  }
+  std::sort(args.begin(), args.end(),
+            [](const VertexPtr& lhs, const VertexPtr& rhs) {
+    if (lhs->terminal()) return true;
+    if (rhs->terminal()) return false;
+    return SetNode::Ptr(lhs)->order() > SetNode::Ptr(rhs)->order();
+  });
+  auto it = args.cbegin();
+  result = *it;
+  for (++it; it != args.cend(); ++it) {
+    result = Zbdd::Apply(gate->type(), result, *it);
+  }
+  assert(result);
+  return result;
+}
+
+std::shared_ptr<SetNode> Zbdd::ConvertGraph(
+    const VariablePtr& variable) noexcept {
+  SetNodePtr& in_table = unique_table_[{variable->index(), 1, 0}];
+  if (in_table) return in_table;
+  in_table = std::make_shared<SetNode>(variable->index(), variable->order());
+  in_table->id(set_id_++);
+  in_table->high(kBase_);
+  in_table->low(kEmpty_);
+  return in_table;
+}
+
+std::shared_ptr<SetNode> Zbdd::CreateModuleProxy(
+    const IGatePtr& gate) noexcept {
+  assert(gate->IsModule());
+  SetNodePtr& in_table = unique_table_[{gate->index(), 1, 0}];
+  if (in_table) return in_table;
+  in_table = std::make_shared<SetNode>(gate->index(), gate->order());
+  in_table->module(true);  // The main difference.
+  in_table->id(set_id_++);
+  in_table->high(kBase_);
+  in_table->low(kEmpty_);
+  return in_table;
+}
+
+std::shared_ptr<Vertex> Zbdd::Apply(Operator type, const VertexPtr& arg_one,
+                                    const VertexPtr& arg_two) noexcept {
+  if (arg_one->terminal() && arg_two->terminal())
+    return Zbdd::Apply(type, Terminal::Ptr(arg_one), Terminal::Ptr(arg_two));
+  if (arg_one->terminal())
+    return Zbdd::Apply(type, SetNode::Ptr(arg_two), Terminal::Ptr(arg_one));
+  if (arg_two->terminal())
+    return Zbdd::Apply(type, SetNode::Ptr(arg_one), Terminal::Ptr(arg_two));
+
+  if (arg_one->id() == arg_two->id()) return arg_one;
+
+  Triplet sig = Zbdd::GetSignature(type, arg_one, arg_two);
+  VertexPtr& result = compute_table_[sig];  // Register if not computed.
+  if (result) return result;  // Already computed.
+
+  SetNodePtr set_one = SetNode::Ptr(arg_one);
+  SetNodePtr set_two = SetNode::Ptr(arg_two);
+  if (set_one->order() > set_two->order()) std::swap(set_one, set_two);
+  result = Zbdd::Apply(type, set_one, set_two);
+  return result;
+}
+
+std::shared_ptr<Vertex> Zbdd::Apply(Operator type, const TerminalPtr& term_one,
+                                    const TerminalPtr& term_two) noexcept {
+  switch (type) {
+    case kOrGate:
+      if (term_one->value() || term_two->value()) return kBase_;
+      return kEmpty_;
+    case kAndGate:
+      if (!term_one->value() || !term_two->value()) return kEmpty_;
+      return kBase_;
+    default:
+      assert(false && "Unsupported Boolean operation on ZBDD.");
+  }
+}
+
+std::shared_ptr<Vertex> Zbdd::Apply(Operator type, const SetNodePtr& set_node,
+                                    const TerminalPtr& term) noexcept {
+  switch (type) {
+    case kOrGate:
+      if (term->value()) return kBase_;
+      return set_node;
+    case kAndGate:
+      if (!term->value()) return kEmpty_;
+      return set_node;
+    default:
+      assert(false && "Unsupported Boolean operation on ZBDD.");
+  }
+}
+
+std::shared_ptr<Vertex> Zbdd::Apply(Operator type, const SetNodePtr& arg_one,
+                                    const SetNodePtr& arg_two) noexcept {
+  VertexPtr high;
+  VertexPtr low;
+  if (arg_one->order() == arg_two->order()) {  // The same variable.
+    assert(arg_one->index() == arg_two->index());
+    switch (type) {
+      case kOrGate:
+        high = Zbdd::Apply(type, arg_one->high(), arg_two->high());
+        low = Zbdd::Apply(type, arg_one->low(), arg_two->low());
+        break;
+      case kAndGate:
+        // (x*f1 + f0) * (x*g1 + g0) = x*(f1*(g1 + g0) + f0*g1) + f0*g0
+        high = Zbdd::Apply(
+            kOrGate,
+            Zbdd::Apply(kAndGate, arg_one->high(),
+                        Zbdd::Apply(kOrGate, arg_two->high(), arg_two->low())),
+            Zbdd::Apply(kAndGate, arg_one->low(), arg_two->high()));
+        low = Zbdd::Apply(type, arg_one->low(), arg_two->low());
+        break;
+      default:
+        assert(false && "Unsupported Boolean operation on ZBDD.");
+    }
+  } else {
+    assert(arg_one->order() < arg_two->order());
+    switch (type) {
+      case kOrGate:
+        high = arg_one->high();
+        low = Zbdd::Apply(kOrGate, arg_one->low(), arg_two);
+        break;
+      case kAndGate:
+        high = Zbdd::Apply(kAndGate, arg_one->high(), arg_two);
+        low = Zbdd::Apply(kAndGate, arg_one->low(), arg_two);
+        break;
+      default:
+        assert(false && "Unsupported Boolean operation on ZBDD.");
+    }
+  }
+  if (high->id() == low->id()) return low;
+  if (high->terminal() && Terminal::Ptr(high)->value() == false) return low;
+
+  SetNodePtr& in_table =
+      unique_table_[{arg_one->index(), high->id(), low->id()}];
+  if (in_table) return in_table;
+  in_table = std::make_shared<SetNode>(arg_one->index(), arg_one->order());
+  in_table->module(arg_one->module());
+  in_table->high(high);
+  in_table->low(low);
+  in_table->id(set_id_++);
+  return in_table;
+}
+
+Triplet Zbdd::GetSignature(Operator type, const VertexPtr& arg_one,
+                           const VertexPtr& arg_two) noexcept {
+  int min_id = std::min(arg_one->id(), arg_two->id());
+  int max_id = std::max(arg_one->id(), arg_two->id());
+  switch (type) {
+    case kOrGate:
+      return {min_id, 1, max_id};
+    case kAndGate:
+      return {min_id, max_id, 0};
+    default:
+      assert(false && "Only Union and Intersection operations are supported!");
+  }
 }
 
 std::shared_ptr<Vertex> Zbdd::Minimize(const VertexPtr& vertex) noexcept {
