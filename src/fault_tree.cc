@@ -24,10 +24,8 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "ccf_group.h"
 #include "cycle.h"
 #include "error.h"
-#include "expression.h"
 
 namespace scram {
 
@@ -93,7 +91,7 @@ void Component::AddCcfGroup(const CcfGroupPtr& ccf_group) {
   ccf_groups_.emplace(name, ccf_group);
 }
 
-void Component::AddComponent(ComponentPtr component) {
+void Component::AddComponent(std::unique_ptr<Component> component) {
   std::string name = component->name();
   boost::to_lower(name);
   if (components_.count(name)) {

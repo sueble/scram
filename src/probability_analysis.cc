@@ -97,8 +97,7 @@ ProbabilityAnalyzer<Bdd>::~ProbabilityAnalyzer() noexcept {
   if (owner_) delete bdd_graph_;
 }
 
-void ProbabilityAnalyzer<Bdd>::CreateBdd(
-    const std::shared_ptr<Gate>& root) noexcept {
+void ProbabilityAnalyzer<Bdd>::CreateBdd(const GatePtr& root) noexcept {
   CLOCK(ft_creation);
   BooleanGraph* bool_graph = new BooleanGraph(root, kSettings_.ccf_analysis());
   LOG(DEBUG2) << "Boolean graph is created in " << DUR(ft_creation);
@@ -137,7 +136,7 @@ double ProbabilityAnalyzer<Bdd>::CalculateProbability(
   ite->mark(mark);
   double var_prob = 0;
   if (ite->module()) {
-    const Bdd::Function& res = bdd_graph_->gates().find(ite->index())->second;
+    const Bdd::Function& res = bdd_graph_->modules().find(ite->index())->second;
     var_prob = ProbabilityAnalyzer::CalculateProbability(res.vertex, mark);
     if (res.complement) var_prob = 1 - var_prob;
   } else {

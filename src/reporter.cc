@@ -90,10 +90,7 @@ void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
 
   // Report the setup for main minimal cut set analysis.
   xmlpp::Element* quant = information->add_child("calculated-quantity");
-  quant->set_attribute("name", "Minimal Cut Set Analysis");
-  quant->set_attribute(
-      "definition",
-      "Groups of events sufficient for a top event failure");
+  quant->set_attribute("name", "Minimal Cut Sets");
 
   xmlpp::Element* methods = information->add_child("calculation-method");
   if (settings.algorithm() == "bdd") {
@@ -109,10 +106,10 @@ void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
 
   // Report the setup for CCF analysis.
   if (settings.ccf_analysis()) {
-    xmlpp::Element* ccf_an = information->add_child("calculated-quantity");
-    ccf_an->set_attribute("name", "CCF Analysis");
-    ccf_an->set_attribute("definition",
-                          "Failure of multiple elements due to a common cause");
+    quant = information->add_child("calculated-quantity");
+    quant->set_attribute("name", "Common Cause Failure Analysis");
+    quant->set_attribute("definition",
+                         "Incorporation of common cause failure models");
   }
 
   // Report the setup for probability analysis.
@@ -150,8 +147,8 @@ void Reporter::SetupReport(const ModelPtr& model, const Settings& settings,
     quant = information->add_child("calculated-quantity");
     quant->set_attribute("name", "Importance Analysis");
     quant->set_attribute("definition",
-                         "Quantitative analysis of contributions and "\
-                         "importance of events.");
+                         "Quantitative analysis of contributions and "
+                         "importance factors of events.");
   }
 
   // Report the setup for optional uncertainty analysis.
@@ -208,7 +205,7 @@ void Reporter::ReportOrphanPrimaryEvents(
 }
 
 void Reporter::ReportUnusedParameters(
-    const std::vector<ParameterPtr>& unused_parameters,
+    const std::vector<std::shared_ptr<const Parameter>>& unused_parameters,
     xmlpp::Document* doc) {
   if (unused_parameters.empty()) return;
   std::string out = "WARNING! Unused Parameters: ";

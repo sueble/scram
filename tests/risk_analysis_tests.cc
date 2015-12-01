@@ -91,6 +91,7 @@ TEST_F(RiskAnalysisTest, AnalyzeDefault) {
                                          {"pumptwo", "valveone"},
                                          {"valveone", "valvetwo"}};
   EXPECT_EQ(mcs, min_cut_sets());
+  PrintCutSets();  // Quick visual verification and test.
 }
 
 // Test Analysis of Two train system.
@@ -115,6 +116,17 @@ TEST_F(RiskAnalysisTest, AnalyzeDefaultZbdd) {
                                          {"pumpone", "valvetwo"},
                                          {"pumptwo", "valveone"},
                                          {"valveone", "valvetwo"}};
+  EXPECT_EQ(mcs, min_cut_sets());
+}
+
+TEST_F(RiskAnalysisTest, AnalyzeNegZbdd) {
+  std::string tree_input = "./share/scram/input/fta/importance_neg_test.xml";
+  settings.algorithm("zbdd");
+  ASSERT_NO_THROW(ProcessInputFile(tree_input));
+  ASSERT_NO_THROW(ran->Analyze());
+  std::set<std::set<std::string>> mcs = {{"pumpone", "pumptwo"},
+                                         {"pumpone", "valvetwo"},
+                                         {"valveone"}};
   EXPECT_EQ(mcs, min_cut_sets());
 }
 

@@ -46,9 +46,13 @@
 
 #include <boost/functional/hash.hpp>
 
+#include "event.h"
+
 namespace scram {
 
 class IGate;  // Indexed gate parent of nodes.
+using IGatePtr = std::shared_ptr<IGate>;  ///< Shared gates in the graph.
+using IGateWeakPtr = std::weak_ptr<IGate>;  ///< Acyclic ptr to parent gates.
 
 /// @class NodeParentManager
 /// Manager of information about parents.
@@ -60,7 +64,7 @@ class NodeParentManager {
   virtual ~NodeParentManager() = 0;  ///< Abstract class.
 
   /// @returns Parents of a node.
-  const std::unordered_map<int, std::weak_ptr<IGate>>& parents() const {
+  const std::unordered_map<int, IGateWeakPtr>& parents() const {
     return parents_;
   }
 
@@ -68,7 +72,7 @@ class NodeParentManager {
   /// Adds a new parent of a node.
   ///
   /// @param[in] gate  Pointer to the parent gate.
-  void AddParent(const std::shared_ptr<IGate>& gate);
+  void AddParent(const IGatePtr& gate);
 
   /// Removes a parent from the node.
   ///
@@ -80,7 +84,7 @@ class NodeParentManager {
     parents_.erase(index);
   }
 
-  std::unordered_map<int, std::weak_ptr<IGate>> parents_;  ///< Parents.
+  std::unordered_map<int, IGateWeakPtr> parents_;  ///< Parents.
 };
 
 /// @class Node
@@ -245,6 +249,10 @@ class Variable : public Node {
   static int next_variable_;  ///< The next index for a new variable.
 };
 
+using NodePtr = std::shared_ptr<Node>;  ///< Shared base nodes in the graph.
+using ConstantPtr = std::shared_ptr<Constant>;  ///< Shared Boolean constants.
+using VariablePtr = std::shared_ptr<Variable>;  ///< Shared Boolean variables.
+
 /// @enum Operator
 /// Boolean operators of gates
 /// for representation, preprocessing, and analysis purposes.
@@ -290,11 +298,6 @@ enum State {
 /// before any complex analysis is done.
 class IGate : public Node, public std::enable_shared_from_this<IGate> {
  public:
-  using NodePtr = std::shared_ptr<Node>;
-  using ConstantPtr = std::shared_ptr<Constant>;
-  using VariablePtr = std::shared_ptr<Variable>;
-  using IGatePtr = std::shared_ptr<IGate>;
-
   /// Creates an indexed gate with its unique index.
   /// It is assumed that smart pointers are used to manage the graph,
   /// and one shared pointer exists for this gate
@@ -707,8 +710,6 @@ class IGate : public Node, public std::enable_shared_from_this<IGate> {
 /// for the isomorphism of the gates' Boolean formulas.
 class GateSet {
  public:
-  using IGatePtr = std::shared_ptr<IGate>;
-
   /// Inserts a gate into the set
   /// if it is semantically unique.
   ///
@@ -760,10 +761,6 @@ class GateSet {
   std::array<std::unordered_set<IGatePtr, Hash, Equal>, kNumOperators> table_;
 };
 
-class BasicEvent;
-class HouseEvent;
-class Gate;
-class Formula;
 class Preprocessor;
 
 /// @class BooleanGraph
@@ -789,10 +786,6 @@ class BooleanGraph {
   friend class Preprocessor;  ///< The main manipulator of Boolean graphs.
 
  public:
-  using GatePtr = std::shared_ptr<Gate>;
-  using BasicEventPtr = std::shared_ptr<BasicEvent>;
-  using IGatePtr = std::shared_ptr<IGate>;
-
   /// Constructs a BooleanGraph
   /// starting from the top gate of a fault tree.
   /// Upon construction,
@@ -845,12 +838,6 @@ class BooleanGraph {
   void Print();
 
  private:
-  using FormulaPtr = std::unique_ptr<Formula>;
-  using HouseEventPtr = std::shared_ptr<HouseEvent>;
-  using NodePtr = std::shared_ptr<Node>;
-  using ConstantPtr = std::shared_ptr<Constant>;
-  using VariablePtr = std::shared_ptr<Variable>;
-
   /// Mapping to string gate types to enum gate types.
   static const std::map<std::string, Operator> kStringToType_;
 
@@ -1098,8 +1085,7 @@ class BooleanGraph {
 /// @returns The provided output stream in its original state.
 ///
 /// @warning Visit information may get changed.
-std::ostream& operator<<(std::ostream& os,
-                         const std::shared_ptr<Constant>& constant);
+std::ostream& operator<<(std::ostream& os, const ConstantPtr& constant);
 
 /// Prints indexed variables as basic events in the shorthand format.
 ///
@@ -1109,8 +1095,7 @@ std::ostream& operator<<(std::ostream& os,
 /// @returns The provided output stream in its original state.
 ///
 /// @warning Visit information may get changed.
-std::ostream& operator<<(std::ostream& os,
-                         const std::shared_ptr<Variable>& variable);
+std::ostream& operator<<(std::ostream& os, const VariablePtr& variable);
 
 /// Prints indexed gates in the shorthand format.
 /// The gates that have become a constant are named "GC".
@@ -1122,7 +1107,7 @@ std::ostream& operator<<(std::ostream& os,
 /// @returns The provided output stream in its original state.
 ///
 /// @warning Visit information may get changed.
-std::ostream& operator<<(std::ostream& os, const std::shared_ptr<IGate>& gate);
+std::ostream& operator<<(std::ostream& os, const IGatePtr& gate);
 
 /// Prints the BooleanGraph as a fault tree in the shorthand format.
 /// This function is mostly for debugging purposes.

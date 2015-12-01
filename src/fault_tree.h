@@ -22,31 +22,22 @@
 #define SCRAM_SRC_FAULT_TREE_H_
 
 #include <memory>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "ccf_group.h"
 #include "element.h"
 #include "event.h"
+#include "expression.h"
 
 namespace scram {
-
-class CcfGroup;
-class Parameter;
 
 /// @class Component
 /// Component is for logical grouping of events, gates, and other components.
 class Component : public Element, public Role {
  public:
-  using GatePtr = std::shared_ptr<Gate>;
-  using BasicEventPtr = std::shared_ptr<BasicEvent>;
-  using HouseEventPtr = std::shared_ptr<HouseEvent>;
-  using ParameterPtr = std::shared_ptr<Parameter>;
-  using CcfGroupPtr = std::shared_ptr<CcfGroup>;
-  using ComponentPtr = std::unique_ptr<Component>;
-
   /// Constructs a component assuming
   /// that it exists within some fault tree.
   /// The public or private role of a component is not
@@ -101,7 +92,8 @@ class Component : public Element, public Role {
 
   /// @returns Components in this component container
   ///          with lower-case names as keys.
-  const std::unordered_map<std::string, ComponentPtr>& components() const {
+  const std::unordered_map<std::string, std::unique_ptr<Component>>&
+  components() const {
     return components_;
   }
 
@@ -148,7 +140,7 @@ class Component : public Element, public Role {
   /// @param[in] component  The CCF group to be added to this container.
   ///
   /// @throws ValidationError  The component is already in this container.
-  void AddComponent(ComponentPtr component);
+  void AddComponent(std::unique_ptr<Component> component);
 
  protected:
   /// Recursively traverses components
@@ -177,8 +169,10 @@ class Component : public Element, public Role {
   std::unordered_map<std::string, CcfGroupPtr> ccf_groups_;
 
   /// Container for components with lower-case names as keys.
-  std::unordered_map<std::string, ComponentPtr> components_;
+  std::unordered_map<std::string, std::unique_ptr<Component>> components_;
 };
+
+using ComponentPtr = std::unique_ptr<Component>;  ///< Unique system components.
 
 /// @class FaultTree
 /// Fault tree representation as a container of
@@ -187,8 +181,6 @@ class Component : public Element, public Role {
 /// detection of top events.
 class FaultTree : public Component {
  public:
-  using GatePtr = std::shared_ptr<Gate>;
-
   /// The main constructor of the Fault Tree.
   /// Fault trees are assumed to be public and belong to the root model.
   ///
@@ -206,8 +198,6 @@ class FaultTree : public Component {
   void CollectTopEvents();
 
  private:
-  using FormulaPtr = std::unique_ptr<Formula>;
-
   /// Recursively marks descendant gates as "non-top".
   /// These gates belong to this fault tree only.
   ///
@@ -225,6 +215,8 @@ class FaultTree : public Component {
 
   std::vector<GatePtr> top_events_;  ///< Top events of this fault tree.
 };
+
+using FaultTreePtr = std::unique_ptr<FaultTree>;  ///< Unique trees in models.
 
 }  // namespace scram
 
