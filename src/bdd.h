@@ -37,28 +37,25 @@ namespace scram {
 
 /// @class Vertex
 /// Representation of a vertex in BDD graphs.
+/// This is a base class for all BDD vertices;
+/// however, it is NOT polymorphic for performance reasons.
 class Vertex {
  public:
-  /// @param[in] terminal  Flag for terminal nodes.
-  /// @param[in] id  Identificator of the BDD graph.
-  explicit Vertex(bool terminal = false, int id = 0);
-
+  Vertex() = delete;
   Vertex(const Vertex&) = delete;
   Vertex& operator=(const Vertex&) = delete;
-
-  virtual ~Vertex() = 0;  ///< Abstract class.
-
-  /// @returns true if this vertex is terminal.
-  bool terminal() const { return terminal_; }
 
   /// @returns Identificator of the BDD graph rooted by this vertex.
   int id() const { return id_; }
 
- protected:
-  int id_;  ///< Unique identifier of the BDD graph with this vertex.
+  /// @returns true if this vertex is terminal.
+  bool terminal() const { return id_ < 2; }
 
- private:
-  bool terminal_;  ///< Flag for terminal vertices. RTTI hack.
+ protected:
+  /// @param[in] id  Identificator of the BDD graph.
+  explicit Vertex(int id);
+
+  int id_;  ///< Unique identifier of the BDD graph with this vertex.
 };
 
 /// @class Terminal
@@ -78,7 +75,7 @@ class Terminal : public Vertex {
   /// @note The value serves as an id for this terminal vertex.
   ///       Non-terminal if-then-else vertices should never have
   ///       identifications of value 0 or 1.
-  bool value() const { return value_; }
+  bool value() const { return id_; }
 
   /// Recovers a shared pointer to Terminal from a pointer to Vertex.
   ///
@@ -88,9 +85,6 @@ class Terminal : public Vertex {
   static std::shared_ptr<Terminal> Ptr(const std::shared_ptr<Vertex>& vertex) {
     return std::static_pointer_cast<Terminal>(vertex);
   }
-
- private:
-  bool value_;  ///< The meaning of the terminal.
 };
 
 using VertexPtr = std::shared_ptr<Vertex>;  ///< Shared BDD vertices.
@@ -98,13 +92,19 @@ using TerminalPtr = std::shared_ptr<Terminal>;  ///< Shared terminal vertices.
 
 /// @class NonTerminal
 /// Representation of non-terminal vertices in BDD graphs.
+/// This class is a base class for various BDD-specific vertices.
+/// however, as Vertex, NonTerminal is not polymorphic.
 class NonTerminal : public Vertex {
  public:
   /// @param[in] index  Index of this non-terminal vertex.
   /// @param[in] order  Specific ordering number for BDD graphs.
-  NonTerminal(int index, int order);
-
-  virtual ~NonTerminal() = 0;  ///< Abstract base class.
+  /// @param[in] id  Unique identifier of the ROBDD graph.
+  ///                The identifier should not collide
+  ///                with the identifiers (0/1) of terminal nodes.
+  /// @param[in] high  A vertex for the (1/True/then/left) branch.
+  /// @param[in] low  A vertex for the (0/False/else/right) branch.
+  NonTerminal(int index, int order, int id, const VertexPtr& high,
+              const VertexPtr& low);
 
   /// @returns The index of this vertex.
   int index() const { return index_; }
@@ -121,40 +121,11 @@ class NonTerminal : public Vertex {
   /// Sets this vertex for representation of a module.
   void module(bool flag) { module_ = flag; }
 
-  using Vertex::id;  ///< Conflicting with the overload.
-
-  /// Sets the unique identifier of the ROBDD graph.
-  ///
-  /// @param[in] id  Unique identifier of the ROBDD graph.
-  ///                The identifier should not collide
-  ///                with the identifiers of terminal nodes.
-  void id(int id) {
-    assert(id > 1);  // Must not have an ID of terminal nodes.
-    Vertex::id_ = id;
-  }
-
   /// @returns (1/True/then/left) branch if-then-else vertex.
   const VertexPtr& high() const { return high_; }
 
-  /// Sets the (1/True/then/left) branch vertex.
-  ///
-  /// @param[in] high  The if-then-else vertex.
-  void high(const VertexPtr& high) { high_ = high; }
-
   /// @returns (0/False/else/right) branch vertex.
-  ///
-  /// @note This edge may have complement interpretation.
-  ///       Check complement_edge() upon using this edge.
   const VertexPtr& low() const { return low_; }
-
-  /// Sets the (0/False/else/right) branch vertex.
-  ///
-  /// @param[in] low  The vertex.
-  ///
-  /// @note This may have complement interpretation.
-  ///       Keep the complement_edge() flag up-to-date
-  ///       after setting this edge.
-  void low(const VertexPtr& low) { low_ = low; }
 
   /// @returns The mark of this vertex.
   bool mark() const { return mark_; }
@@ -165,38 +136,12 @@ class NonTerminal : public Vertex {
   void mark(bool flag) { mark_ = flag; }
 
  protected:
-  int index_;  ///< Index of the variable.
   int order_;  ///< Order of the variable.
-  bool module_;  ///< Mark for module variables.
   VertexPtr high_;  ///< 1 (True/then) branch in the Shannon decomposition.
   VertexPtr low_;  ///< O (False/else) branch in the Shannon decomposition.
+  int index_;  ///< Index of the variable.
+  bool module_;  ///< Mark for module variables.
   bool mark_;  ///< Traversal mark.
-};
-
-/// @class ComplementEdge
-/// Mixin for vertices
-/// that may need to indicate
-/// that one of edges must be interpreted as complement.
-///
-/// @note This is not about the vertex,
-///       but it is about the chosen edge.
-class ComplementEdge {
- public:
-  /// Sets the complement edge to false by default.
-  ComplementEdge();
-
-  virtual ~ComplementEdge() = 0;  ///< Abstract class.
-
-  /// @returns true if the chosen edge is complement.
-  bool complement_edge() const { return complement_edge_; }
-
-  /// Sets the complement flag for the chosen edge.
-  ///
-  /// @param[in] flag  Indicator to treat the chosen edge as a complement.
-  void complement_edge(bool flag) { complement_edge_ = flag; }
-
- private:
-  bool complement_edge_;  ///< Flag for complement edge.
 };
 
 /// @class Ite
@@ -208,9 +153,17 @@ class ComplementEdge {
 ///       one of two (high/low) edges to assign the attribute.
 ///       Consistency is not the responsibility of this class
 ///       but of BDD algorithms and users.
-class Ite : public NonTerminal, public ComplementEdge {
+class Ite : public NonTerminal {
  public:
   using NonTerminal::NonTerminal;  ///< Constructor with index and order.
+
+  /// @returns true if the chosen edge is complement.
+  bool complement_edge() const { return complement_edge_; }
+
+  /// Sets the complement flag for the chosen edge.
+  ///
+  /// @param[in] flag  Indicator to treat the chosen edge as a complement.
+  void complement_edge(bool flag) { complement_edge_ = flag; }
 
   /// @returns The probability of the function graph.
   double p() const { return p_; }
@@ -238,6 +191,7 @@ class Ite : public NonTerminal, public ComplementEdge {
   }
 
  private:
+  bool complement_edge_ = false;  ///< Flag for complement edge.
   double p_ = 0;  ///< Probability of the function graph.
   double factor_ = 0;  ///< Importance factor calculation results.
 };
@@ -358,7 +312,6 @@ class Bdd {
   /// if one of the arguments is the computation result.
   using ComputeTable = PairTable<Function>;
 
-#ifndef NGARBAGE
   /// @class GarbageCollector
   /// This garbage collector manages tables of a BDD.
   /// The garbage collection is triggered
@@ -367,8 +320,7 @@ class Bdd {
    public:
     /// @param[in,out] bdd  BDD to manage.
     explicit GarbageCollector(Bdd* bdd) noexcept
-        : garbage_collection_(bdd->garbage_collection_),
-          bdd_(bdd) {}
+        : unique_table_(bdd->unique_table_) {}
 
     /// Frees the memory
     /// and triggers the garbage collection ONLY if requested.
@@ -377,10 +329,8 @@ class Bdd {
     void operator()(Ite* ptr) noexcept;
 
    private:
-    std::weak_ptr<bool> garbage_collection_;  ///< Flag for garbage collection.
-    Bdd* bdd_;  ///< Pointer to the managed BDD.
+    std::weak_ptr<UniqueTable> unique_table_;  ///< Managed table.
   };
-#endif
 
   /// Fetches a unique if-then-else vertex from a hash table.
   /// If the vertex doesn't exist,
@@ -539,7 +489,7 @@ class Bdd {
   /// The key consists of ite(index, id_high, id_low),
   /// where IDs are unique (id_high != id_low) identifications of
   /// unique reduced-ordered function graphs.
-  UniqueTable unique_table_;
+  std::shared_ptr<UniqueTable> unique_table_;
 
   /// Table of processed computations over functions.
   /// The argument functions are recorded with their IDs (not vertex indices).
@@ -548,18 +498,6 @@ class Bdd {
   /// The key is {min_id, max_id}.
   ComputeTable and_table_;  ///< Table of processed AND computations.
   ComputeTable or_table_;  ///< Table of processed OR computations.
-
-#ifndef NGARBAGE
-  /// @struct Membership.
-  /// Keys for membership in tables.
-  struct Membership {
-    std::vector<std::pair<int, int>> and_table;  ///< In AND computation table.
-    std::vector<std::pair<int, int>> or_table;  ///< In OR computation table.
-  };
-
-  std::unordered_map<int, Membership> ite_as_arg_;  ///< ITE in compute tables.
-  std::shared_ptr<bool> garbage_collection_;  ///< Flag for garbage collection.
-#endif
 
   std::unordered_map<int, Function> modules_;  ///< Module graphs.
   std::unordered_map<int, int> index_to_order_;  ///< Indices and orders.

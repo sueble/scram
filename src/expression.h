@@ -55,7 +55,7 @@ class Expression {
   /// to register their arguments.
   ///
   /// @param[in] args  Arguments of this expression.
-  explicit Expression(const std::vector<ExpressionPtr>& args);
+  explicit Expression(std::vector<ExpressionPtr> args);
 
   Expression(const Expression&) = delete;
   Expression& operator=(const Expression&) = delete;
@@ -112,17 +112,17 @@ class Expression {
   }
 
  protected:
-  bool sampled_ = false;  ///< Indication if the expression is already sampled.
-  double sampled_value_ = 0;  ///< The sampled value.
   std::vector<ExpressionPtr> args_;  ///< Expressions arguments.
+  double sampled_value_;  ///< The sampled value.
+  bool sampled_;  ///< Indication if the expression is already sampled.
 
  private:
   /// Gathers nodes and connectors from arguments of the expression.
   void GatherNodesAndConnectors();
 
+  bool gather_;  ///< A flag to gather nodes and connectors.
   std::vector<Parameter*> nodes_;  ///< Parameters as nodes.
   std::vector<Expression*> connectors_;  ///< Expressions as connectors.
-  bool gather_ = true;  ///< A flag to gather nodes and connectors.
 };
 
 /// @enum Units
@@ -215,10 +215,10 @@ class Parameter : public Expression, public Element, public Role {
  private:
   std::string name_;  ///< Name of this parameter or variable.
   std::string id_;  ///< Identifier of this parameter or variable.
-  Units unit_;  ///< Units of this parameter.
   ExpressionPtr expression_;  ///< Expression for this parameter.
-  std::string mark_;  ///< The mark for traversal in cycle detection.
+  Units unit_;  ///< Units of this parameter.
   bool unused_;  ///< Usage state.
+  std::string mark_;  ///< The mark for traversal in cycle detection.
 };
 
 /// @class MissionTime
@@ -611,8 +611,8 @@ class Histogram : public RandomDeviate {
   ///       which leaves only positive values for boundaries.
   ///       This behavior is restrictive
   ///       and should be handled accordingly.
-  Histogram(const std::vector<ExpressionPtr>& boundaries,
-            const std::vector<ExpressionPtr>& weights);
+  Histogram(std::vector<ExpressionPtr> boundaries,
+            std::vector<ExpressionPtr> weights);
 
   /// @throws InvalidArgument  The boundaries are not strictly increasing,
   ///                          or weights are negative.

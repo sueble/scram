@@ -30,8 +30,6 @@ namespace scram {
 
 int Node::next_index_ = 1e6;  // 1 million basic events per fault tree is crazy!
 
-NodeParentManager::~NodeParentManager() {}  // Pure virtual destructor.
-
 void NodeParentManager::AddParent(const IGatePtr& gate) {
   parents_.emplace(gate->index(), gate);
 }
@@ -67,7 +65,7 @@ IGate::IGate(Operator type) noexcept
 
 IGatePtr IGate::Clone() noexcept {
   BLOG(DEBUG5, module_) << "WARNING: Cloning module G" << Node::index();
-  IGatePtr clone(new IGate(type_));  // The same type.
+  auto clone = std::make_shared<IGate>(type_);  // The same type.
   clone->vote_number_ = vote_number_;  // Copy vote number in case it is K/N.
   // Getting arguments copied.
   clone->args_ = args_;
@@ -79,23 +77,6 @@ IGatePtr IGate::Clone() noexcept {
   for (const auto& arg : variable_args_) arg.second->AddParent(clone);
   for (const auto& arg : constant_args_) arg.second->AddParent(clone);
   return clone;
-}
-
-template<typename Ptr, typename Container>
-void IGate::AddArg(int index, const Ptr& arg, Container* container) noexcept {
-  assert(index != 0);
-  assert(std::abs(index) == arg->index());
-  assert(state_ == kNormalState);
-  assert(!((type_ == kNotGate || type_ == kNullGate) && !args_.empty()));
-  assert(!(type_ == kXorGate && args_.size() > 1));
-  assert(vote_number_ >= 0);
-
-  if (args_.count(index)) return IGate::ProcessDuplicateArg(index);
-  if (args_.count(-index)) return IGate::ProcessComplementArg(index);
-
-  args_.insert(index);
-  container->emplace(index, arg);
-  arg->AddParent(shared_from_this());
 }
 
 void IGate::TransferArg(int index, const IGatePtr& recipient) noexcept {
@@ -398,7 +379,7 @@ void IGate::ProcessAtleastGateDuplicateArg(int index) noexcept {
     assert(this->args_.size() == 2);
   } else {
     // Create the AND gate to combine with the duplicate node.
-    IGatePtr and_gate(new IGate(kAndGate));
+    auto and_gate = std::make_shared<IGate>(kAndGate);
     this->AddArg(and_gate->index(), and_gate);
     clone_one->TransferArg(index, and_gate);  // Transfered the x.
 
@@ -477,7 +458,7 @@ void BooleanGraph::Print() {
 IGatePtr BooleanGraph::ProcessFormula(const FormulaPtr& formula, bool ccf,
                                       ProcessedNodes* nodes) noexcept {
   Operator type = kStringToType_.find(formula->type())->second;
-  IGatePtr parent(new IGate(type));
+  auto parent = std::make_shared<IGate>(type);
 
   if (type != kOrGate && type != kAndGate) normal_ = false;
 
@@ -534,7 +515,7 @@ void BooleanGraph::ProcessBasicEvents(
         parent->AddArg(var->index(), var);
       } else {
         basic_events_.push_back(basic_event);
-        VariablePtr new_basic(new Variable());  // Sequential indexation.
+        auto new_basic = std::make_shared<Variable>();  // Sequential indices.
         assert(basic_events_.size() == new_basic->index());
         parent->AddArg(new_basic->index(), new_basic);
         nodes->variables.emplace(basic_event->id(), new_basic);
@@ -552,7 +533,7 @@ void BooleanGraph::ProcessHouseEvents(
       ConstantPtr constant = nodes->constants.find(house->id())->second;
       parent->AddArg(constant->index(), constant);
     } else {
-      ConstantPtr constant(new Constant(house->state()));
+      auto constant = std::make_shared<Constant>(house->state());
       parent->AddArg(constant->index(), constant);
       nodes->constants.emplace(house->id(), constant);
       constants_.push_back(constant);

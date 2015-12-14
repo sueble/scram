@@ -26,13 +26,16 @@ namespace scram {
 
 Zbdd::Zbdd(const Settings& settings) noexcept
     : kSettings_(settings),
+      unique_table_(std::make_shared<UniqueTable>()),
       kBase_(std::make_shared<Terminal>(true)),
       kEmpty_(std::make_shared<Terminal>(false)),
       set_id_(2) {}
 
+/// @def LOG_ZBDD
+/// Logs ZBDD characteristics.
 #define LOG_ZBDD                                                               \
   LOG(DEBUG4) << "# of ZBDD nodes created: " << set_id_ - 1;                   \
-  LOG(DEBUG4) << "# of entries in unique table: " << unique_table_.size();     \
+  LOG(DEBUG4) << "# of entries in unique table: " << unique_table_->size();    \
   LOG(DEBUG4) << "# of entries in AND table: " << and_table_.size();           \
   LOG(DEBUG4) << "# of entries in OR table: " << or_table_.size();             \
   LOG(DEBUG4) << "# of entries in subsume table: " << subsume_table_.size();   \
@@ -132,7 +135,7 @@ void Zbdd::Analyze() noexcept {
 
   // Complete cleanup of the memory.
   minimal_results_.clear();
-  unique_table_.clear();
+  unique_table_.reset();  // Important to turn the garbage collector off.
   and_table_.clear();
   or_table_.clear();
   subsume_table_.clear();
@@ -151,18 +154,26 @@ void Zbdd::Analyze() noexcept {
 
 #undef LOG_ZBDD
 
-const SetNodePtr& Zbdd::FetchUniqueTable(int index, const VertexPtr& high,
-                                         const VertexPtr& low, int order,
-                                         bool module) noexcept {
-  SetNodePtr& in_table = unique_table_[{index, high->id(), low->id()}];
-  if (in_table) return in_table;
+void Zbdd::GarbageCollector::operator()(SetNode* ptr) noexcept {
+  if (!unique_table_.expired()) {
+    LOG(DEBUG5) << "Running garbage collection for " << ptr->id();
+    unique_table_.lock()->erase({ptr->index(), ptr->high()->id(),
+                                 ptr->low()->id()});
+  }
+  delete ptr;
+}
+
+SetNodePtr Zbdd::FetchUniqueTable(int index, const VertexPtr& high,
+                                  const VertexPtr& low, int order,
+                                  bool module) noexcept {
+  SetNodeWeakPtr& in_table = (*unique_table_)[{index, high->id(), low->id()}];
+  if (!in_table.expired()) return in_table.lock();
   assert(order > 0 && "Improper order.");
-  in_table = std::make_shared<SetNode>(index, order);
-  in_table->id(set_id_++);
-  in_table->module(module);
-  in_table->high(high);
-  in_table->low(low);
-  return in_table;
+  SetNodePtr node(new SetNode(index, order, set_id_++, high, low),
+                  GarbageCollector(this));
+  node->module(module);
+  in_table = node;
+  return node;
 }
 
 VertexPtr Zbdd::ConvertBdd(const VertexPtr& vertex, bool complement,
@@ -249,6 +260,10 @@ VertexPtr Zbdd::ConvertGraph(
   for (++it; it != args.cend(); ++it) {
     result = Zbdd::Apply(gate->type(), result, *it, kSettings_.limit_order());
   }
+  and_table_.clear();
+  or_table_.clear();
+  subsume_table_.clear();
+  minimal_results_.clear();
   assert(result);
   return result;
 }
@@ -264,15 +279,15 @@ VertexPtr Zbdd::ConvertCutSets(
   if (data.front()->empty()) return kBase_;
 
   VertexPtr result = kEmpty_;
-  for (const auto& cut_set : data) {
-    result = Zbdd::Apply(kOrGate, result, Zbdd::EmplaceCutSet(cut_set),
-                         kSettings_.limit_order());
-  }
+  for (const auto& cut_set : data)
+    result = Zbdd::EmplaceCutSet(result, Zbdd::EmplaceCutSet(cut_set));
+
   return result;
 }
 
 VertexPtr Zbdd::EmplaceCutSet(const mocus::CutSetPtr& cut_set) noexcept {
   assert(!cut_set->empty() && "Unity cut set must be sanitized.");
+  assert(cut_set->order() <= kSettings_.limit_order() && "Improper order.");
   VertexPtr result = kBase_;
   std::vector<int>::const_reverse_iterator it;
   for (it = cut_set->modules().rbegin(); it != cut_set->modules().rend();
@@ -293,6 +308,43 @@ VertexPtr Zbdd::EmplaceCutSet(const mocus::CutSetPtr& cut_set) noexcept {
     SetNode::Ptr(result)->minimal(true);
   }
   return result;
+}
+
+VertexPtr Zbdd::EmplaceCutSet(const VertexPtr& root,
+                              const VertexPtr& set_vertex) noexcept {
+  if (root->terminal()) {
+    if (Terminal::Ptr(root)->value()) return root;
+    return set_vertex;
+  }
+  if (set_vertex->terminal()) {
+    if (Terminal::Ptr(set_vertex)->value()) return set_vertex;
+    return root;
+  }
+  SetNodePtr root_node = SetNode::Ptr(root);
+  SetNodePtr set_node = SetNode::Ptr(set_vertex);
+  assert(root_node->index() > 0 && set_node->index() > 0);
+  assert(set_node->low()->terminal() && "Not a cut set!");
+  assert(!Terminal::Ptr(set_node->low())->value() && "Not a cut set!");
+  SetNodePtr reference = root_node;
+  VertexPtr high;
+  VertexPtr low;
+  if (root_node->order() == set_node->order()) {  // The same variable.
+    assert(root_node->index() == set_node->index());
+    high = Zbdd::EmplaceCutSet(root_node->high(), set_node->high());
+    low = root_node->low();
+  } else if (root_node->order() < set_node->order()) {
+    high = root_node->high();
+    low = Zbdd::EmplaceCutSet(root_node->low(), set_node);
+  } else {
+    high = set_node->high();
+    low = root_node;
+    reference = set_node;
+  }
+  if (high->id() == low->id()) return low;
+  if (high->terminal() && Terminal::Ptr(high)->value() == false) return low;
+  return Zbdd::FetchUniqueTable(reference->index(), high, low,
+                                reference->order(),
+                                reference->module());
 }
 
 VertexPtr& Zbdd::FetchComputeTable(Operator type, const VertexPtr& arg_one,
@@ -568,8 +620,7 @@ Zbdd::GenerateCutSets(const VertexPtr& vertex) noexcept {
   }
 
   // Destroy the subgraph to remove extra reference counts.
-  node->low(kEmpty_);
-  node->high(kBase_);
+  node->CutBranches();
 
   if (node.use_count() > 2) node->cut_sets(result);
   return result;
