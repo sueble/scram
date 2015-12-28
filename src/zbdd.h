@@ -171,6 +171,17 @@ class Zbdd {
                               const VertexPtr& low, int order,
                               bool module) noexcept;
 
+  /// Fetches a replacement for an existing node
+  /// or a new node based on an existing node.
+  ///
+  /// @param[in] node  An existing node.
+  /// @param[in] high  The new high vertex.
+  /// @param[in] low  The new low vertex.
+  ///
+  /// @returns Set node for a replacement.
+  SetNodePtr FetchUniqueTable(const SetNodePtr& node, const VertexPtr& high,
+                              const VertexPtr& low) noexcept;
+
   /// Converts BDD graph into ZBDD graph.
   ///
   /// @param[in] vertex  Vertex of the ROBDD graph.
@@ -242,26 +253,15 @@ class Zbdd {
                   const VertexPtr& arg_two, int limit_order) noexcept;
 
   /// Applies the logic of a Boolean operator
-  /// to terminal vertices.
+  /// with a terminal vertex.
   ///
   /// @param[in] type  The operator to apply.
   /// @param[in] term_one  First argument terminal vertex.
-  /// @param[in] term_two  Second argument terminal vertex.
+  /// @param[in] arg_two  Second argument vertex.
   ///
   /// @returns The resulting ZBDD vertex.
   VertexPtr Apply(Operator type, const TerminalPtr& term_one,
-                  const TerminalPtr& term_two) noexcept;
-
-  /// Applies the logic of a Boolean operator
-  /// to non-terminal and terminal vertices.
-  ///
-  /// @param[in] type  The operator or type of the gate.
-  /// @param[in] set_node  Non-terminal vertex.
-  /// @param[in] term  Terminal vertex.
-  ///
-  /// @returns The resulting ZBDD vertex.
-  VertexPtr Apply(Operator type, const SetNodePtr& set_node,
-                  const TerminalPtr& term) noexcept;
+                  const VertexPtr& arg_two) noexcept;
 
   /// Applies Boolean operation to ZBDD graph non-terminal vertices.
   ///

@@ -174,6 +174,14 @@ SetNodePtr Zbdd::FetchUniqueTable(int index, const VertexPtr& high,
   return node;
 }
 
+SetNodePtr Zbdd::FetchUniqueTable(const SetNodePtr& node, const VertexPtr& high,
+                                  const VertexPtr& low) noexcept {
+  if (node->high()->id() == high->id() &&
+      node->low()->id() == low->id()) return node;
+  return Zbdd::FetchUniqueTable(node->index(), high, low, node->order(),
+                                node->module());
+}
+
 VertexPtr Zbdd::ConvertBdd(const VertexPtr& vertex, bool complement,
                            const Bdd* bdd_graph, int limit_order,
                            PairTable<VertexPtr>* ites) noexcept {
@@ -296,12 +304,10 @@ VertexPtr& Zbdd::FetchComputeTable(Operator type, const VertexPtr& arg_one,
 VertexPtr Zbdd::Apply(Operator type, const VertexPtr& arg_one,
                       const VertexPtr& arg_two, int limit_order) noexcept {
   if (limit_order < 0) return kEmpty_;
-  if (arg_one->terminal() && arg_two->terminal())
-    return Zbdd::Apply(type, Terminal::Ptr(arg_one), Terminal::Ptr(arg_two));
   if (arg_one->terminal())
-    return Zbdd::Apply(type, SetNode::Ptr(arg_two), Terminal::Ptr(arg_one));
+    return Zbdd::Apply(type, Terminal::Ptr(arg_one), arg_two);
   if (arg_two->terminal())
-    return Zbdd::Apply(type, SetNode::Ptr(arg_one), Terminal::Ptr(arg_two));
+    return Zbdd::Apply(type, Terminal::Ptr(arg_two), arg_one);
 
   if (arg_one->id() == arg_two->id()) return arg_one;
 
@@ -319,28 +325,14 @@ VertexPtr Zbdd::Apply(Operator type, const VertexPtr& arg_one,
 }
 
 VertexPtr Zbdd::Apply(Operator type, const TerminalPtr& term_one,
-                      const TerminalPtr& term_two) noexcept {
+                      const VertexPtr& arg_two) noexcept {
   switch (type) {
     case kOrGate:
-      if (term_one->value() || term_two->value()) return kBase_;
-      return kEmpty_;
+      if (term_one->value()) return kBase_;
+      return arg_two;
     case kAndGate:
-      if (!term_one->value() || !term_two->value()) return kEmpty_;
-      return kBase_;
-    default:
-      assert(false && "Unsupported Boolean operation on ZBDD.");
-  }
-}
-
-VertexPtr Zbdd::Apply(Operator type, const SetNodePtr& set_node,
-                      const TerminalPtr& term) noexcept {
-  switch (type) {
-    case kOrGate:
-      if (term->value()) return kBase_;
-      return set_node;
-    case kAndGate:
-      if (!term->value()) return kEmpty_;
-      return set_node;
+      if (!term_one->value()) return kEmpty_;
+      return arg_two;
     default:
       assert(false && "Unsupported Boolean operation on ZBDD.");
   }
@@ -410,9 +402,7 @@ VertexPtr Zbdd::Apply(Operator type, const SetNodePtr& arg_one,
   }
   if (high->id() == low->id()) return low;
   if (high->terminal() && Terminal::Ptr(high)->value() == false) return low;
-  return Zbdd::Minimize(Zbdd::FetchUniqueTable(arg_one->index(), high, low,
-                                               arg_one->order(),
-                                               arg_one->module()));
+  return Zbdd::Minimize(Zbdd::FetchUniqueTable(arg_one, high, low));
 }
 
 VertexPtr Zbdd::EliminateComplements(
@@ -436,8 +426,7 @@ VertexPtr Zbdd::EliminateComplement(const SetNodePtr& node,
   if (high->terminal() && Terminal::Ptr(high)->value() == false) return low;
   if (node->index() < 0)  /// @todo Consider tracking the order.
     return Zbdd::Apply(kOrGate, high, low, kSettings_.limit_order());
-  return Zbdd::Minimize(Zbdd::FetchUniqueTable(node->index(), high, low,
-                                               node->order(), node->module()));
+  return Zbdd::Minimize(Zbdd::FetchUniqueTable(node, high, low));
 }
 
 VertexPtr Zbdd::EliminateConstantModules(
@@ -466,8 +455,7 @@ VertexPtr Zbdd::EliminateConstantModule(const SetNodePtr& node,
       return Zbdd::Apply(kOrGate, high, low, kSettings_.limit_order());
     }
   }
-  return Zbdd::Minimize(Zbdd::FetchUniqueTable(node->index(), high, low,
-                                               node->order(), node->module()));
+  return Zbdd::Minimize(Zbdd::FetchUniqueTable(node, high, low));
 }
 
 VertexPtr Zbdd::Minimize(const VertexPtr& vertex) noexcept {
@@ -484,8 +472,7 @@ VertexPtr Zbdd::Minimize(const VertexPtr& vertex) noexcept {
     result = low;
     return result;
   }
-  result = Zbdd::FetchUniqueTable(node->index(), high, low, node->order(),
-                                  node->module());
+  result = Zbdd::FetchUniqueTable(node, high, low);
   SetNode::Ptr(result)->minimal(true);
   return result;
 }
@@ -524,9 +511,7 @@ VertexPtr Zbdd::Subsume(const VertexPtr& high, const VertexPtr& low) noexcept {
     return computed;
   }
   assert(subhigh->id() != sublow->id());
-  SetNodePtr new_high =
-      Zbdd::FetchUniqueTable(high_node->index(), subhigh, sublow,
-                             high_node->order(), high_node->module());
+  SetNodePtr new_high = Zbdd::FetchUniqueTable(high_node, subhigh, sublow);
   new_high->minimal(high_node->minimal());
   computed = new_high;
   return computed;
@@ -676,7 +661,6 @@ VertexPtr CutSetContainer::ConvertGate(const IGatePtr& gate) noexcept {
   assert(gate->type() == kAndGate || gate->type() == kOrGate);
   assert(gate->constant_args().empty());
   assert(gate->args().size() > 1);
-  LOG(DEBUG4) << "Converting gate G" << gate->index();
   std::vector<SetNodePtr> args;
   for (const std::pair<const int, VariablePtr>& arg : gate->variable_args()) {
     args.push_back(Zbdd::FetchUniqueTable(arg.first, kBase_, kEmpty_,
@@ -704,7 +688,7 @@ VertexPtr CutSetContainer::ExtractIntermediateCutSets(int index) noexcept {
   assert(index && index > gate_index_bound_);
   assert(!root_->terminal() && "Impossible to have intermediate cut sets.");
   assert(index == SetNode::Ptr(root_)->index() && "Broken ordering!");
-  LOG(DEBUG4) << "Extracting cut sets for G" << index;
+  LOG(DEBUG5) << "Extracting cut sets for G" << index;
   SetNodePtr node = SetNode::Ptr(root_);
   root_ = node->low();
   return node->high();
