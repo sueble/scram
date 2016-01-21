@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,35 +22,41 @@
 /// The design and code are inspired by
 /// the C++ logging framework of Petru Marginean,
 /// published at http://www.drdobbs.com/cpp/logging-in-c/201804215
+///
+/// The timing facilities are inspired by
+/// the talk of Bryce Adelstein "Benchmarking C++ Code" at CppCon 2015.
 
 #ifndef SCRAM_SRC_LOGGER_H_
 #define SCRAM_SRC_LOGGER_H_
 
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
-#include <ctime>
 #include <sstream>
 #include <string>
 
 namespace scram {
 
-/// @def LOG(level)
-/// Logging with the level defined.
-#define LOG(level) if (level > scram::Logger::ReportLevel()); \
-  else scram::Logger().Get(level)
+/// Takes a current time stamp in nanoseconds.
+#define TIME_STAMP() std::chrono::steady_clock::now().time_since_epoch().count()
 
-/// @def BLOG(level, cond)
-/// Conditional logging with the level defined.
-#define BLOG(level, cond) if (!cond || level > scram::Logger::ReportLevel()); \
-  else scram::Logger().Get(level)
+/// Starts the timing in nanoseconds.
+///
+/// @param[out] var  A unique name for time variable in the scope.
+#define CLOCK(var) uint64_t var = TIME_STAMP()
 
-/// @def CLOCK(var)
-/// Starts the timing where var is the unique variable for the clock.
-#define CLOCK(var) std::clock_t var = std::clock()
+/// Calculates the time duration since the start of the clock in seconds.
+///
+/// @param[in] var  The variable initialized by the CLOCK macro (in the past!).
+#define DUR(var) (TIME_STAMP() - var) * 1e-9
 
-/// @def DUR(var)
-/// Calculates the time duration from the start of the clock with variable name
-/// var. This macro must be in the same scope as CLOCK(var).
-#define DUR(var) (std::clock() - var) / static_cast<double>(CLOCKS_PER_SEC)
+/// Logging with a level.
+#define LOG(level) \
+  if (level <= scram::Logger::ReportLevel()) scram::Logger().Get(level)
+
+/// Conditional logging with a level.
+#define BLOG(level, cond) \
+  if (cond && level <= scram::Logger::ReportLevel()) scram::Logger().Get(level)
 
 /// @enum LogLevel
 /// Levels for log statements.

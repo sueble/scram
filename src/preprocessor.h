@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ namespace scram {
 /// The class provides main preprocessing operations
 /// over a Boolean graph
 /// to simplify the fault tree
-/// and to help generate minimal cut sets more efficiently.
+/// and to help analysis run more efficiently.
 class Preprocessor {
  public:
   /// Constructs a preprocessor of a Boolean graph
@@ -1038,7 +1038,6 @@ class Preprocessor {
                    std::vector<VariablePtr>* variables) noexcept;
 
   BooleanGraph* graph_;  ///< The Boolean graph to preprocess.
-  int root_sign_;  ///< The negative or positive sign of the root node.
   bool constant_graph_;  ///< Graph is constant due to constant events.
   /// Container for constant gates to be tracked and cleaned by algorithms.
   /// These constant gates are created

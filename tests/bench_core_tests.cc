@@ -36,8 +36,8 @@ TEST_P(RiskAnalysisTest, ABC) {
   }
 
   std::set< std::set<std::string> > mcs = {{"a"}, {"b"} , {"c"}};
-  EXPECT_EQ(3, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(3, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Benchmark Tests for [AB or BC] fault tree.
@@ -54,8 +54,8 @@ TEST_P(RiskAnalysisTest, AB_BC) {
   }
 
   std::set< std::set<std::string> > mcs = {{"a", "b"}, {"b", "c"}};
-  EXPECT_EQ(2, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(2, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Benchmark Tests for [AB or ~AC] fault tree.
@@ -71,13 +71,16 @@ TEST_P(RiskAnalysisTest, AB_OR_NOT_AC) {
     EXPECT_DOUBLE_EQ(0.29, p_total());
   }
 
-  // Prime implicants.
-  /* std::set<std::set<std::string>> mcs = {{"a", "b"}, {"not a", "c"}, */
-  /*                                        {"b", "c"}}; */
-  // Minimal cut sets.
-  std::set<std::set<std::string>> mcs = {{"a", "b"}, {"c"}};
-  EXPECT_EQ(2, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"a", "b"}, {"not a", "c"},
+                                          {"b", "c"}};
+    EXPECT_EQ(3, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{"a", "b"}, {"c"}};
+    EXPECT_EQ(2, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Simple verification tests for Atleast gate fault tree.
@@ -94,8 +97,8 @@ TEST_P(RiskAnalysisTest, ATLEAST) {
   }
 
   std::set< std::set<std::string> > mcs = {{"a", "b"}, {"b", "c"}, {"a", "c"}};
-  EXPECT_EQ(3, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(3, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Benchmark tests for NOT gate.
@@ -109,8 +112,8 @@ TEST_P(RiskAnalysisTest, A_OR_NOT_A) {
   EXPECT_DOUBLE_EQ(1, p_total());
 
   // Special case of one empty cut set in a container.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_TRUE(min_cut_sets().begin()->empty());
+  EXPECT_EQ(1, products().size());
+  EXPECT_TRUE(products().begin()->empty());
 }
 
 // [A OR NOT B]
@@ -125,10 +128,14 @@ TEST_P(RiskAnalysisTest, A_OR_NOT_B) {
     EXPECT_DOUBLE_EQ(0.82, p_total());
   }
 
-  /// @todo Enable with prime implicants.
-  /* std::set< std::set<std::string> > mcs = {{"a"}, {"not b"}}; */
-  std::set< std::set<std::string> > mcs = {{}};
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"a"}, {"not b"}};
+    EXPECT_EQ(2, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{}};
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // [A AND NOT A]
@@ -138,7 +145,7 @@ TEST_P(RiskAnalysisTest, A_AND_NOT_A) {
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
   EXPECT_DOUBLE_EQ(0, p_total());
-  EXPECT_TRUE(min_cut_sets().empty());
+  EXPECT_TRUE(products().empty());
 }
 
 // [A AND NOT B]
@@ -153,11 +160,15 @@ TEST_P(RiskAnalysisTest, A_AND_NOT_B) {
     EXPECT_NEAR(0.08, p_total(), 1e-5);
   }
 
-  /// @todo Enable with prime implicants.
-  /* std::set< std::set<std::string> > mcs = {{"a", "not b"}}; */
-  std::set< std::set<std::string> > mcs = {{"a"}};
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"a", "not b"}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set< std::set<std::string> > mcs = {{"a"}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // [A OR (B, NOT A)]
@@ -173,8 +184,8 @@ TEST_P(RiskAnalysisTest, A_OR_NOT_AB) {
   }
 
   std::set< std::set<std::string> > mcs = {{"a"}, {"b"}};
-  EXPECT_EQ(2, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(2, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Uncertainty report for Unity case.
@@ -207,10 +218,15 @@ TEST_P(RiskAnalysisTest, MultipleParentNegativeGate) {
     EXPECT_DOUBLE_EQ(0.9, p_total());
   }
 
-  /* std::set<std::set<std::string>> mcs = {{"not a"}};  // Prime implicants. */
-  std::set<std::set<std::string>> mcs = {{}};  // Minimal cut sets.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"not a"}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Checks for NAND gate.
@@ -218,21 +234,30 @@ TEST_P(RiskAnalysisTest, NAND) {
   std::string tree_input = "./share/scram/input/core/nand.xml";
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  /// @todo Enable with prime implicants.
-  /* std::set<std::set<std::string>> mcs = {{"not a"}, {"not b"}}; */
-  /* EXPECT_EQ(mcs, min_cut_sets()); */
-  EXPECT_EQ(1, min_cut_sets().size());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"not a"}, {"not b"}};
+    EXPECT_EQ(2, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Checks for NOR gate.
-TEST_P(RiskAnalysisTest, DISABLED_NOR) {  /// @todo Enable with BDD-to-ZBDD
+TEST_P(RiskAnalysisTest, NOR) {
   std::string tree_input = "./share/scram/input/core/nor.xml";
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
-  /// @todo Enable with prime implicants.
-  /* std::set<std::set<std::string>> mcs = {{"not a", "not b"}}; */
-  /* EXPECT_EQ(mcs, min_cut_sets()); */
-  EXPECT_EQ(1, min_cut_sets().size());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"not a", "not b"}};
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Checks for NAND UNITY top gate cases.
@@ -244,8 +269,8 @@ TEST_P(RiskAnalysisTest, NAND_UNITY) {
   EXPECT_DOUBLE_EQ(1, p_total());
 
   // Special case of one empty cut set in a container.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_TRUE(min_cut_sets().begin()->empty());
+  EXPECT_EQ(1, products().size());
+  EXPECT_TRUE(products().begin()->empty());
 }
 
 // Checks for OR UNITY top gate cases.
@@ -257,8 +282,8 @@ TEST_P(RiskAnalysisTest, OR_UNITY) {
   EXPECT_DOUBLE_EQ(1, p_total());
 
   // Special case of one empty cut set in a container.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_TRUE(min_cut_sets().begin()->empty());
+  EXPECT_EQ(1, products().size());
+  EXPECT_TRUE(products().begin()->empty());
 }
 
 // Checks for UNITY due to house event.
@@ -270,8 +295,8 @@ TEST_P(RiskAnalysisTest, HOUSE_UNITY) {
   EXPECT_DOUBLE_EQ(1, p_total());
 
   // Special case of one empty cut set in a container.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_TRUE(min_cut_sets().begin()->empty());
+  EXPECT_EQ(1, products().size());
+  EXPECT_TRUE(products().begin()->empty());
 }
 
 // Checks for NULL due to house event.
@@ -283,7 +308,7 @@ TEST_P(RiskAnalysisTest, HOUSE_NULL) {
   EXPECT_DOUBLE_EQ(0, p_total());
 
   // Special case of one empty cut set in a container.
-  EXPECT_TRUE(min_cut_sets().empty());
+  EXPECT_TRUE(products().empty());
 }
 
 // Checks for NAND UNITY top gate cases.
@@ -293,8 +318,8 @@ TEST_P(RiskAnalysisTest, SUBTLE_UNITY) {
   ASSERT_NO_THROW(ran->Analyze());
 
   // Special case of one empty cut set in a container.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_TRUE(min_cut_sets().begin()->empty());
+  EXPECT_EQ(1, products().size());
+  EXPECT_TRUE(products().begin()->empty());
 }
 
 // Checks for NAND UNITY top gate cases.
@@ -303,8 +328,8 @@ TEST_P(RiskAnalysisTest, SUBTLE_NULL) {
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
   std::set< std::set<std::string> > mcs = {};
-  EXPECT_EQ(mcs, min_cut_sets());
-  EXPECT_TRUE(min_cut_sets().empty());
+  EXPECT_EQ(mcs, products());
+  EXPECT_TRUE(products().empty());
 }
 
 // Benchmark Tests for [A xor B xor C] fault tree.
@@ -320,14 +345,18 @@ TEST_P(RiskAnalysisTest, XOR_ABC) {
     EXPECT_DOUBLE_EQ(0.404, p_total());
   }
 
-  /// @todo Enable with prime implicants.
-  /* std::set< std::set<std::string> > mcs = {{"a", "b", "c"}, */
-  /*                                          {"a", "not b", "not c"}, */
-  /*                                          {"not a", "b", "not c"}, */
-  /*                                          {"not a", "not b", "c"}}; */
-  std::set< std::set<std::string> > mcs = {{"a"}, {"b"}, {"c"}};
-  EXPECT_EQ(3, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"a", "b", "c"},
+                                          {"a", "not b", "not c"},
+                                          {"not a", "b", "not c"},
+                                          {"not a", "not b", "c"}};
+    EXPECT_EQ(4, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{"a"}, {"b"}, {"c"}};
+    EXPECT_EQ(3, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Checks for top gate of NOT with a single basic event child.
@@ -336,10 +365,15 @@ TEST_P(RiskAnalysisTest, NOT_A) {
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(ran->Analyze());
 
-  /* std::set< std::set<std::string> > mcs = {{"not onlychild"}};  // PI. */
-  std::set< std::set<std::string> > mcs = {{}};  // MCS.
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  if (settings.prime_implicants()) {
+    std::set<std::set<std::string>> pi = {{"not onlychild"}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(pi, products());
+  } else {
+    std::set<std::set<std::string>> mcs = {{}};
+    EXPECT_EQ(1, products().size());
+    EXPECT_EQ(mcs, products());
+  }
 }
 
 // Checks for top gate of NULL with a single basic event child.
@@ -349,8 +383,8 @@ TEST_P(RiskAnalysisTest, NULL_A) {
   ASSERT_NO_THROW(ran->Analyze());
 
   std::set< std::set<std::string> > mcs = {{"onlychild"}};
-  EXPECT_EQ(1, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(1, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Benchmark Tests for Beta factor common cause failure model.
@@ -386,12 +420,12 @@ TEST_P(RiskAnalysisTest, BetaFactorCCF) {
   mcs.insert({p1, p2, v3});
   mcs.insert({p1, p3, v2});
   mcs.insert({p1, p2, p3});
-  EXPECT_EQ(10, min_cut_sets().size());
-  EXPECT_EQ(mcs, min_cut_sets());
+  EXPECT_EQ(10, products().size());
+  EXPECT_EQ(mcs, products());
 }
 
 // Benchmark Tests for Phi factor common cause failure calculations.
-// Test Minimal cut sets and total probabilty.
+// Test Minimal cut sets and total probability.
 TEST_P(RiskAnalysisTest, PhiFactorCCF) {
   std::string tree_input = "./share/scram/input/core/phi_factor_ccf.xml";
   settings.ccf_analysis(true).probability_analysis(true);
@@ -402,9 +436,9 @@ TEST_P(RiskAnalysisTest, PhiFactorCCF) {
   } else {
     EXPECT_NEAR(0.04104, p_total(), 1e-5);
   }
-  EXPECT_EQ(34, min_cut_sets().size());
-  std::vector<int> distr = {0, 2, 24, 8};
-  EXPECT_EQ(distr, McsDistribution());
+  EXPECT_EQ(34, products().size());
+  std::vector<int> distr = {2, 24, 8};
+  EXPECT_EQ(distr, ProductDistribution());
 }
 
 // Benchmark Tests for MGL factor common cause failure calculations.
@@ -419,9 +453,9 @@ TEST_P(RiskAnalysisTest, MGLFactorCCF) {
   } else {
     EXPECT_NEAR(0.01630, p_total(), 1e-5);
   }
-  EXPECT_EQ(34, min_cut_sets().size());
-  std::vector<int> distr = {0, 2, 24, 8};
-  EXPECT_EQ(distr, McsDistribution());
+  EXPECT_EQ(34, products().size());
+  std::vector<int> distr = {2, 24, 8};
+  EXPECT_EQ(distr, ProductDistribution());
 }
 
 // Benchmark Tests for Alpha factor common cause failure calculations.
@@ -436,9 +470,9 @@ TEST_P(RiskAnalysisTest, AlphaFactorCCF) {
   } else {
     EXPECT_NEAR(0.03092, p_total(), 1e-5);
   }
-  EXPECT_EQ(34, min_cut_sets().size());
-  std::vector<int> distr = {0, 2, 24, 8};
-  EXPECT_EQ(distr, McsDistribution());
+  EXPECT_EQ(34, products().size());
+  std::vector<int> distr = {2, 24, 8};
+  EXPECT_EQ(distr, ProductDistribution());
 }
 
 }  // namespace test

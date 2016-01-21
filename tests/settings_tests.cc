@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ TEST(SettingsTest, IncorrectSetup) {
   EXPECT_THROW(s.algorithm("the-best"), InvalidArgument);
   // Incorrect approximation argument.
   EXPECT_THROW(s.approximation("approx"), InvalidArgument);
-  // Incorrect limit order for minimal cut sets.
+  // Incorrect limit order for products.
   EXPECT_THROW(s.limit_order(-1), InvalidArgument);
   // Incorrect cut-off probability.
   EXPECT_THROW(s.cut_off(-1), InvalidArgument);
@@ -61,7 +61,7 @@ TEST(SettingsTest, CorrectSetup) {
   EXPECT_NO_THROW(s.approximation("rare-event"));
   EXPECT_NO_THROW(s.approximation("mcub"));
 
-  // Correct limit order for minimal cut sets.
+  // Correct limit order for products.
   EXPECT_NO_THROW(s.limit_order(1));
   EXPECT_NO_THROW(s.limit_order(100));
 
@@ -89,6 +89,20 @@ TEST(SettingsTest, CorrectSetup) {
   EXPECT_NO_THROW(s.mission_time(0));
   EXPECT_NO_THROW(s.mission_time(10));
   EXPECT_NO_THROW(s.mission_time(1e6));
+}
+
+TEST(SettingsTest, SetupForPrimeImplicants) {
+  Settings s;
+  // Incorrect request for prime implicants.
+  EXPECT_NO_THROW(s.algorithm("mocus"));
+  EXPECT_THROW(s.prime_implicants(true), InvalidArgument);
+  // Correct request for prime implicants.
+  ASSERT_NO_THROW(s.algorithm("bdd"));
+  ASSERT_NO_THROW(s.prime_implicants(true));
+  // Prime implicants with quantitative approximations.
+  EXPECT_NO_THROW(s.approximation("no"));
+  EXPECT_THROW(s.approximation("rare-event"), InvalidArgument);
+  EXPECT_THROW(s.approximation("mcub"), InvalidArgument);
 }
 
 }  // namespace test
