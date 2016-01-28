@@ -24,7 +24,7 @@
 // Different tests are compiled depending on the build type.
 // Generally, debug or non-debug types are recognized.
 //
-// Performance testing values are taken
+// Reference performance values are taken
 // from a computer with the following specs:
 //
 //   Proc         Core i7-2820QM
@@ -33,7 +33,7 @@
 //   Boost        1.55
 //   TCMalloc     2.1
 //
-// The values for performance are expected to have some random variation.
+// The performance measurements are expected to have some random variation.
 // Better as well as worse performance are reported
 // as test failures to indicate the change.
 //
@@ -43,11 +43,25 @@
 
 #include "performance_tests.h"
 
+#include "bdd.h"
+#include "zbdd.h"
+
 namespace scram {
 namespace test {
 
-// Tests the performance of probability calculations
-// with cut-off approximations tests are done.
+// Regression check for performance assumptions of developers.
+#ifndef NDEBUG
+// Test for performance critical object sizes.
+TEST(RegressionTest, ObjectSize) {
+  // x86-64 platform.
+  // 64-bit platform with alignment at 8-byte boundaries.
+  EXPECT_EQ(48, sizeof(NonTerminal));
+  EXPECT_EQ(64, sizeof(Ite));
+  EXPECT_EQ(80, sizeof(SetNode));
+}
+#endif
+
+// Tests the performance of probability calculations.
 TEST_F(PerformanceTest, DISABLED_ThreeMotor) {
   double p_time_std = 0.01;
   std::string input = "./share/scram/input/ThreeMotor/three_motor.xml";
@@ -74,7 +88,7 @@ TEST_F(PerformanceTest, DISABLED_200Event) {
   EXPECT_LT(ProductGenerationTime(), mcs_time);
 }
 
-TEST_F(PerformanceTest, DISABLED_Baobab1_L7) {
+TEST_F(PerformanceTest, DISABLED_Baobab1L7) {
   double mcs_time = 2.5;
 #ifdef NDEBUG
   mcs_time = 0.40;
@@ -88,7 +102,7 @@ TEST_F(PerformanceTest, DISABLED_Baobab1_L7) {
   EXPECT_NEAR(mcs_time, ProductGenerationTime(), mcs_time * delta);
 }
 
-TEST_F(PerformanceTest, DISABLED_CEA9601_BDD) {
+TEST_F(PerformanceTest, DISABLED_CEA9601) {
   double mcs_time = 20;
 #ifdef NDEBUG
   mcs_time = 6;

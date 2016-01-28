@@ -16,7 +16,20 @@ project(SCRAM)
 ####################### Begin compiler configurations ###################
 
 # Default to C++11.
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++11")
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+if(NOT COMPILER_SUPPORTS_CXX11)
+  message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+set(CMAKE_CXX_FLAGS_DEBUG
+  "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -Wpedantic -Wno-sign-compare -Wno-missing-field-initializers")
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_CXX_FLAGS_DEBUG
+    "${CMAKE_CXX_FLAGS_DEBUG} -Wno-deprecated-register -Wno-missing-braces -Wshadow -Wunused-exception-parameter")
+endif()
 
 ######################## End compiler configurations ####################
 
@@ -62,8 +75,10 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Tell CMake where the modules are.
-list(APPEND CMAKE_MODULE_PATH
-  "${CMAKE_DIR}/share/cmake-2.8/Modules" "${PROJECT_SOURCE_DIR}/cmake")
+if(CMAKE_DIR)
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_DIR}/share/cmake-2.8/Modules")
+endif()
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 # Set configuration for all library builds.
 if(WIN32)
@@ -86,6 +101,8 @@ endif()
 ######################## End cmake configuration ###################
 
 ######################## Begin find libraries ######################
+
+set(LIBS "")
 
 # Optional TCMalloc for optimization.
 find_package(Tcmalloc)
@@ -121,7 +138,9 @@ else()
   message(STATUS "Linking against boost dynamic libraries")
 endif()
 
-message(STATUS "    Boost Root: ${Boost_ROOT}")
+if(Boost_ROOT)
+  message(STATUS "    Boost Root: ${Boost_ROOT}")
+endif()
 message(STATUS "    Boost Include directory: ${Boost_INCLUDE_DIR}")
 message(STATUS "    Boost Library directories: ${Boost_LIBRARY_DIRS}")
 set(LIBS ${LIBS} ${Boost_PROGRAM_OPTIONS_LIBRARY})
