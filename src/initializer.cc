@@ -22,6 +22,7 @@
 
 #include <fstream>
 #include <set>
+#include <type_traits>
 #include <unordered_map>
 
 #include <boost/algorithm/string.hpp>
@@ -39,7 +40,7 @@ namespace scram {
 
 namespace {
 
-/// Helper function to staticly cast to XML element.
+/// Helper function to statically cast to XML element.
 ///
 /// @param[in] node  XML node known to be XML element.
 ///
@@ -50,9 +51,10 @@ inline const xmlpp::Element* XmlElement(const xmlpp::Node* node) {
   return static_cast<const xmlpp::Element*>(node);
 }
 
-/// Normalizes the string in the XML attribute.
+/// Normalizes the string in an XML attribute.
 ///
 /// @param[in] element  XML element with the attribute.
+/// @param[in] attribute  The name of the attribute.
 ///
 /// @returns Normalized (trimmed) string from the attribute.
 inline std::string GetAttributeValue(const xmlpp::Element* element,
@@ -60,6 +62,31 @@ inline std::string GetAttributeValue(const xmlpp::Element* element,
   std::string value = element->get_attribute_value(attribute);
   boost::trim(value);
   return value;
+}
+
+/// Gets a number from an XML attribute.
+///
+/// @tparam T  Numerical type.
+///
+/// @param[in] element  XML element with the attribute.
+/// @param[in] attribute  The name of the attribute.
+///
+/// @returns The interpreted value.
+///
+/// @throws ValidationError  Casting is unsuccessful.
+///                          The error message will include the line number.
+template <typename T>
+inline typename std::enable_if<std::is_arithmetic<T>::value, T>::type
+CastAttributeValue(const xmlpp::Element* element,
+                   const std::string& attribute) {
+  try {
+    return boost::lexical_cast<T>(GetAttributeValue(element, attribute));
+  } catch (boost::bad_lexical_cast&) {
+    std::stringstream msg;
+    msg << "Line " << element->get_line() << ":\n"
+        << "Failed to interpret attribute '" << attribute << "' to a number.";
+    throw ValidationError(msg.str());
+  }
 }
 
 }  // namespace
@@ -144,7 +171,7 @@ void Initializer::ProcessInputFile(const std::string& xml_file) {
   file_stream.close();
 
   XmlParser* parser = new XmlParser(stream);
-  parsers_.emplace_back(parser);
+  parsers_.emplace_back(parser);  // Gets managed by unique pointer.
   parser->Validate(schema_);
 
   const xmlpp::Document* doc = parser->Document();
@@ -367,8 +394,7 @@ FormulaPtr Initializer::GetFormula(const xmlpp::Element* formula_node,
   }
   FormulaPtr formula(new Formula(type));
   if (type == "atleast") {
-    std::string min_num = GetAttributeValue(formula_node, "min");
-    int vote_number = boost::lexical_cast<int>(min_num);
+    int vote_number = CastAttributeValue<int>(formula_node, "min");
     formula->vote_number(vote_number);
   }
   // Process arguments of this formula.
@@ -563,46 +589,139 @@ void Initializer::DefineParameter(const xmlpp::Element* param_node,
   parameter->expression(expression);
 }
 
+template <class T, int N>
+struct Initializer::Extractor {
+  /// Extracts and accumulates expressions
+  /// to be passed to the constructor of expression T.
+  ///
+  /// @tparam Ts  Expression types.
+  ///
+  /// @param[in] args  A vector of XML elements containing the arguments.
+  /// @param[in] base_path  Series of ancestor containers in the path with dots.
+  /// @param[in,out] init  The host Initializer.
+  /// @param[in] expressions  Accumulated argument expressions.
+  ///
+  /// @returns A shared pointer to the extracted expression.
+  ///
+  /// @throws std::out_of_range  Not enough arguments in the args container.
+  template <class... Ts>
+  std::shared_ptr<T> operator()(const xmlpp::NodeSet& args,
+                                const std::string& base_path,
+                                Initializer* init,
+                                Ts&&... expressions) {
+    static_assert(N > 0, "The number of arguments can't be fewer than 1.");
+    return Extractor<T, N - 1>()(args, base_path, init,
+                                 init->GetExpression(XmlElement(args.at(N - 1)),
+                                                     base_path),
+                                 std::forward<Ts>(expressions)...);
+  }
+};
+
+/// Partial specialization for terminal Extractor.
+template <class T>
+struct Initializer::Extractor<T, 0> {
+  /// Constructs the requested expression T
+  /// with all accumulated argument expressions.
+  ///
+  /// @tparam Ts  Expression types.
+  ///
+  /// @param[in] expressions  All argument expressions for constructing T.
+  ///
+  /// @returns A shared pointer to the constructed expression.
+  template <class... Ts>
+  std::shared_ptr<T> operator()(const xmlpp::NodeSet& /*args*/,
+                                const std::string& /*base_path*/,
+                                Initializer* /*init*/,
+                                Ts&&... expressions) {
+    static_assert(sizeof...(Ts), "Unintended use case.");
+    return std::make_shared<T>(std::forward<Ts>(expressions)...);
+  }
+};
+
+/// Partial specialization for Extractor of Histogram expressions.
+///
+/// @tparam N  Irrelevant request for this expression.
+template <int N>
+struct Initializer::Extractor<Histogram, N> {
+  /// Constructs Histogram deviate expression
+  /// expression arguments in XML elements.
+  ///
+  /// @param[in] args  A vector of XML elements containing the arguments.
+  /// @param[in] base_path  Series of ancestor containers in the path with dots.
+  /// @param[in,out] init  The host Initializer.
+  ///
+  /// @returns A shared pointer to the constructed Histogram expression.
+  std::shared_ptr<Histogram> operator()(const xmlpp::NodeSet& args,
+                                        const std::string& base_path,
+                                        Initializer* init) {
+    std::vector<ExpressionPtr> boundaries;
+    std::vector<ExpressionPtr> weights;
+    for (const xmlpp::Node* node : args) {
+      const xmlpp::Element* el = XmlElement(node);
+      xmlpp::NodeSet pair = el->find("./*");
+      assert(pair.size() == 2);
+      boundaries.push_back(init->GetExpression(XmlElement(pair[0]), base_path));
+      weights.push_back(init->GetExpression(XmlElement(pair[1]), base_path));
+    }
+    return std::make_shared<Histogram>(std::move(boundaries),
+                                       std::move(weights));
+  }
+};
+
+const Initializer::ExtractorMap Initializer::kExpressionExtractors_ = {
+    {"exponential", Extractor<ExponentialExpression, 2>()},
+    {"GLM", Extractor<GlmExpression, 4>()},
+    {"Weibull", Extractor<WeibullExpression, 4>()},
+    {"uniform-deviate", Extractor<UniformDeviate, 2>()},
+    {"normal-deviate", Extractor<NormalDeviate, 2>()},
+    {"lognormal-deviate", Extractor<LogNormalDeviate, 3>()},
+    {"gamma-deviate", Extractor<GammaDeviate, 2>()},
+    {"beta-deviate", Extractor<BetaDeviate, 2>()},
+    {"histogram", Extractor<Histogram, -1>()}};
+
 ExpressionPtr Initializer::GetExpression(const xmlpp::Element* expr_element,
                                          const std::string& base_path) {
-  ExpressionPtr expression;
-  bool not_parameter = true;  // Parameters are saved in a different container.
-  if (GetConstantExpression(expr_element, expression)) {
-  } else if (GetParameterExpression(expr_element, base_path, expression)) {
-    not_parameter = false;
-  } else {
-    GetDeviateExpression(expr_element, base_path, expression);
-  }
-  assert(expression);
-  if (not_parameter) expressions_.push_back(expression);
+  static const std::set<std::string> const_expr = {"int", "float", "bool"};
+  static const std::set<std::string> param_expr = {"parameter",
+                                                   "system-mission-time"};
+  if (const_expr.count(expr_element->get_name()))
+    return Initializer::GetConstantExpression(expr_element);
+
+  if (param_expr.count(expr_element->get_name()))
+    return Initializer::GetParameterExpression(expr_element, base_path);
+
+  ExpressionPtr expression = kExpressionExtractors_.at(
+      expr_element->get_name())(expr_element->find("./*"), base_path, this);
+  expressions_.push_back(expression);  // For late validation.
   return expression;
 }
 
-bool Initializer::GetConstantExpression(const xmlpp::Element* expr_element,
-                                        ExpressionPtr& expression) {
+ExpressionPtr Initializer::GetConstantExpression(
+    const xmlpp::Element* expr_element) {
   assert(expr_element);
   std::string expr_name = expr_element->get_name();
-  if (expr_name == "float" || expr_name == "int") {
-    std::string val = GetAttributeValue(expr_element, "value");
-    double num = boost::lexical_cast<double>(val);
-    expression = std::make_shared<ConstantExpression>(num);
+  if (expr_name == "int") {
+    int val = CastAttributeValue<int>(expr_element, "value");
+    return std::make_shared<ConstantExpression>(val);
 
-  } else if (expr_name == "bool") {
-    std::string val = GetAttributeValue(expr_element, "value");
-    bool state = (val == "true") ? true : false;
-    expression = std::make_shared<ConstantExpression>(state);
+  } else if (expr_name == "float") {
+    double val = CastAttributeValue<double>(expr_element, "value");
+    return std::make_shared<ConstantExpression>(val);
+
   } else {
-    return false;
+    assert(expr_name == "bool");
+    std::string val = GetAttributeValue(expr_element, "value");
+    return std::make_shared<ConstantExpression>(val == "true");
   }
-  return true;
 }
 
-bool Initializer::GetParameterExpression(const xmlpp::Element* expr_element,
-                                         const std::string& base_path,
-                                         ExpressionPtr& expression) {
+ExpressionPtr Initializer::GetParameterExpression(
+    const xmlpp::Element* expr_element,
+    const std::string& base_path) {
   assert(expr_element);
   std::string expr_name = expr_element->get_name();
   std::string param_unit = "";  // The expected unit.
+  ExpressionPtr expression;
   if (expr_name == "parameter") {
     std::string name = GetAttributeValue(expr_element, "name");
     try {
@@ -616,12 +735,10 @@ bool Initializer::GetParameterExpression(const xmlpp::Element* expr_element,
       err.msg(msg.str() + err.msg());
       throw;
     }
-  } else if (expr_name == "system-mission-time") {
+  } else {
+    assert(expr_name == "system-mission-time");
     param_unit = kUnitToString_[mission_time_->unit()];
     expression = mission_time_;
-
-  } else {
-    return false;
   }
   // Check units.
   std::string unit = GetAttributeValue(expr_element, "unit");
@@ -632,86 +749,7 @@ bool Initializer::GetParameterExpression(const xmlpp::Element* expr_element,
         << "\nGiven: " << unit;
     throw ValidationError(msg.str());
   }
-  return true;
-}
-
-bool Initializer::GetDeviateExpression(const xmlpp::Element* expr_element,
-                                       const std::string& base_path,
-                                       ExpressionPtr& expression) {
-  assert(expr_element);
-  std::string expr_name = expr_element->get_name();
-  xmlpp::NodeSet args = expr_element->find("./*");
-  if (expr_name == "uniform-deviate") {
-    assert(args.size() == 2);
-    ExpressionPtr min = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr max = GetExpression(XmlElement(args[1]), base_path);
-    expression = std::make_shared<UniformDeviate>(min, max);
-
-  } else if (expr_name == "normal-deviate") {
-    assert(args.size() == 2);
-    ExpressionPtr mean = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr sigma = GetExpression(XmlElement(args[1]), base_path);
-    expression = std::make_shared<NormalDeviate>(mean, sigma);
-
-  } else if (expr_name == "lognormal-deviate") {
-    assert(args.size() == 3);
-    ExpressionPtr mean = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr ef = GetExpression(XmlElement(args[1]), base_path);
-    ExpressionPtr level = GetExpression(XmlElement(args[2]), base_path);
-    expression = std::make_shared<LogNormalDeviate>(mean, ef, level);
-
-  } else if (expr_name == "gamma-deviate") {
-    assert(args.size() == 2);
-    ExpressionPtr k = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr theta = GetExpression(XmlElement(args[1]), base_path);
-    expression = std::make_shared<GammaDeviate>(k, theta);
-
-  } else if (expr_name == "beta-deviate") {
-    assert(args.size() == 2);
-    ExpressionPtr alpha = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr beta = GetExpression(XmlElement(args[1]), base_path);
-    expression = std::make_shared<BetaDeviate>(alpha, beta);
-
-  } else if (expr_name == "histogram") {
-    std::vector<ExpressionPtr> boundaries;
-    std::vector<ExpressionPtr> weights;
-    for (const xmlpp::Node* node : args) {
-      const xmlpp::Element* el = XmlElement(node);
-      xmlpp::NodeSet pair = el->find("./*");
-      assert(pair.size() == 2);
-      ExpressionPtr bound = GetExpression(XmlElement(pair[0]), base_path);
-      boundaries.push_back(bound);
-
-      ExpressionPtr weight = GetExpression(XmlElement(pair[1]), base_path);
-      weights.push_back(weight);
-    }
-    expression = std::make_shared<Histogram>(boundaries, weights);
-
-  } else if (expr_name == "exponential") {
-    assert(args.size() == 2);
-    ExpressionPtr lambda = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr time = GetExpression(XmlElement(args[1]), base_path);
-    expression = std::make_shared<ExponentialExpression>(lambda, time);
-
-  } else if (expr_name == "GLM") {
-    assert(args.size() == 4);
-    ExpressionPtr gamma = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr lambda = GetExpression(XmlElement(args[1]), base_path);
-    ExpressionPtr mu = GetExpression(XmlElement(args[2]), base_path);
-    ExpressionPtr time = GetExpression(XmlElement(args[3]), base_path);
-    expression = std::make_shared<GlmExpression>(gamma, lambda, mu, time);
-
-  } else if (expr_name == "Weibull") {
-    assert(args.size() == 4);
-    ExpressionPtr alpha = GetExpression(XmlElement(args[0]), base_path);
-    ExpressionPtr beta = GetExpression(XmlElement(args[1]), base_path);
-    ExpressionPtr t0 = GetExpression(XmlElement(args[2]), base_path);
-    ExpressionPtr time = GetExpression(XmlElement(args[3]), base_path);
-    expression = std::make_shared<WeibullExpression>(alpha, beta, t0, time);
-  } else {
-    return false;
-  }
-  return true;
+  return expression;
 }
 
 CcfGroupPtr Initializer::RegisterCcfGroup(const xmlpp::Element* ccf_node,
@@ -813,7 +851,7 @@ void Initializer::DefineCcfFactor(const xmlpp::Element* factor_node,
     msg << "CCF group factor level number is not provided.";
     throw ValidationError(msg.str());
   }
-  int level_num = boost::lexical_cast<int>(level);
+  int level_num = CastAttributeValue<int>(factor_node, "level");
   assert(factor_node->find("./*").size() == 1);
   const xmlpp::Element* expr_node = XmlElement(factor_node->find("./*")[0]);
   ExpressionPtr expression =

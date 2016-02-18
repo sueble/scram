@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -67,13 +67,7 @@ void XmlParserTests::FillBadSchema(std::stringstream& ss) {
      << "</grammar>";
 }
 
-void XmlParserTests::SetUp() {
-  inner_node_ = "inside";
-  outer_node_ = "outside";
-  inner_content_ = "inside_content";
-}
-
-void XmlParserTests::TearDown() {}
+using XmlParserPtr = std::unique_ptr<XmlParser>;
 
 // This is an indirect test of the validator.
 TEST_F(XmlParserTests, RelaxNGValidator) {
@@ -83,18 +77,14 @@ TEST_F(XmlParserTests, RelaxNGValidator) {
   FillSchema(schema);
 
   XmlParserPtr parser;
-  EXPECT_NO_THROW(parser = XmlParserPtr(new XmlParser(snippet)));
+  ASSERT_NO_THROW(parser = XmlParserPtr(new XmlParser(snippet)));
 
   RelaxNGValidator validator;
-  const xmlpp::Document* doc = nullptr;
-  EXPECT_NO_THROW(validator.ParseMemory(schema.str()));
-  EXPECT_THROW(validator.Validate(doc), InvalidArgument);
-
-  doc = parser->Document();
-  validator = RelaxNGValidator();
+  EXPECT_THROW(validator.Validate(nullptr), LogicError);
+  const xmlpp::Document* doc = parser->Document();
   EXPECT_THROW(validator.Validate(doc), LogicError);  // No schema initialized.
 
-  EXPECT_NO_THROW(validator.ParseMemory(schema.str()));
+  ASSERT_NO_THROW(validator.ParseMemory(schema.str()));
   EXPECT_NO_THROW(validator.Validate(doc));  // Initialized.
 }
 

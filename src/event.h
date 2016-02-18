@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,6 +86,12 @@ class PrimaryEvent : public Event {
   bool has_expression() const { return has_expression_; }
 
  protected:
+  /// Sets indication for existence of an expression.
+  ///
+  /// @param[in] flag  true if the expression is defined.
+  void has_expression(bool flag) { has_expression_ = flag; }
+
+ private:
   /// Flag to notify that expression for the event is defined.
   bool has_expression_ = false;
 };
@@ -100,7 +106,7 @@ class HouseEvent : public PrimaryEvent {
   ///
   /// @param[in] constant  False or True for the state of this house event.
   void state(bool constant) {
-    PrimaryEvent::has_expression_ = true;
+    PrimaryEvent::has_expression(true);
     state_ = constant;
   }
 
@@ -122,14 +128,14 @@ class BasicEvent : public PrimaryEvent {
  public:
   using PrimaryEvent::PrimaryEvent;  // Construction with unique identification.
 
-  virtual ~BasicEvent() {}
+  virtual ~BasicEvent() = default;
 
   /// Sets the expression of this basic event.
   ///
   /// @param[in] expression  The expression to describe this event.
   void expression(const ExpressionPtr& expression) {
     assert(!expression_);
-    PrimaryEvent::has_expression_ = true;
+    PrimaryEvent::has_expression(true);
     expression_ = expression;
   }
 
@@ -307,12 +313,12 @@ class Formula {
   /// @throws LogicError  The gate is not yet assigned.
   const std::string& type() const { return type_; }
 
-  /// @returns The vote number if and only if the operator is ATLEAST.
+  /// @returns The vote number if and only if the formula is "atleast".
   ///
   /// @throws LogicError  The vote number is not yet assigned.
   int vote_number() const;
 
-  /// Sets the vote number only for an ATLEAST formula.
+  /// Sets the vote number only for an "atleast" formula.
   ///
   /// @param[in] number  The vote number.
   ///
@@ -396,7 +402,7 @@ class Formula {
   /// @param[in,out] container  The final destination to save the event.
   ///
   /// @throws DuplicateArgumentError  The argument even tis duplicate.
-  template<typename Ptr>
+  template <class Ptr>
   void AddArgument(const Ptr& event, std::vector<Ptr>* container) {
     if (event_args_.count(event->id()))
       throw DuplicateArgumentError("Duplicate argument " + event->name());
@@ -408,7 +414,7 @@ class Formula {
   void GatherNodesAndConnectors();
 
   std::string type_;  ///< Logical operator.
-  int vote_number_;  ///< Vote number for ATLEAST operator.
+  int vote_number_;  ///< Vote number for "atleast" operator.
   std::map<std::string, EventPtr> event_args_;  ///< All event arguments.
   std::vector<HouseEventPtr> house_event_args_;  ///< House event arguments.
   std::vector<BasicEventPtr> basic_event_args_;  ///< Basic event arguments.

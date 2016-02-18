@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -83,7 +83,7 @@ TEST(InitializerTest, UnsupportedFeature) {
 }
 
 // Test correct inputs without probability information.
-TEST(InitializerTest, CorrectFTAInputs) {
+TEST(InitializerTest, CorrectFtaInputs) {
   std::string dir = "./share/scram/input/fta/";
   std::vector<std::string> correct_inputs = {
       "correct_tree_input.xml",
@@ -113,7 +113,7 @@ TEST(InitializerTest, CorrectFTAInputs) {
 }
 
 // Test correct inputs with probability information.
-TEST(InitializerTest, CorrectProbInputs) {
+TEST(InitializerTest, CorrectProbabilityInputs) {
   std::string dir = "./share/scram/input/fta/";
   std::vector<std::string> correct_inputs = {
       "correct_tree_input_with_probs.xml",
@@ -133,10 +133,11 @@ TEST(InitializerTest, CorrectProbInputs) {
 }
 
 // Test incorrect fault tree inputs
-TEST(InitializerTest, IncorrectFTAInputs) {
+TEST(InitializerTest, IncorrectFtaInputs) {
   std::string dir = "./share/scram/input/fta/";
 
   std::vector<std::string> incorrect_inputs = {
+      "int_overflow.xml",
       "doubly_defined_gate.xml",
       "doubly_defined_house.xml",
       "doubly_defined_basic.xml",
@@ -184,7 +185,7 @@ TEST(InitializerTest, IncorrectFTAInputs) {
   }
 }
 
-TEST(InitializerTest, IncorrectProbInputs) {
+TEST(InitializerTest, IncorrectProbabilityInputs) {
   std::string dir = "./share/scram/input/fta/";
   std::vector<std::string> incorrect_inputs = {
       "invalid_probability.xml",
