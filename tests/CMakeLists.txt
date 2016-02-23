@@ -6,9 +6,9 @@ set(GENERATED_FILTER_LIST "" CACHE INTERNAL "")
 set(GENERATED_TEST_SOURCE_LIST "" CACHE INTERNAL "")
 
 # The gtest include file directories.
-set(GTEST_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest/include")
+set(GTEST_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/googletest/include")
 
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/GoogleTest")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/googletest")
 
 # Alerts CMake to any tests
 # we need to worry about.
@@ -19,6 +19,7 @@ include_directories(${GTEST_INCLUDE_DIRS})
 # Any GoogleTests inside will be automatically added to ctest.
 set(SCRAM_CORE_TEST_SOURCE
   "${CMAKE_CURRENT_SOURCE_DIR}/xml_parser_tests.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/xml_stream_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/settings_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/config_tests.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/element_tests.cc"

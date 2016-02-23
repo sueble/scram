@@ -741,18 +741,17 @@ bool Preprocessor::CoalesceGates(bool common) noexcept {
   assert(null_gates_.empty());
   if (graph_->root()->IsConstant()) return false;
   graph_->ClearGateMarks();
-  bool ret = Preprocessor::JoinGates(graph_->root(), common);
+  bool ret = Preprocessor::CoalesceGates(graph_->root(), common);
 
   assert(null_gates_.empty());
   Preprocessor::ClearConstGates();
   return ret;
 }
 
-bool Preprocessor::JoinGates(const IGatePtr& gate, bool common) noexcept {
+bool Preprocessor::CoalesceGates(const IGatePtr& gate, bool common) noexcept {
   if (gate->mark()) return false;
   gate->mark(true);
-  bool possible = true;  // If joining is possible at all.
-  Operator target_type;  // What kind of arg gate are we searching for?
+  Operator target_type = kNull;  // What kind of arg gate are we searching for?
   switch (gate->type()) {
     case kNand:
     case kAnd:
@@ -765,18 +764,18 @@ bool Preprocessor::JoinGates(const IGatePtr& gate, bool common) noexcept {
       target_type = kOr;
       break;
     default:
-      possible = false;
+      target_type = kNull;  // Implicit no operation!
   }
   assert(!gate->args().empty());
   std::vector<IGatePtr> to_join;  // Gate arguments of the same logic.
   bool changed = false;  // Indication if the graph is changed.
   for (const std::pair<const int, IGatePtr>& arg : gate->gate_args()) {
     IGatePtr arg_gate = arg.second;
-    if (Preprocessor::JoinGates(arg_gate, common)) changed = true;
+    if (Preprocessor::CoalesceGates(arg_gate, common)) changed = true;
 
-    if (!possible) continue;  // Joining with the parent is impossible.
+    if (target_type == kNull) continue;  // Coalescing is impossible.
     if (arg_gate->IsConstant()) continue;  // No args to join.
-    if (arg.first < 0) continue;  // Cannot join a negative arg gate.
+    if (arg.first < 0) continue;  // Cannot coalesce a negative arg gate.
     if (arg_gate->IsModule()) continue;  // Preserve modules.
     if (!common && arg_gate->parents().size() > 1) continue;  // Check common.
 
@@ -784,7 +783,7 @@ bool Preprocessor::JoinGates(const IGatePtr& gate, bool common) noexcept {
   }
 
   for (const IGatePtr& arg : to_join) {
-    gate->JoinGate(arg);
+    gate->CoalesceGate(arg);
     changed = true;
     if (gate->IsConstant()) {
       const_gates_.push_back(gate);  // Register for future processing.
@@ -1553,8 +1552,7 @@ bool Preprocessor::DetectDistributivity(const IGatePtr& gate) noexcept {
   gate->mark(true);
   assert(!gate->IsConstant());
   bool changed = false;
-  bool possible = true;  // Whether or not distributivity possible.
-  Operator distr_type;
+  Operator distr_type = kNull;  // Implicit flag of no operation!
   switch (gate->type()) {
     case kAnd:
     case kNand:
@@ -1565,7 +1563,7 @@ bool Preprocessor::DetectDistributivity(const IGatePtr& gate) noexcept {
       distr_type = kAnd;
       break;
     default:
-      possible = false;
+      distr_type = kNull;
   }
   std::vector<IGatePtr> candidates;
   // Collect child gates of distributivity type.
@@ -1574,7 +1572,7 @@ bool Preprocessor::DetectDistributivity(const IGatePtr& gate) noexcept {
     bool ret = Preprocessor::DetectDistributivity(child_gate);
     assert(!child_gate->IsConstant() && "Impossible state.");
     if (ret) changed = true;
-    if (!possible) continue;  // Distributivity is not possible.
+    if (distr_type == kNull) continue;  // Distributivity is not possible.
     if (arg.first < 0) continue;  // Does not work on negation.
     if (child_gate->IsModule()) continue;  // Can't have common arguments.
     if (child_gate->type() == distr_type) candidates.push_back(child_gate);
@@ -1590,6 +1588,7 @@ bool Preprocessor::HandleDistributiveArgs(
     std::vector<IGatePtr>* candidates) noexcept {
   if (candidates->empty()) return false;
   assert(gate->args().size() > 1 && "Malformed parent gate.");
+  assert(distr_type == kAnd || distr_type == kOr);
   bool changed = Preprocessor::FilterDistributiveArgs(gate, candidates);
   if (candidates->size() < 2) return changed;
   // Detecting a combination
@@ -1747,6 +1746,7 @@ void Preprocessor::TransformDistributiveArgs(
     Operator distr_type,
     MergeTable::MergeGroup* group) noexcept {
   if (group->empty()) return;
+  assert(distr_type == kAnd || distr_type == kOr);
   const MergeTable::Option& base_option = group->front();
   const MergeTable::CommonArgs& args = base_option.first;
   const MergeTable::CommonParents& gates = base_option.second;
