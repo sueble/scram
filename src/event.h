@@ -181,8 +181,7 @@ class BasicEvent : public PrimaryEvent {
   /// Indicates if this basic event has been set to be in a CCF group.
   ///
   /// @returns true if in a CCF group.
-  /// @returns false otherwise.
-  bool HasCcf() const { return ccf_gate_ ? true : false; }
+  bool HasCcf() const { return ccf_gate_ != nullptr; }
 
   /// @returns CCF group gate representing this basic event.
   const GatePtr& ccf_gate() const {
@@ -292,7 +291,7 @@ class Gate : public Event {
 
  private:
   FormulaPtr formula_;  ///< Boolean formula of this gate.
-  std::string mark_ = "";  ///< The mark for traversal or toposort.
+  std::string mark_;  ///< The mark for traversal or toposort.
 };
 
 /// @class Formula
