@@ -35,7 +35,7 @@ namespace scram {
 /// Representation of non-terminal nodes in ZBDD.
 /// Complement variables are represented with negative indices.
 /// The order of the complement is higher than the order of the variable.
-class SetNode : public NonTerminal {
+class SetNode : public NonTerminal<SetNode> {
  public:
   using NonTerminal::NonTerminal;  ///< Constructor with index and order.
 
@@ -72,8 +72,9 @@ class SetNode : public NonTerminal {
   /// @param[in] vertex  Pointer to a Vertex known to be a SetNode.
   ///
   /// @return Casted pointer to SetNode.
-  static std::shared_ptr<SetNode> Ptr(const std::shared_ptr<Vertex>& vertex) {
-    return std::static_pointer_cast<SetNode>(vertex);
+  static IntrusivePtr<SetNode> Ptr(
+      const IntrusivePtr<Vertex<SetNode>>& vertex) {
+    return boost::static_pointer_cast<SetNode>(vertex);
   }
 
  private:
@@ -82,13 +83,15 @@ class SetNode : public NonTerminal {
   int64_t count_ = 0;  ///< The number of products, nodes, or anything else.
 };
 
-using SetNodePtr = std::shared_ptr<SetNode>;  ///< Shared ZBDD set nodes.
-using SetNodeWeakPtr = std::weak_ptr<SetNode>;  ///< Pointer for tables.
+using SetNodePtr = IntrusivePtr<SetNode>;  ///< Shared ZBDD set nodes.
 
 /// @class Zbdd
 /// Zero-Suppressed Binary Decision Diagrams for set manipulations.
 class Zbdd {
  public:
+  using VertexPtr = IntrusivePtr<Vertex<SetNode>>;  ///< ZBDD vertex base.
+  using TerminalPtr = IntrusivePtr<Terminal<SetNode>>;  ///< Terminal vertex.
+
   /// Converts Reduced Ordered BDD
   /// into Zero-Suppressed BDD.
   ///
@@ -132,29 +135,10 @@ class Zbdd {
   const std::vector<std::vector<int>>& products() const { return products_; }
 
  protected:
+  using SetNodeWeakPtr = WeakIntrusivePtr<SetNode>;  ///< Pointer for tables.
   using UniqueTable = TripletTable<SetNodeWeakPtr>;  ///< To keep ZBDD reduced.
   using ComputeTable = TripletTable<VertexPtr>;  ///< General computation table.
   using Product = std::vector<int>;  ///< For clarity of expected results.
-
-  /// @class GarbageCollector
-  /// This garbage collector manages tables of a ZBDD.
-  /// The garbage collection is triggered
-  /// when the reference count of a ZBDD vertex reaches 0.
-  class GarbageCollector {
-   public:
-    /// @param[in,out] zbdd  ZBDD to manage.
-    explicit GarbageCollector(Zbdd* zbdd) noexcept
-        : unique_table_(zbdd->unique_table_) {}
-
-    /// Frees the memory
-    /// and triggers the garbage collection ONLY if requested.
-    ///
-    /// @param[in] ptr  Pointer to a SetNode vertex with reference count 0.
-    void operator()(SetNode* ptr) noexcept;
-
-   private:
-    std::weak_ptr<UniqueTable> unique_table_;  ///< Managed table.
-  };
 
   /// Default constructor to initialize member variables.
   ///
@@ -274,7 +258,7 @@ class Zbdd {
   /// @returns Pointer to the root vertex of the ZBDD graph.
   ///
   /// @post The input BDD structure is not changed.
-  VertexPtr ConvertBdd(const VertexPtr& vertex, bool complement,
+  VertexPtr ConvertBdd(const Bdd::VertexPtr& vertex, bool complement,
                        Bdd* bdd_graph, int limit_order,
                        PairTable<VertexPtr>* ites) noexcept;
 
@@ -326,29 +310,42 @@ class Zbdd {
       std::unordered_map<int, std::pair<VertexPtr, int>>* gates,
       std::unordered_map<int, IGatePtr>* module_gates) noexcept;
 
-  /// Fetches computation tables for results.
+  /// Computes the key for computation results.
+  /// The key is used in computation memoisation tables.
   ///
-  /// @param[in] type  Boolean operation type.
   /// @param[in] arg_one  First argument.
   /// @param[in] arg_two  Second argument.
   /// @param[in] limit_order  The limit on the order for the computations.
   ///
-  /// @returns nullptr reference for uploading the computation results
-  ///                  if it doesn't exists.
-  /// @returns Pointer to ZBDD root vertex as the computation result.
+  /// @returns A triplet of integers for the computation key.
   ///
-  /// @pre The operator is either AND or OR.
   /// @pre The arguments are not the same functions.
   ///      Equal ID functions are handled by the reduction.
   /// @pre Even though the arguments are not SetNodePtr type,
   ///      they are ZBDD SetNode vertices.
-  ///
-  /// @note The order of input argument vertices does not matter.
-  VertexPtr& FetchComputeTable(Operator type, const VertexPtr& arg_one,
-                               const VertexPtr& arg_two,
-                               int limit_order) noexcept;
+  Triplet GetResultKey(const VertexPtr& arg_one, const VertexPtr& arg_two,
+                       int limit_order) noexcept;
 
   /// Applies Boolean operation to two vertices representing sets.
+  /// This is the main function for the operation.
+  ///
+  /// @tparam Type  The operator enum.
+  ///
+  /// @param[in] arg_one  First argument ZBDD set.
+  /// @param[in] arg_two  Second argument ZBDD set.
+  /// @param[in] limit_order  The limit on the order for the computations.
+  ///
+  /// @returns The resulting ZBDD vertex.
+  ///
+  /// @note The limit on the order is not guaranteed.
+  ///       It is for optimization purposes only.
+  template <Operator Type>
+  VertexPtr Apply(const VertexPtr& arg_one, const VertexPtr& arg_two,
+                  int limit_order) noexcept;
+
+  /// Applies Boolean operation to two vertices representing sets.
+  /// This is a convenience function
+  /// if the operator type cannot be determined at compile time.
   ///
   /// @param[in] type  The operator or type of the gate.
   /// @param[in] arg_one  First argument ZBDD set.
@@ -364,22 +361,10 @@ class Zbdd {
   VertexPtr Apply(Operator type, const VertexPtr& arg_one,
                   const VertexPtr& arg_two, int limit_order) noexcept;
 
-  /// Applies the logic of a Boolean operator
-  /// with a terminal vertex.
-  ///
-  /// @param[in] type  The operator to apply.
-  /// @param[in] term_one  First argument terminal vertex.
-  /// @param[in] arg_two  Second argument vertex.
-  ///
-  /// @returns The resulting ZBDD vertex.
-  ///
-  /// @pre The operator is either AND or OR.
-  VertexPtr Apply(Operator type, const TerminalPtr& term_one,
-                  const VertexPtr& arg_two) noexcept;
-
   /// Applies Boolean operation to ZBDD graph non-terminal vertices.
   ///
-  /// @param[in] type  The operator or type of the gate.
+  /// @tparam Type  The operator enum.
+  ///
   /// @param[in] arg_one  First argument set vertex.
   /// @param[in] arg_two  Second argument set vertex.
   /// @param[in] limit_order  The limit on the order for the computations.
@@ -387,10 +372,9 @@ class Zbdd {
   /// @returns The resulting ZBDD vertex.
   ///
   /// @pre Argument vertices are ordered.
-  ///
-  /// @pre The operator is either AND or OR.
-  VertexPtr Apply(Operator type, const SetNodePtr& arg_one,
-                  const SetNodePtr& arg_two, int limit_order) noexcept;
+  template <Operator Type>
+  VertexPtr Apply(const SetNodePtr& arg_one, const SetNodePtr& arg_two,
+                  int limit_order) noexcept;
 
   /// Removes complements of variables from products.
   /// This procedure only needs to be performed for non-coherent graphs
@@ -616,7 +600,7 @@ class Zbdd {
 
   /// Table of unique SetNodes denoting sets.
   /// The key consists of (index, id_high, id_low) triplet.
-  std::shared_ptr<UniqueTable> unique_table_;
+  UniqueTable unique_table_;
 
   /// Table of processed computations over sets.
   /// The argument sets are recorded with their IDs (not vertex indices).

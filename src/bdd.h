@@ -22,41 +22,182 @@
 #define SCRAM_SRC_BDD_H_
 
 #include <array>
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <boost/functional/hash.hpp>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #include "boolean_graph.h"
 #include "settings.h"
 
 namespace scram {
 
+/// @struct ControlBlock
+/// Control flags and pointers for communication
+/// between BDD vertex pointers and BDD tables.
+struct ControlBlock {
+  void* vertex;  ///< The manager of the control block.
+  int weak_count;  ///< Pointers in tables.
+};
+
+/// The default management of BDD vertices.
+///
+/// @tparam T  The type of the main functional BDD vertex.
+template <class T>
+using IntrusivePtr = boost::intrusive_ptr<T>;
+
+/// A weak pointer to store in tables.
+///
+/// @tparam T  The type of the main functional BDD vertex.
+template <class T>
+class WeakIntrusivePtr final {
+  /// No-throw swaperator for containers.
+  friend void swap(WeakIntrusivePtr& lhs, WeakIntrusivePtr& rhs) noexcept {
+    std::swap(lhs->control_block_, rhs->control_block_);
+  }
+
+ public:
+  /// Default constructor is to allow initialization in tables.
+  WeakIntrusivePtr() noexcept : control_block_(nullptr) {}
+
+  WeakIntrusivePtr(const WeakIntrusivePtr& ptr) = delete;  ///< No use.
+  WeakIntrusivePtr& operator=(const WeakIntrusivePtr&) = delete;  ///< No use.
+
+  /// Constructs from the shared pointer.
+  /// However, there is no weak-to-shared constructor.
+  ///
+  /// @param[in] ptr  Fully initialized intrusive pointer.
+  explicit WeakIntrusivePtr(const IntrusivePtr<T>& ptr) noexcept
+      : control_block_(get_control_block(ptr.get())) {
+    control_block_->weak_count++;
+  }
+
+  /// Copy assignment from shared pointers
+  /// for convenient initialization with operator[] in hash tables.
+  ///
+  /// @param[in] ptr  Fully initialized intrusive pointer.
+  ///
+  /// @returns Reference to this.
+  WeakIntrusivePtr& operator=(const IntrusivePtr<T>& ptr) noexcept {
+    this->~WeakIntrusivePtr();
+    new(this) WeakIntrusivePtr(ptr);
+    return *this;
+  }
+
+  /// Decrements weak count in the control block.
+  /// If this is the last pointer and vertex is gone,
+  /// the control block is deleted.
+  ~WeakIntrusivePtr() noexcept {
+    if (control_block_) {
+      if (--control_block_->weak_count == 0 &&
+          control_block_->vertex == nullptr)
+        delete control_block_;
+    }
+  }
+
+  /// @returns true if the managed vertex is deleted or not initialized.
+  bool expired() const { return !control_block_ || !control_block_->vertex; }
+
+  /// @returns The intrusive pointer of the vertex.
+  ///
+  /// @warning Hard failure for uninitialized pointers.
+  IntrusivePtr<T> lock() const {
+    return IntrusivePtr<T>(static_cast<T*>(control_block_->vertex));
+  }
+
+ private:
+  ControlBlock* control_block_;  ///< To receive information from vertices.
+};
+
+template <class T>
+class Terminal;  // Forward declaration for Vertex to manage.
+
 /// @class Vertex
 /// Representation of a vertex in BDD graphs.
 /// This is a base class for all BDD vertices;
 /// however, it is NOT polymorphic for performance reasons.
+///
+/// @tparam T  The type of the main functional BDD vertex.
+///
+/// @pre Vertices are managed by reference counted pointers
+///      provided by this class' interface.
+/// @pre Vertices are not shared among separate BDD instances.
+template <class T>
 class Vertex {
+  /// @param[in] ptr  Vertex pointer managed by intrusive pointers.
+  ///
+  /// @returns The control block of intrusive counting for tables.
+  friend ControlBlock* get_control_block(Vertex<T>* ptr) noexcept {
+    return ptr->control_block_;
+  }
+
+  /// Increases the reference count for new intrusive pointers.
+  ///
+  /// @param[in] ptr  Vertex pointer managed by intrusive pointers.
+  friend void intrusive_ptr_add_ref(Vertex<T>* ptr) noexcept {
+    ptr->use_count_++;
+  }
+
+  /// Decrements the reference count for removed intrusive pointers.
+  /// If no more intrusive pointers left,
+  /// the object is deleted.
+  ///
+  /// @param[in] ptr  Vertex pointer managed by intrusive pointers.
+  friend void intrusive_ptr_release(Vertex<T>* ptr) noexcept {
+    assert(ptr->use_count_ > 0 && "Missing reference counts.");
+    if (--ptr->use_count_ == 0) {
+      if (!ptr->terminal()) {  // Likely.
+        delete static_cast<T*>(ptr);
+      } else {
+        delete static_cast<Terminal<T>*>(ptr);
+      }
+    }
+  }
+
  public:
-  /// @param[in] id  Identificator of the BDD graph.
-  explicit Vertex(int id);
+  /// @param[in] id  Identifier of the BDD graph.
+  explicit Vertex(int id)
+      : id_(id),
+        use_count_(0),
+        control_block_(new ControlBlock{this}) {}
 
   Vertex(const Vertex&) = delete;
   Vertex& operator=(const Vertex&) = delete;
 
-  /// @returns Identificator of the BDD graph rooted by this vertex.
+  /// @returns Identifier of the BDD graph rooted by this vertex.
   int id() const { return id_; }
 
   /// @returns true if this vertex is terminal.
   bool terminal() const { return id_ < 2; }
 
+  /// @returns The number of registered intrusive pointers.
+  int use_count() const { return use_count_; }
+
+  /// @returns true if there is only one registered shared pointer.
+  bool unique() const {
+    assert(use_count_ && "No registered shared pointers.");
+    return use_count_ == 1;
+  }
+
  protected:
-  ~Vertex() = default;
+  /// Communicates the destruction via the control block
+  /// if there's anyone left to care.
+  ~Vertex() noexcept {
+    if (control_block_->weak_count == 0) {
+      delete control_block_;
+    } else {
+      control_block_->vertex = nullptr;
+    }
+  }
 
  private:
   int id_;  ///< Unique identifier of the BDD graph with this vertex.
+  int use_count_;  ///< Reference count for the intrusive pointer.
+  ControlBlock* control_block_;  ///< Communication channel for pointers.
 };
 
 /// @class Terminal
@@ -66,36 +207,41 @@ class Vertex {
 /// there are at most two terminal vertices of value 1 or 0.
 /// If the BDD graph has attributed edges,
 /// only single terminal vertex is expected with value 1.
-class Terminal : public Vertex {
+///
+/// @tparam T  The type of the main functional BDD vertex.
+template <class T>
+class Terminal : public Vertex<T> {
  public:
   /// @param[in] value  True or False (1 or 0) terminal.
-  explicit Terminal(bool value);
+  explicit Terminal(bool value) : Vertex<T>(value) {}
 
   /// @returns The value of the terminal vertex.
   ///
   /// @note The value serves as an id for this terminal vertex.
   ///       Non-terminal if-then-else vertices should never have
   ///       identifications of value 0 or 1.
-  bool value() const { return Vertex::id(); }
+  bool value() const { return Vertex<T>::id(); }
 
   /// Recovers a shared pointer to Terminal from a pointer to Vertex.
   ///
   /// @param[in] vertex  Pointer to a Vertex known to be a Terminal.
   ///
   /// @return Casted pointer to Terminal.
-  static std::shared_ptr<Terminal> Ptr(const std::shared_ptr<Vertex>& vertex) {
-    return std::static_pointer_cast<Terminal>(vertex);
+  static IntrusivePtr<Terminal<T>> Ptr(const IntrusivePtr<Vertex<T>>& vertex) {
+    return boost::static_pointer_cast<Terminal<T>>(vertex);
   }
 };
-
-using VertexPtr = std::shared_ptr<Vertex>;  ///< Shared BDD vertices.
-using TerminalPtr = std::shared_ptr<Terminal>;  ///< Shared terminal vertices.
 
 /// @class NonTerminal
 /// Representation of non-terminal vertices in BDD graphs.
 /// This class is a base class for various BDD-specific vertices.
 /// however, as Vertex, NonTerminal is not polymorphic.
-class NonTerminal : public Vertex {
+///
+/// @tparam T  The type of the main functional BDD vertex.
+template <class T>
+class NonTerminal : public Vertex<T> {
+  using VertexPtr = IntrusivePtr<Vertex<T>>;  ///< Convenient change point.
+
  public:
   /// @param[in] index  Index of this non-terminal vertex.
   /// @param[in] order  Specific ordering number for BDD graphs.
@@ -105,7 +251,15 @@ class NonTerminal : public Vertex {
   /// @param[in] high  A vertex for the (1/True/then/left) branch.
   /// @param[in] low  A vertex for the (0/False/else/right) branch.
   NonTerminal(int index, int order, int id, const VertexPtr& high,
-              const VertexPtr& low);
+              const VertexPtr& low)
+      : Vertex<T>(id),
+        high_(high),
+        low_(low),
+        order_(order),
+        index_(index),
+        module_(false),
+        coherent_(false),
+        mark_(false) {}
 
   /// @returns The index of this vertex.
   int index() const { return index_; }
@@ -160,9 +314,9 @@ class NonTerminal : public Vertex {
   }
 
  private:
-  int order_;  ///< Order of the variable.
   VertexPtr high_;  ///< 1 (True/then) branch in the Shannon decomposition.
   VertexPtr low_;  ///< O (False/else) branch in the Shannon decomposition.
+  int order_;  ///< Order of the variable.
   int index_;  ///< Index of the variable.
   bool module_;  ///< Mark for module variables.
   bool coherent_;  ///< Mark for coherence.
@@ -178,7 +332,7 @@ class NonTerminal : public Vertex {
 ///       one of two (high/low) edges to assign the attribute.
 ///       Consistency is not the responsibility of this class
 ///       but of BDD algorithms and users.
-class Ite : public NonTerminal {
+class Ite : public NonTerminal<Ite> {
  public:
   using NonTerminal::NonTerminal;  ///< Constructor with index and order.
 
@@ -211,8 +365,8 @@ class Ite : public NonTerminal {
   /// @param[in] vertex  Pointer to a Vertex known to be an Ite.
   ///
   /// @return Casted pointer to Ite.
-  static std::shared_ptr<Ite> Ptr(const std::shared_ptr<Vertex>& vertex) {
-    return std::static_pointer_cast<Ite>(vertex);
+  static IntrusivePtr<Ite> Ptr(const IntrusivePtr<Vertex<Ite>>& vertex) {
+    return boost::static_pointer_cast<Ite>(vertex);
   }
 
  private:
@@ -221,8 +375,7 @@ class Ite : public NonTerminal {
   double factor_ = 0;  ///< Importance factor calculation results.
 };
 
-using ItePtr = std::shared_ptr<Ite>;  ///< Shared if-then-else vertices.
-using IteWeakPtr = std::weak_ptr<Ite>;  ///< Pointer for storage outside of BDD.
+using ItePtr = IntrusivePtr<Ite>;  ///< Shared if-then-else vertices.
 
 using Triplet = std::array<int, 3>;  ///< (v, G, H) triplet for functions.
 
@@ -277,6 +430,9 @@ class Bdd {
   friend class Zbdd;  // Direct access for calculation of prime implicants.
 
  public:
+  using VertexPtr = IntrusivePtr<Vertex<Ite>>;  ///< BDD vertex base.
+  using TerminalPtr = IntrusivePtr<Terminal<Ite>>;  ///< Terminal vertices.
+
   /// Constructor with the analysis target.
   /// Reduced Ordered BDD is produced from a Boolean graph.
   ///
@@ -333,31 +489,12 @@ class Bdd {
   const std::vector<std::vector<int>>& products() const;
 
  private:
+  using IteWeakPtr = WeakIntrusivePtr<Ite>;  ///< Pointer in containers.
   using UniqueTable = TripletTable<IteWeakPtr>;  ///< To keep BDD reduced.
   /// To store computed results with an ordered pair of arguments.
   /// This table introduces circular reference
   /// if one of the arguments is the computation result.
   using ComputeTable = PairTable<Function>;
-
-  /// @class GarbageCollector
-  /// This garbage collector manages tables of a BDD.
-  /// The garbage collection is triggered
-  /// when the reference count of a BDD vertex reaches 0.
-  class GarbageCollector {
-   public:
-    /// @param[in,out] bdd  BDD to manage.
-    explicit GarbageCollector(Bdd* bdd) noexcept
-        : unique_table_(bdd->unique_table_) {}
-
-    /// Frees the memory
-    /// and triggers the garbage collection ONLY if requested.
-    ///
-    /// @param[in] ptr  Pointer to an ITE vertex with reference count 0.
-    void operator()(Ite* ptr) noexcept;
-
-   private:
-    std::weak_ptr<UniqueTable> unique_table_;  ///< Managed table.
-  };
 
   /// Fetches a unique if-then-else vertex from a hash table.
   /// If the vertex doesn't exist,
@@ -371,8 +508,7 @@ class Bdd {
   ///
   /// @returns If-then-else node with the given parameters.
   ///
-  /// @pre Expired pointers in the unique table are garbage collected.
-  /// @pre Only pointers in the unique table are
+  /// @pre Non-expired pointers in the unique table are
   ///      either in the BDD or in the computation table.
   ItePtr FetchUniqueTable(int index, const VertexPtr& high,
                           const VertexPtr& low, bool complement_edge,
@@ -421,38 +557,57 @@ class Bdd {
       const IGatePtr& gate,
       std::unordered_map<int, std::pair<Function, int>>* gates) noexcept;
 
-  /// Fetches computation tables for results.
+  /// Computes minimum and maximum ids for keys in computation tables.
   ///
-  /// @param[in] type  The operator or type of the gate.
   /// @param[in] arg_one  First argument function graph.
   /// @param[in] arg_two  Second argument function graph.
   /// @param[in] complement_one  Interpretation of arg_one as complement.
   /// @param[in] complement_two  Interpretation of arg_two as complement.
   ///
-  /// @returns New function with nullptr vertex pointer
-  ///          for uploading the computation results
-  ///          if it doesn't exists.
-  /// @returns If computation is already performed,
-  ///          the non-null result vertex with the return function.
+  /// @returns A pair of min and max integers with a sign for a complement.
   ///
-  /// @pre The operator is either AND or OR.
   /// @pre The arguments are not be the same function.
   ///      Equal ID functions are handled by the reduction.
   /// @pre Even though the arguments are not ItePtr type,
   ///      they are if-then-else vertices.
-  Function& FetchComputeTable(Operator type, const VertexPtr& arg_one,
-                              const VertexPtr& arg_two, bool complement_one,
-                              bool complement_two) noexcept;
-
-  /// Calculates consensus of high and low of an if-then-else BDD vertex.
-  ///
-  /// @param[in] ite  The BDD vertex with the input.
-  /// @param[in] complement  Interpretation of the BDD vertex.
-  ///
-  /// @returns The consensus BDD function.
-  Bdd::Function CalculateConsensus(const ItePtr& ite, bool complement) noexcept;
+  std::pair<int, int> GetMinMaxId(const VertexPtr& arg_one,
+                                  const VertexPtr& arg_two, bool complement_one,
+                                  bool complement_two) noexcept;
 
   /// Applies Boolean operation to BDD graphs.
+  /// This is the main function for the operation.
+  /// The application is specialized with the operator.
+  ///
+  /// @tparam Type  The operator enum.
+  ///
+  /// @param[in] arg_one  First argument function graph.
+  /// @param[in] arg_two  Second argument function graph.
+  /// @param[in] complement_one  Interpretation of arg_one as complement.
+  /// @param[in] complement_two  Interpretation of arg_two as complement.
+  ///
+  /// @returns The BDD function as a result of operation.
+  ///
+  /// @note The order of arguments does not matter for two variable operators.
+  template <Operator Type>
+  Function Apply(const VertexPtr& arg_one, const VertexPtr& arg_two,
+                 bool complement_one, bool complement_two) noexcept;
+
+  /// Applies Boolean operation to BDD ITE graphs.
+  ///
+  /// @tparam Type  The operator enum.
+  ///
+  /// @param[in] ite_one  First argument function graph.
+  /// @param[in] ite_two  Second argument function graph.
+  /// @param[in] complement_one  Interpretation of arg_one as complement.
+  /// @param[in] complement_two  Interpretation of arg_two as complement.
+  /// @param[out] result  The BDD function as a result of operation.
+  template <Operator Type>
+  void Apply(ItePtr ite_one, ItePtr ite_two, bool complement_one,
+             bool complement_two, Function* result) noexcept;
+
+  /// Applies Boolean operation to BDD graphs.
+  /// This is a convenience function
+  /// if the operator type cannot be determined at compile time.
   ///
   /// @param[in] type  The operator or type of the gate.
   /// @param[in] arg_one  First argument function graph.
@@ -469,38 +624,10 @@ class Bdd {
                  const VertexPtr& arg_one, const VertexPtr& arg_two,
                  bool complement_one, bool complement_two) noexcept;
 
-  /// Applies the logic of a Boolean operator
-  /// to a terminal vertex.
-  ///
-  /// @param[in] type  The operator to apply.
-  /// @param[in] term_one  First argument terminal vertex.
-  /// @param[in] arg_two  Second argument vertex.
-  /// @param[in] complement_one  Interpretation of term_one as complement.
-  /// @param[in] complement_two  Interpretation of arg_two as complement.
-  ///
-  /// @returns The resulting BDD function.
-  ///
-  /// @pre The operator is either AND or OR.
-  Function Apply(Operator type,
-                 const TerminalPtr& term_one, const VertexPtr& arg_two,
-                 bool complement_one, bool complement_two) noexcept;
-
-  /// Applies Boolean operation for a special case of the same arguments.
-  ///
-  /// @param[in] type  The operator or type of the gate.
-  /// @param[in] single_arg  One of two identical arguments.
-  /// @param[in] complement_one  Interpretation of the first vertex argument.
-  /// @param[in] complement_two  Interpretation of the second vertex argument.
-  ///
-  /// @returns The BDD function as a result of operation.
-  ///
-  /// @pre The operator is either AND or OR.
-  Function Apply(Operator type, const VertexPtr& single_arg,
-                 bool complement_one, bool complement_two) noexcept;
-
   /// Applies Boolean operation to BDD graph non-terminal vertices.
   ///
-  /// @param[in] type  The operator or type of the gate.
+  /// @tparam Type  The operator enum.
+  ///
   /// @param[in] arg_one  First argument if-then-else vertex.
   /// @param[in] arg_two  Second argument if-then-else vertex.
   /// @param[in] complement_one  Interpretation of arg_one as complement.
@@ -509,12 +636,19 @@ class Bdd {
   /// @returns High and Low BDD functions as a result of operation.
   ///
   /// @pre Argument if-then-else vertices must be ordered.
-  /// @pre The operator is either AND or OR.
-  std::pair<Function, Function> Apply(Operator type,
-                                      const ItePtr& arg_one,
+  template <Operator Type>
+  std::pair<Function, Function> Apply(const ItePtr& arg_one,
                                       const ItePtr& arg_two,
                                       bool complement_one,
                                       bool complement_two) noexcept;
+
+  /// Calculates consensus of high and low of an if-then-else BDD vertex.
+  ///
+  /// @param[in] ite  The BDD vertex with the input.
+  /// @param[in] complement  Interpretation of the BDD vertex.
+  ///
+  /// @returns The consensus BDD function.
+  Function CalculateConsensus(const ItePtr& ite, bool complement) noexcept;
 
   /// Counts the number of if-then-else nodes.
   ///
@@ -555,9 +689,9 @@ class Bdd {
   /// The key consists of ite(index, id_high, id_low),
   /// where IDs are unique (id_high != id_low) identifications of
   /// unique reduced-ordered function graphs.
-  std::shared_ptr<UniqueTable> unique_table_;
+  UniqueTable unique_table_;
 
-  /// Table of processed computations over functions.
+  /// Tables of processed computations over functions.
   /// The argument functions are recorded with their IDs (not vertex indices).
   /// In order to keep only unique computations,
   /// the argument IDs must be ordered.

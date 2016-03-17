@@ -55,7 +55,11 @@ namespace test {
 TEST(RegressionTest, ObjectSize) {
   // x86-64 platform.
   // 64-bit platform with alignment at 8-byte boundaries.
-  EXPECT_EQ(48, sizeof(NonTerminal));
+  EXPECT_EQ(16, sizeof(ControlBlock));
+  EXPECT_EQ(8, sizeof(WeakIntrusivePtr<Vertex<Ite>>));
+  EXPECT_EQ(8, sizeof(IntrusivePtr<Vertex<Ite>>));
+  EXPECT_EQ(16, sizeof(Vertex<Ite>));
+  EXPECT_EQ(48, sizeof(NonTerminal<Ite>));
   EXPECT_EQ(64, sizeof(Ite));
   EXPECT_EQ(80, sizeof(SetNode));
 }
@@ -89,9 +93,9 @@ TEST_F(PerformanceTest, DISABLED_200Event) {
 }
 
 TEST_F(PerformanceTest, DISABLED_Baobab1L7) {
-  double mcs_time = 2.5;
+  double mcs_time = 2.1;
 #ifdef NDEBUG
-  mcs_time = 0.40;
+  mcs_time = 0.30;
 #endif
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/Baobab/baobab1.xml");
@@ -102,10 +106,10 @@ TEST_F(PerformanceTest, DISABLED_Baobab1L7) {
   EXPECT_NEAR(mcs_time, ProductGenerationTime(), mcs_time * delta);
 }
 
-TEST_F(PerformanceTest, DISABLED_CEA9601) {
-  double mcs_time = 20;
+TEST_F(PerformanceTest, DISABLED_CEA9601_L4) {
+  double mcs_time = 12;
 #ifdef NDEBUG
-  mcs_time = 6;
+  mcs_time = 3.6;
 #endif
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/CEA9601/CEA9601.xml");
@@ -115,6 +119,19 @@ TEST_F(PerformanceTest, DISABLED_CEA9601) {
   EXPECT_EQ(54436, NumOfProducts());
   EXPECT_NEAR(mcs_time, ProductGenerationTime(), mcs_time * delta);
 }
+
+#ifdef NDEBUG
+TEST_F(PerformanceTest, DISABLED_CEA9601_L5) {
+  double mcs_time = 8.4;
+  std::vector<std::string> input_files;
+  input_files.push_back("./share/scram/input/CEA9601/CEA9601.xml");
+  input_files.push_back("./share/scram/input/CEA9601/CEA9601-basic-events.xml");
+  settings.limit_order(5).algorithm("bdd");
+  ASSERT_NO_THROW(Analyze(input_files));
+  EXPECT_EQ(1615876, NumOfProducts());
+  EXPECT_NEAR(mcs_time, ProductGenerationTime(), mcs_time * delta);
+}
+#endif
 
 TEST_F(PerformanceTest, DISABLED_Baobab2) {
   double mcs_time = 0.1;
@@ -127,16 +144,15 @@ TEST_F(PerformanceTest, DISABLED_Baobab2) {
 }
 
 TEST_F(PerformanceTest, DISABLED_Baobab1) {
-  double mcs_time = 2.5;
+  double mcs_time = 2.2;
 #ifdef NDEBUG
-  mcs_time = 0.40;
+  mcs_time = 0.30;
 #endif
   std::vector<std::string> input_files;
   input_files.push_back("./share/scram/input/Baobab/baobab1.xml");
   input_files.push_back("./share/scram/input/Baobab/baobab1-basic-events.xml");
-  settings.limit_order(8);
   ASSERT_NO_THROW(Analyze(input_files));
-  EXPECT_EQ(25892, NumOfProducts());
+  EXPECT_EQ(46188, NumOfProducts());
   EXPECT_NEAR(mcs_time, ProductGenerationTime(), mcs_time * delta);
 }
 
