@@ -85,7 +85,7 @@ class Preprocessor {
   ///          however, the preprocessing algorithms should not rely on this.
   ///          If the partial normalization messes some significant algorithm,
   ///          it may be removed from this phase in future.
-  void PhaseOne() noexcept;
+  void RunPhaseOne() noexcept;
 
   /// Preprocessing phase of the original structure of the graph.
   /// This phase attempts to leverage
@@ -97,14 +97,14 @@ class Preprocessor {
   /// @note Modules are detected and created.
   /// @note Non-module and non-multiple gates are coalesced.
   /// @note Boolean optimization is applied.
-  void PhaseTwo() noexcept;
+  void RunPhaseTwo() noexcept;
 
   /// Application of gate normalization.
   /// After this phase,
   /// the graph is in normal form.
   ///
   /// @note Gate normalization is conducted.
-  void PhaseThree() noexcept;
+  void RunPhaseThree() noexcept;
 
   /// Propagation of complements.
   /// Complements are propagated down to the variables in the graph.
@@ -112,14 +112,14 @@ class Preprocessor {
   /// the graph is in negation normal form.
   ///
   /// @note Complements are propagated to the variables of the graph.
-  void PhaseFour() noexcept;
+  void RunPhaseFour() noexcept;
 
   /// The final phase
   /// that cleans up the graph,
   /// and puts the structure of the graph ready for analysis.
   /// This phase makes the graph structure
   /// alternating AND/OR gate layers.
-  void PhaseFive() noexcept;
+  void RunPhaseFive() noexcept;
 
   /// Checks the root gate of the graph for further processing.
   /// The root gate may become constant
@@ -456,10 +456,10 @@ class Preprocessor {
   /// The gates created with these modular arguments
   /// are guaranteed to be independent modules.
   ///
-  /// @param[in] modular_args  Candidates for modular grouping.
+  /// @param[in,out] modular_args  Candidates for modular grouping.
   /// @param[out] groups  Grouped modular arguments.
   void GroupModularArgs(
-      const std::vector<std::pair<int, NodePtr>>& modular_args,
+      std::vector<std::pair<int, NodePtr>>* modular_args,
       std::vector<std::vector<std::pair<int, NodePtr>>>* groups) noexcept;
 
   /// Creates new module gates
@@ -481,12 +481,12 @@ class Preprocessor {
 
   /// Gathers all modules in the Boolean graph.
   ///
-  /// @param[out] modules  Unique modules encountered breadth-first.
+  /// @returns Unique modules encountered breadth-first.
   ///
-  /// @note It is assumed that module detection is already performed.
+  /// @pre Module detection and marking has already been performed.
   ///
   /// @warning Gate marks are used.
-  void GatherModules(std::vector<IGateWeakPtr>* modules) noexcept;
+  std::vector<IGateWeakPtr> GatherModules() noexcept;
 
   /// Identifies common arguments of gates,
   /// and merges the common arguments into new gates.
@@ -588,12 +588,12 @@ class Preprocessor {
   /// The groups do not intersect
   /// either by candidates or common arguments.
   ///
-  /// @param[in] candidates  The group of the gates with their common arguments.
+  /// @param[in,out] candidates  The group of the gates with their common args.
   /// @param[out] groups  Non-intersecting collection of groups of candidates.
   ///
   /// @note Groups with only one member are discarded.
   void GroupCandidatesByArgs(
-      const MergeTable::Candidates& candidates,
+      MergeTable::Candidates* candidates,
       std::vector<MergeTable::Candidates>* groups) noexcept;
 
   /// Finds intersections of common arguments of gates.

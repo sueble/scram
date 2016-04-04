@@ -62,7 +62,7 @@ const std::vector<std::vector<int>>& Mocus::products() const {
 
 std::unique_ptr<zbdd::CutSetContainer>
 Mocus::AnalyzeModule(const IGatePtr& gate, const Settings& settings) noexcept {
-  assert(gate->IsModule() && "Expected only module gates.");
+  assert(gate->module() && "Expected only module gates.");
   CLOCK(gen_time);
   LOG(DEBUG3) << "Finding cut sets from module: G" << gate->index();
   LOG(DEBUG4) << "Limit on product order: " << settings.limit_order();
@@ -89,8 +89,11 @@ Mocus::AnalyzeModule(const IGatePtr& gate, const Settings& settings) noexcept {
   }
   for (const auto& entry : container->GatherModules()) {
     int index = entry.first;
+    assert(index > 0 && "No complement modules are expected.");
     int limit = entry.second.second;
-    if (limit == 0) {  /// @todo Make cut-offs strict.
+    assert(limit >= 0 && "Order cut-off is not strict.");
+    bool coherent = entry.second.first;
+    if (limit == 0 && coherent) {  // Unity is impossible.
       std::unique_ptr<zbdd::CutSetContainer> empty_zbdd(
           new zbdd::CutSetContainer(kSettings_, index,
                                     graph_->basic_events().size()));

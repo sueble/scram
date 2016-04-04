@@ -46,8 +46,8 @@ Bdd::Bdd(const BooleanGraph* fault_tree, const Settings& settings)
     assert(top->gate_args().empty());
     int child = *top->args().begin();
     VariablePtr var = top->variable_args().begin()->second;
-    root_ = {child < 0, Bdd::FetchUniqueTable(var->index(), kOne_, kOne_,
-                                              true, var->order())};
+    root_ = {child < 0, Bdd::FindOrAddVertex(var->index(), kOne_, kOne_, true,
+                                             var->order())};
   } else {
     std::unordered_map<int, std::pair<Function, int>> gates;
     root_ = Bdd::ConvertGraph(fault_tree->root(), &gates);
@@ -77,6 +77,12 @@ Bdd::~Bdd() noexcept = default;
 void Bdd::Analyze() noexcept {
   zbdd_ = std::unique_ptr<Zbdd>(new Zbdd(this, kSettings_));
   zbdd_->Analyze();
+  if (!coherent_) {  // The BDD has been used by the ZBDD.
+    Bdd::ClearTables();
+    unique_table_.Release();
+    and_table_.reserve(0);
+    or_table_.reserve(0);
+  }
 }
 
 const std::vector<std::vector<int>>& Bdd::products() const {
@@ -84,9 +90,9 @@ const std::vector<std::vector<int>>& Bdd::products() const {
   return zbdd_->products();
 }
 
-ItePtr Bdd::FetchUniqueTable(int index, const VertexPtr& high,
-                             const VertexPtr& low, bool complement_edge,
-                             int order) noexcept {
+ItePtr Bdd::FindOrAddVertex(int index, const VertexPtr& high,
+                            const VertexPtr& low, bool complement_edge,
+                            int order) noexcept {
   assert(index > 0 && "Only positive indices are expected.");
   IteWeakPtr& in_table =
       unique_table_.FindOrAdd(index, high->id(),
@@ -99,11 +105,11 @@ ItePtr Bdd::FetchUniqueTable(int index, const VertexPtr& high,
   return ite;
 }
 
-ItePtr Bdd::FetchUniqueTable(const ItePtr& ite, const VertexPtr& high,
-                             const VertexPtr& low,
-                             bool complement_edge) noexcept {
-  ItePtr in_table = Bdd::FetchUniqueTable(ite->index(), high, low,
-                                          complement_edge, ite->order());
+ItePtr Bdd::FindOrAddVertex(const ItePtr& ite, const VertexPtr& high,
+                            const VertexPtr& low,
+                            bool complement_edge) noexcept {
+  ItePtr in_table = Bdd::FindOrAddVertex(ite->index(), high, low,
+                                         complement_edge, ite->order());
   if (in_table->unique()) {
     in_table->module(ite->module());
     in_table->coherent(ite->coherent());
@@ -113,17 +119,17 @@ ItePtr Bdd::FetchUniqueTable(const ItePtr& ite, const VertexPtr& high,
   return in_table;
 }
 
-ItePtr Bdd::FetchUniqueTable(const IGatePtr& gate, const VertexPtr& high,
-                             const VertexPtr& low,
-                             bool complement_edge) noexcept {
-  assert(gate->IsModule() && "Only module gates are expected for proxies.");
-  ItePtr in_table = Bdd::FetchUniqueTable(gate->index(), high, low,
-                                          complement_edge, gate->order());
+ItePtr Bdd::FindOrAddVertex(const IGatePtr& gate, const VertexPtr& high,
+                            const VertexPtr& low,
+                            bool complement_edge) noexcept {
+  assert(gate->module() && "Only module gates are expected for proxies.");
+  ItePtr in_table = Bdd::FindOrAddVertex(gate->index(), high, low,
+                                         complement_edge, gate->order());
   if (in_table->unique()) {
-    in_table->module(gate->IsModule());
+    in_table->module(gate->module());
     in_table->coherent(gate->coherent());
   }
-  assert(in_table->module() == gate->IsModule());
+  assert(in_table->module() == gate->module());
   assert(in_table->coherent() == gate->coherent());
   return in_table;
 }
@@ -144,15 +150,15 @@ Bdd::Function Bdd::ConvertGraph(
   std::vector<Function> args;
   for (const std::pair<const int, VariablePtr>& arg : gate->variable_args()) {
     args.push_back({arg.first < 0,
-                    Bdd::FetchUniqueTable(arg.second->index(), kOne_, kOne_,
-                                          true, arg.second->order())});
+                    Bdd::FindOrAddVertex(arg.second->index(), kOne_, kOne_,
+                                         true, arg.second->order())});
     index_to_order_.emplace(arg.second->index(), arg.second->order());
   }
   for (const std::pair<const int, IGatePtr>& arg : gate->gate_args()) {
     Function res = Bdd::ConvertGraph(arg.second, gates);
-    if (arg.second->IsModule()) {
+    if (arg.second->module()) {
       args.push_back({arg.first < 0,
-                      Bdd::FetchUniqueTable(arg.second, kOne_, kOne_, true)});
+                      Bdd::FindOrAddVertex(arg.second, kOne_, kOne_, true)});
     } else {
       bool complement = (arg.first < 0) ^ res.complement;
       args.push_back({complement, res.vertex});
@@ -165,15 +171,14 @@ Bdd::Function Bdd::ConvertGraph(
     return Ite::Ptr(lhs.vertex)->order() > Ite::Ptr(rhs.vertex)->order();
   });
   auto it = args.cbegin();
-  result.complement = it->complement;
-  result.vertex = it->vertex;
+  result = *it;
   for (++it; it != args.cend(); ++it) {
     result = Bdd::Apply(gate->type(), result.vertex, it->vertex,
                         result.complement, it->complement);
   }
   Bdd::ClearTables();
   assert(result.vertex);
-  if (gate->IsModule()) modules_.emplace(gate->index(), result);
+  if (gate->module()) modules_.emplace(gate->index(), result);
   if (gate->parents().size() > 1) gates->insert({gate->index(), {result, 1}});
   return result;
 }
@@ -260,8 +265,8 @@ void Bdd::Apply(ItePtr ite_one, ItePtr ite_two,
   if (!complement_edge && (high.vertex->id() == low.vertex->id())) {
       result->vertex = low.vertex;  // Another redundancy detection.
   } else {
-    result->vertex = Bdd::FetchUniqueTable(ite_one, high.vertex, low.vertex,
-                                           complement_edge);
+    result->vertex =
+        Bdd::FindOrAddVertex(ite_one, high.vertex, low.vertex, complement_edge);
   }
 }
 
