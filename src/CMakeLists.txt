@@ -52,28 +52,28 @@ set_target_properties(scramcore
   INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
   )
 
-target_link_libraries(scramcore dl ${LIBS})
+target_link_libraries(scramcore ${LIBS})
 
-if(NOT BUILD_SHARED_LIBS)
+if(WIN32)
   install(
     TARGETS scramcore
-    DESTINATION lib
-    COMPONENT scramcore
+    RUNTIME DESTINATION bin COMPONENT scram
+    LIBRARY DESTINATION lib COMPONENT scram
+    ARCHIVE DESTINATION lib COMPONENT scram
     )
 else()
   install(
     TARGETS scramcore
-    LIBRARY DESTINATION lib
-    COMPONENT scramcore
+    DESTINATION lib
+    COMPONENT scram
     )
 endif()
 
-add_executable(scram
-  scram.cc
-  )
+add_executable(scram scram.cc)
 target_link_libraries(scram scramcore ${Boost_LIBRARIES})
 
-install(TARGETS scram
+install(
+  TARGETS scram
   RUNTIME DESTINATION bin
   COMPONENT scram
   )

@@ -57,28 +57,16 @@ add_executable(scram_tests
   ${SCRAM_CORE_TEST_SOURCE}
   )
 
-target_link_libraries(scram_tests dl
+target_link_libraries(scram_tests
   ${LIBS}
   scramcore
   gtest
   )
 
-install(TARGETS scram_tests
+install(
+  TARGETS scram_tests
   RUNTIME DESTINATION bin
   COMPONENT testing
-  )
-
-# Read tests after building the driver
-# and add them to ctest.
-set(tgt "scram_tests")
-add_custom_command(TARGET ${tgt}
-  POST_BUILD
-  COMMAND python "${CMAKE_CURRENT_SOURCE_DIR}/generate_gtest_macros.py"
-  "--executable=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${tgt}"
-  "--output=${SCRAM_BINARY_DIR}/CTestTestfile.cmake"
-  COMMENT "adding tests from ${tgt}"
-  DEPENDS
-  VERBATIM
   )
 
 # Copy test input files into the shared directory for testing.

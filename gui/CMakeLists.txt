@@ -23,12 +23,12 @@ add_library(scramgui
 
 qt5_use_modules(scramgui Core Gui Widgets)
 
-target_link_libraries(scramgui dl scramcore ${LIBS})
+target_link_libraries(scramgui scramcore ${LIBS})
 
 add_executable(scram-gui ${SCRAM_GUI_BIN})
 target_link_libraries(scram-gui scramgui scramcore ${Boost_LIBRARIES})
 
 install(TARGETS scram-gui
   RUNTIME DESTINATION bin
-  COMPONENT scram-gui
+  COMPONENT gui
   )

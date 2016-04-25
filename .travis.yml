@@ -10,27 +10,24 @@ env:
     secure: "C4tE5UQtoItWxd+sSfj9vULLd0EjY5Ek/BentI/m1xz6tAOi+65RTjMEgz9OQZh1rlsExV4y9YEfV/JzZ3peLNypw3b2BaCum6LECkaEDob2aPR03u/DruTkGkXITUIFFh2hg0iQH2TZP9/0ZtQBRXqNbU+DnH8Rs1Q+kNcWoFU="
 
 addons:
-  coverity_scan:
-    project:
-      name: "rakhimov/scram"
-    # description: "Simplified Command-line Risk Analysis Multi-tool"
-    notification_email: "ol.rakhimov@gmail.com"
-    build_command_prepend: "cmake .."
-    build_command: "make -j 2"
-    branch_pattern: "coverity-scan"
-
-before_install:
-    - sudo apt-get update -qq
-
-install:
-    - sudo apt-get install -qq libboost-program-options-dev
-    - sudo apt-get install -qq libboost-filesystem-dev
-    - sudo apt-get install -qq libboost-system-dev
-    - sudo apt-get install -qq libboost-math-dev
-    - sudo apt-get install -qq libxml2-dev
-    - sudo apt-get install -qq libxml++2.6-dev
-    - sudo apt-get install -qq libgoogle-perftools-dev
-    - sudo apt-get install -qq qt5-default
+    coverity_scan:
+        project:
+            name: "rakhimov/scram"
+        # description: "Simplified Command-line Risk Analysis Multi-tool"
+        notification_email: "ol.rakhimov@gmail.com"
+        build_command_prepend: "cmake .."
+        build_command: "make -j 2"
+        branch_pattern: "coverity-scan"
+    apt:
+        packages:
+            - libboost-program-options-dev
+            - libboost-filesystem-dev
+            - libboost-system-dev
+            - libboost-math-dev
+            - libxml2-dev
+            - libxml++2.6-dev
+            - libgoogle-perftools-dev
+            - qt5-default
 
 before_script:
     - mkdir build
