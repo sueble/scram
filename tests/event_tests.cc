@@ -23,6 +23,7 @@
 #include "error.h"
 
 namespace scram {
+namespace mef {
 namespace test {
 
 // Test for Event base class.
@@ -81,7 +82,7 @@ TEST(FormulaTest, FormulaArguments) {
   EXPECT_EQ(shadow, top->formula_args().begin()->get());
 }
 
-TEST(GateTest, Cycle) {
+TEST(MEFGateTest, Cycle) {
   GatePtr top(new Gate("Top"));
   GatePtr middle(new Gate("Middle"));
   GatePtr bottom(new Gate("Bottom"));
@@ -190,7 +191,7 @@ TEST(FormulaTest, Validate) {
   EXPECT_NO_THROW(top->Validate());
 }
 
-TEST(GateTest, Inhibit) {
+TEST(MEFGateTest, Inhibit) {
   BasicEventPtr A(new BasicEvent("a"));
   BasicEventPtr B(new BasicEvent("b"));
   BasicEventPtr C(new BasicEvent("c"));
@@ -237,4 +238,5 @@ TEST(PrimaryEventTest, HouseProbability) {
 }
 
 }  // namespace test
+}  // namespace mef
 }  // namespace scram

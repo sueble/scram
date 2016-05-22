@@ -1,8 +1,8 @@
-cmake_minimum_required(VERSION 2.8.12)
-
 set(BUILD_SHARED_LIBS FALSE)  # GUI code should never be used by the core.
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+include_directories("${PROJECT_SOURCE_DIR}")  # Include core headers via "src".
 
 set(SCRAM_GUI_RES "${CMAKE_CURRENT_SOURCE_DIR}/res.qrc")
 set(SCRAM_GUI_SRC "${CMAKE_CURRENT_SOURCE_DIR}/mainwindow.cpp")
@@ -21,7 +21,7 @@ add_library(scramgui
   ${SCRAM_GUI_LIB_RES}
   )
 
-qt5_use_modules(scramgui Core Gui Widgets)
+target_link_libraries(scramgui Qt5::Core Qt5::Gui Qt5::Widgets)
 
 target_link_libraries(scramgui scramcore ${LIBS})
 

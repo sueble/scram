@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.8.12)
 
 # In-source build prevention.
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
@@ -7,7 +7,7 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message(STATUS "CMakeCache.txt")
   message(STATUS "CMakeFiles")
   message(STATUS "Once these files are removed, create a separate directory")
-  message(STATUS "and run CMake from there")
+  message(STATUS "and run CMake from there.")
   message(FATAL_ERROR "in-source build detected")
 endif()
 
@@ -29,15 +29,18 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG
   "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -Wpedantic -Wno-sign-compare -Wnon-virtual-dtor -Wno-missing-field-initializers")
 
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5.3)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wshadow -Wsuggest-override")
+  endif()
+
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS_DEBUG
-    "${CMAKE_CXX_FLAGS_DEBUG} -Wno-deprecated-register -Wno-missing-braces -Wshadow -Wunused-exception-parameter")
+    "${CMAKE_CXX_FLAGS_DEBUG} -Wno-missing-braces -Wshadow -Wunused-exception-parameter")
 endif()
 
 if(WIN32)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-deprecated-declarations")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wno-deprecated-declarations")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-error")
 endif()
 
 ######################## End compiler configurations ####################
@@ -84,20 +87,7 @@ set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Tell CMake where the modules are.
-if(CMAKE_DIR)
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_DIR}/share/cmake-2.8/Modules")
-endif()
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-
-# Set configuration for all library builds.
-if(WIN32)
-  set(suffix ".dll")
-elseif(APPLE)
-  set(CMAKE_SHARED_LINKER_FLAGS "-undefined dynamic_lookup")
-  set(suffix ".dylib")
-else()
-  set(suffix ".so")
-endif()
 
 ######################## End cmake configuration ###################
 
@@ -158,33 +148,34 @@ message(STATUS "    Boost System location: ${Boost_SYSTEM_LIBRARY}")
 set(LIBS ${LIBS} ${Boost_FILESYSTEM_LIBRARY})
 message(STATUS "    Boost Filesystem location: ${Boost_FILESYSTEM_LIBRARY}")
 
-# Find the QtWidgets library.
-if(APPLE)
-  # Qt5 with Homebrew.
-  set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/usr/local/opt/qt5")
-endif()
-find_package(Qt5Widgets)
-if(Qt5Widgets_FOUND)
-  message(STATUS "Found Qt5")
-  message(STATUS "Qt5 Version: ${Qt5Widgets_VERSION_STRING}")
+if(NOT NGUI)
+  # Find the QtWidgets library.
+  if(APPLE)
+    # Qt5 with Homebrew.
+    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/usr/local/opt/qt5")
+  endif()
+  find_package(Qt5Widgets REQUIRED)
+  if(Qt5Widgets_FOUND)
+    message(STATUS "Found Qt5")
+    message(STATUS "Qt5 Version: ${Qt5Widgets_VERSION_STRING}")
+  endif()
 endif()
 
 ########################## End of find libraries ########################
 
 ########################## Begin includes ###############################
 
-# Include all the directories we just found.
-include_directories("${Boost_INCLUDE_DIR}")
-include_directories("${LIBXML2_INCLUDE_DIR}")
-include_directories("${LibXML++_INCLUDE_DIR}")
-include_directories("${LibXML++Config_INCLUDE_DIR}")
-include_directories(${Glibmm_INCLUDE_DIRS})
-include_directories("${SCRAM_SOURCE_DIR}")
+# Include all the discovered system directories.
+include_directories(SYSTEM "${Boost_INCLUDE_DIR}")
+include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")
+include_directories(SYSTEM "${LibXML++_INCLUDE_DIR}")
+include_directories(SYSTEM "${LibXML++Config_INCLUDE_DIR}")
+include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})
 
 add_subdirectory("${SCRAM_SOURCE_DIR}")
 add_subdirectory("${SCRAM_TEST_DIR}")
 
-if(Qt5Widgets_FOUND)
+if(NOT NGUI)
   add_subdirectory("${SCRAM_GUI_DIR}")
 endif()
 

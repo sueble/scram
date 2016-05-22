@@ -22,6 +22,7 @@
 #include "error.h"
 
 namespace scram {
+namespace mef {
 namespace test {
 
 // This mock class is used to specify
@@ -39,11 +40,11 @@ class OpenExpression : public Expression {
   double sample;
   double min;  // This value is used only if explicitly set non-zero.
   double max;  // This value is used only if explicitly set non-zero.
-  double Mean() noexcept { return mean; }
-  double GetSample() noexcept { return sample; }
-  double Max() noexcept { return max ? max : sample; }
-  double Min() noexcept { return min ? min : sample; }
-  bool IsConstant() noexcept { return true; }
+  double Mean() noexcept override { return mean; }
+  double GetSample() noexcept override { return sample; }
+  double Max() noexcept override { return max ? max : sample; }
+  double Min() noexcept override { return min ? min : sample; }
+  bool IsConstant() noexcept override { return true; }
 };
 
 using OpenExpressionPtr = std::shared_ptr<OpenExpression>;
@@ -592,4 +593,5 @@ TEST(ExpressionTest, DivisionMaxAndMin) {
 }
 
 }  // namespace test
+}  // namespace mef
 }  // namespace scram

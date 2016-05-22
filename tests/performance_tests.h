@@ -29,22 +29,23 @@
 #include "risk_analysis.h"
 
 namespace scram {
+namespace core {
 namespace test {
 
 class PerformanceTest : public ::testing::Test {
  protected:
-  virtual void SetUp() {
+  void SetUp() override {
     settings.algorithm("mocus");
     delta = 0.10;  // % variation of values.
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     delete ran;
   }
 
   // Convenient function to manage analysis of one model in input files.
   void Analyze(const std::vector<std::string>& input_files) {
-    Initializer* init = new Initializer(settings);
+    mef::Initializer* init = new mef::Initializer(settings);
     init->ProcessInputFiles(input_files);
     ran = new RiskAnalysis(init->model(), settings);
     delete init;
@@ -88,6 +89,7 @@ class PerformanceTest : public ::testing::Test {
 };
 
 }  // namespace test
+}  // namespace core
 }  // namespace scram
 
 #endif  // SCRAM_TESTS_PERFORMANCE_TESTS_H_
