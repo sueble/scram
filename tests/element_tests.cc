@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2015 Olzhas Rakhimov
+ * Copyright (C) 2014-2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,28 @@ namespace scram {
 namespace mef {
 namespace test {
 
-class TestElement : public Element {};
+namespace {
+
+class TestElement : public Element {
+ public:
+  TestElement() : Element("", /*optional=*/true) {}
+};
+
+class NamedElement : public Element {
+ public:
+  explicit NamedElement(std::string name) : Element(std::move(name)) {}
+};
+
+}  // namespace
+
+TEST(ElementTest, Name) {
+  EXPECT_NO_THROW(TestElement());
+  EXPECT_THROW(NamedElement(""), LogicError);
+
+  EXPECT_NO_THROW(NamedElement("name"));
+  NamedElement el("name");
+  EXPECT_EQ("name", el.name());
+}
 
 TEST(ElementTest, Label) {
   TestElement el;
@@ -46,6 +67,30 @@ TEST(ElementTest, Attribute) {
   EXPECT_THROW(el.AddAttribute(attr), LogicError);
   ASSERT_TRUE(el.HasAttribute(attr.name));
   ASSERT_NO_THROW(el.GetAttribute(attr.name));
+}
+
+namespace {
+
+class NameId : public Element, public Role, public Id {
+ public:
+  NameId()
+      : Element("", true),
+        Role(RoleSpecifier::kPublic, "path"),
+        Id(*this, *this) {}
+  explicit NameId(std::string name, RoleSpecifier role = RoleSpecifier::kPublic,
+                  std::string path = "")
+      : Element(name), Role(role, path), Id(*this, *this) {}
+};
+
+}  // namespace
+
+TEST(ElementTest, Id) {
+  EXPECT_THROW(NameId(), LogicError);
+  EXPECT_NO_THROW(NameId("name"));
+  EXPECT_THROW(NameId("name", RoleSpecifier::kPrivate, ""), LogicError);
+  NameId id_public("name");
+  NameId id_private("name", RoleSpecifier::kPrivate, "path");
+  EXPECT_NE(id_public.id(), id_private.id());
 }
 
 }  // namespace test

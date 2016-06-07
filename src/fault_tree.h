@@ -47,21 +47,18 @@ class Component : public Element, public Role {
   /// Component name is not meant to be public;
   /// however, it must be unique within the parent fault tree or component.
   ///
-  /// @param[in] name  The name identificator for the component.
+  /// @param[in] name  The name identifier for the component.
   /// @param[in] base_path  The series of containers to get this container.
-  /// @param[in] is_public  A flag to define public or private role for members.
+  /// @param[in] role  The default role for container members.
   ///
   /// @throws LogicError  The name is empty.
-  explicit Component(const std::string& name, const std::string& base_path = "",
-                     bool is_public = true);
+  explicit Component(std::string name, std::string base_path = "",
+                     RoleSpecifier role = RoleSpecifier::kPublic);
 
   Component(const Component&) = delete;
   Component& operator=(const Component&) = delete;
 
   virtual ~Component() {}
-
-  /// @returns The name of this component.
-  const std::string& name() const { return name_; }
 
   /// @returns The container of component constructs of specific kind
   ///          with construct original names as keys.
@@ -125,7 +122,7 @@ class Component : public Element, public Role {
 
   /// Adds a member component container into this component container.
   /// Components are unique.
-  /// The ownership is transfered to this component only.
+  /// The ownership is transferred to this component only.
   ///
   /// @param[in] component  The CCF group to be added to this container.
   ///
@@ -153,8 +150,6 @@ class Component : public Element, public Role {
   template <class Ptr, class Container>
   void AddEvent(const Ptr& event, Container* container);
 
-  std::string name_;  ///< The name of this component.
-
   /// Container for component constructs with original names as keys.
   /// @{
   std::unordered_map<std::string, GatePtr> gates_;
@@ -178,7 +173,7 @@ class FaultTree : public Component {
   /// The main constructor of the Fault Tree.
   /// Fault trees are assumed to be public and belong to the root model.
   ///
-  /// @param[in] name  The name identificator of this fault tree.
+  /// @param[in] name  The name identifier of this fault tree.
   explicit FaultTree(const std::string& name);
 
   /// @returns The collected top events of this fault tree.

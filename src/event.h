@@ -36,31 +36,22 @@ namespace mef {
 
 /// @class Event
 /// Abstract base class for general fault tree events.
-class Event : public Element, public Role {
+class Event : public Element, public Role, public Id {
  public:
   /// Constructs a fault tree event with a specific id.
-  /// It is assumed that names
-  /// and other strings do not have
-  /// leading and trailing whitespace characters.
   ///
   /// @param[in] name  The original name.
   /// @param[in] base_path  The series of containers to get this event.
-  /// @param[in] is_public  Whether or not the event is public.
+  /// @param[in] role  The role of the event within the model or container.
   ///
   /// @throws LogicError  The name is empty.
-  explicit Event(const std::string& name, const std::string& base_path = "",
-                 bool is_public = true);
+  explicit Event(std::string name, std::string base_path = "",
+                 RoleSpecifier role = RoleSpecifier::kPublic);
 
   Event(const Event&) = delete;
   Event& operator=(const Event&) = delete;
 
   virtual ~Event() = 0;  ///< Abstract class.
-
-  /// @returns The unique id that is set upon the construction of this event.
-  const std::string& id() const { return id_; }
-
-  /// @returns The original name.
-  const std::string& name() const { return name_; }
 
   /// @returns True if this node is orphan.
   bool orphan() const { return orphan_; }
@@ -71,8 +62,6 @@ class Event : public Element, public Role {
   void orphan(bool state) { orphan_ = state; }
 
  private:
-  std::string id_;  ///< Unique Id name of an event.
-  std::string name_;  ///< Original name.
   bool orphan_;  ///< Indication of an orphan node.
 };
 
@@ -235,7 +224,7 @@ class CcfEvent : public BasicEvent {
   /// @param[in] ccf_group  The CCF group that created this event.
   /// @param[in] member_names  The names of members that this CCF event
   ///                          represents as multiple failure.
-  CcfEvent(const std::string& name, const CcfGroup* ccf_group,
+  CcfEvent(std::string name, const CcfGroup* ccf_group,
            const std::vector<std::string>& member_names);
 
   /// @returns Pointer to the CCF group that created this CCF event.
@@ -274,11 +263,6 @@ class Gate : public Event {
     assert(!formula_);
     formula_ = std::move(formula);
   }
-
-  /// This function is for cycle detection.
-  ///
-  /// @returns The connector between gates.
-  Formula* connector() const { return formula_.get(); }
 
   /// Checks if a gate is initialized correctly.
   ///
@@ -378,18 +362,6 @@ class Formula {
   /// @throws ValidationError  Problems with the operator or arguments.
   void Validate();
 
-  /// @returns Gates as nodes.
-  const std::vector<Gate*>& nodes() {
-    if (gather_) Formula::GatherNodesAndConnectors();
-    return nodes_;
-  }
-
-  /// @returns Formulae as connectors.
-  const std::vector<Formula*>& connectors() {
-    if (gather_) Formula::GatherNodesAndConnectors();
-    return connectors_;
-  }
-
  private:
   /// Formula types that require two or more arguments.
   static const std::set<std::string> kTwoOrMore_;
@@ -413,9 +385,6 @@ class Formula {
     if (event->orphan()) event->orphan(false);
   }
 
-  /// Gathers nodes and connectors from arguments of the gate.
-  void GatherNodesAndConnectors();
-
   std::string type_;  ///< Logical operator.
   int vote_number_;  ///< Vote number for "atleast" operator.
   std::map<std::string, EventPtr> event_args_;  ///< All event arguments.
@@ -425,9 +394,6 @@ class Formula {
   /// Arguments that are formulas
   /// if this formula is nested.
   std::vector<FormulaPtr> formula_args_;
-  std::vector<Gate*> nodes_;  ///< Gate arguments as nodes.
-  std::vector<Formula*> connectors_;  ///< Formulae as connectors.
-  bool gather_;  ///< A flag to gather nodes and connectors.
 };
 
 }  // namespace mef

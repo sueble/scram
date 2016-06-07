@@ -64,6 +64,9 @@ class Expression {
 
   virtual ~Expression() = default;
 
+  /// @returns A set of arguments of the expression.
+  const std::vector<ExpressionPtr>& args() const { return args_; }
+
   /// Validates the expression.
   /// This late validation is due to parameters that are defined late.
   ///
@@ -101,22 +104,7 @@ class Expression {
   /// @returns Minimum value of this expression.
   virtual double Min() noexcept { return this->Mean(); }
 
-  /// @returns Parameters as nodes.
-  const std::vector<Parameter*>& nodes() {
-    if (gather_) Expression::GatherNodesAndConnectors();
-    return nodes_;
-  }
-
-  /// @returns Non-Parameter Expressions as connectors.
-  const std::vector<Expression*>& connectors() {
-    if (gather_) Expression::GatherNodesAndConnectors();
-    return connectors_;
-  }
-
  protected:
-  /// @returns A set of arguments of the expression.
-  const std::vector<ExpressionPtr>& args() const { return args_; }
-
   /// Registers an additional argument expression.
   ///
   /// @param[in] arg  An argument expression used by this expression.
@@ -129,15 +117,9 @@ class Expression {
   /// @returns A sampled value of this expression.
   virtual double GetSample() noexcept = 0;
 
-  /// Gathers nodes and connectors from arguments of the expression.
-  void GatherNodesAndConnectors();
-
   std::vector<ExpressionPtr> args_;  ///< Expression's arguments.
   double sampled_value_;  ///< The sampled value.
   bool sampled_;  ///< Indication if the expression is already sampled.
-  bool gather_;  ///< A flag to gather nodes and connectors.
-  std::vector<Parameter*> nodes_;  ///< Parameters as nodes.
-  std::vector<Expression*> connectors_;  ///< Expressions as connectors.
 };
 
 /// @enum Units
@@ -159,18 +141,17 @@ enum Units {
 /// This class provides a representation of a variable
 /// in basic event description.
 /// It is both expression and element description.
-class Parameter : public Expression, public Element, public Role {
+class Parameter : public Expression, public Element, public Role, public Id {
  public:
   /// Creates a parameter as a variable for future references.
   ///
   /// @param[in] name  The name of this variable (Case sensitive).
   /// @param[in] base_path  The series of containers to get this parameter.
-  /// @param[in] is_public  Whether or not the parameter is public.
+  /// @param[in] role  The role of the parameter within the model or container.
   ///
   /// @throws LogicError  The name is empty.
-  explicit Parameter(const std::string& name,
-                     const std::string& base_path = "",
-                     bool is_public = true);
+  explicit Parameter(std::string name, std::string base_path = "",
+                     RoleSpecifier role = RoleSpecifier::kPublic);
 
   /// Sets the expression of this parameter.
   ///
@@ -178,12 +159,6 @@ class Parameter : public Expression, public Element, public Role {
   ///
   /// @throws LogicError  The parameter expression is already set.
   void expression(const ExpressionPtr& expression);
-
-  /// @returns The name of this variable.
-  const std::string& name() const { return name_; }
-
-  /// @returns The unique identifier of this parameter.
-  const std::string& id() const { return id_; }
 
   /// @returns The unit of this parameter.
   Units unit() const { return unit_; }
@@ -205,11 +180,6 @@ class Parameter : public Expression, public Element, public Role {
   double Max() noexcept override { return expression_->Max(); }
   double Min() noexcept override { return expression_->Min(); }
 
-  /// This function is for cycle detection.
-  ///
-  /// @returns The connector between parameters.
-  Expression* connector() { return this; }
-
   /// @returns The mark of this node.
   const std::string& mark() const { return mark_; }
 
@@ -221,8 +191,6 @@ class Parameter : public Expression, public Element, public Role {
  private:
   double GetSample() noexcept override { return expression_->Sample(); }
 
-  std::string name_;  ///< Name of this parameter or variable.
-  std::string id_;  ///< Identifier of this parameter or variable.
   ExpressionPtr expression_;  ///< Expression for this parameter.
   Units unit_;  ///< Units of this parameter.
   bool unused_;  ///< Usage state.
