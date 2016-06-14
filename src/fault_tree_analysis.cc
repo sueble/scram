@@ -23,6 +23,8 @@
 #include <set>
 #include <utility>
 
+#include <boost/generator_iterator.hpp>
+
 namespace scram {
 namespace core {
 
@@ -40,7 +42,7 @@ void Print(const std::vector<Product>& products) {
   for (const auto& product : products) {
     std::set<std::string> ids;
     for (const auto& literal : product) {
-      ids.insert((literal.complement ? "~" : "") + literal.event->name());
+      ids.insert((literal.complement ? "~" : "") + literal.event.name());
     }
     to_print.push_back(ids);
   }
@@ -55,18 +57,19 @@ void Print(const std::vector<Product>& products) {
   for (const auto& product : to_print) distribution[product.size() - 1]++;
   std::cerr << " " << to_print.size() << " : {";
   for (int i : distribution) std::cerr << " " << i;
-  std::cerr << " }" << std::endl << std::endl;
+  std::cerr << " }\n\n";
 
   for (const auto& product : to_print) {
     for (const auto& id : product) std::cerr << " " << id;
-    std::cerr << std::endl;
+    std::cerr << "\n";
   }
+  std::cerr << std::flush;
 }
 
 double CalculateProbability(const Product& product) {
   double p = 1;
   for (const Literal& literal : product) {
-    p *= literal.complement ? 1 - literal.event->p() : literal.event->p();
+    p *= literal.complement ? 1 - literal.event.p() : literal.event.p();
   }
   return p;
 }
@@ -127,21 +130,28 @@ void FaultTreeAnalysis::Convert(const std::vector<std::vector<int>>& results,
   } else if (results.size() == 1 && results.back().empty()) {
     Analysis::AddWarning("The top event is UNITY. Failure is guaranteed.");
   }
-  std::unordered_set<int> unique_events;
+  assert(products_.empty());
+  products_.reserve(results.size());
+
+  struct GeneratorIterator {
+    void operator++() { ++it; }
+    /// Populates the Product with Literals.
+    std::pair<bool, const mef::BasicEvent*> operator*() {
+      const mef::BasicEvent* basic_event = graph.GetBasicEvent(std::abs(*it));
+      product_events.insert(basic_event);
+      return {*it < 0, basic_event};
+    }
+    std::vector<int>::const_iterator it;
+    const BooleanGraph& graph;
+    decltype(product_events_)& product_events;
+  };
+
   for (const auto& result_set : results) {
     assert(result_set.size() <= Analysis::settings().limit_order() &&
            "Miscalculated product sets with larger-than-required order.");
-    Product product;
-    product.reserve(result_set.size());
-    for (int index : result_set) {
-      int abs_index = std::abs(index);
-      const mef::BasicEventPtr& basic_event = graph->GetBasicEvent(abs_index);
-      product.push_back({index < 0, basic_event});
-      if (unique_events.count(abs_index)) continue;
-      unique_events.insert(abs_index);
-      product_events_.push_back(basic_event);
-    }
-    products_.emplace_back(std::move(product));
+    products_.emplace_back(
+        result_set.size(),
+        GeneratorIterator{result_set.begin(), *graph, product_events_});
   }
 #ifndef NDEBUG
   if (Analysis::settings().print) Print(products_);

@@ -30,7 +30,6 @@
 
 namespace scram {
 
-/// @class Random
 /// This class contains generators for various random distributions.
 /// The values passed to the member functions are asserted
 /// to be in the correct form.
@@ -83,7 +82,7 @@ class Random {
   ///                       The values must be strictly increasing.
   /// @param[in] weights  Weights at the boundaries.
   ///                     The number of weights must be equal to
-  ///                     the number of points.
+  ///                     the number of intervals (points - 1).
   ///                     Extra weights are ignored.
   ///
   /// @returns A sampled value.
@@ -102,7 +101,7 @@ class Random {
   ///                       The values must be strictly increasing.
   /// @param[in] weights  Weights at the boundaries.
   ///                     The number of weights must be equal to
-  ///                     the number of points.
+  ///                     the number of intervals (points - 1).
   ///                     Extra weights are ignored.
   ///
   /// @returns A sampled value.

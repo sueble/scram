@@ -26,7 +26,6 @@
 namespace scram {
 namespace core {
 
-/// @class Settings
 /// Builder for analysis settings.
 /// Analysis facilities are guaranteed not to throw or fail
 /// with an instance of this class.
@@ -81,7 +80,7 @@ class Settings {
   ///
   /// @returns Reference to this object.
   ///
-  /// @throws InvalidArgument  The number is less than 0.
+  /// @throws InvalidArgument  The number is less than 0 or too large.
   Settings& limit_order(int order);
 
   /// @returns The minimum required probability for products.

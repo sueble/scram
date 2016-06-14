@@ -429,8 +429,10 @@ TEST(ExpressionTest, BetaDeviate) {
 TEST(ExpressionTest, Histogram) {
   std::vector<ExpressionPtr> boundaries;
   std::vector<ExpressionPtr> weights;
+  OpenExpressionPtr b0(new OpenExpression(0, 0));
   OpenExpressionPtr b1(new OpenExpression(1, 1));
   OpenExpressionPtr b2(new OpenExpression(3, 3));
+  boundaries.push_back(b0);
   boundaries.push_back(b1);
   boundaries.push_back(b2);
   OpenExpressionPtr w1(new OpenExpression(2, 2));
@@ -444,8 +446,11 @@ TEST(ExpressionTest, Histogram) {
   weights.pop_back();
   ASSERT_NO_THROW(Histogram(boundaries, weights));
 
-  ExpressionPtr dev;
-  EXPECT_NO_THROW(dev = ExpressionPtr(new Histogram(boundaries, weights)));
+  ExpressionPtr dev(new Histogram(boundaries, weights));
+  EXPECT_NO_THROW(dev->Validate());
+  b0->mean = 0.5;
+  EXPECT_THROW(dev->Validate(), InvalidArgument);
+  b0->mean = 0;
   EXPECT_DOUBLE_EQ(10.0 / 18, dev->Mean());
 
   b1->mean = -1;
@@ -500,6 +505,19 @@ TEST(ExpressionTest, Neg) {
   expression->min = 1;
   EXPECT_DOUBLE_EQ(-1, dev->Max());
   EXPECT_DOUBLE_EQ(-100, dev->Min());
+}
+
+// Test expression initialization with 2 or more arguments.
+TEST(ExpressionTest, BinaryExpression) {
+  std::vector<ExpressionPtr> arguments;
+  ExpressionPtr dev;
+  EXPECT_THROW(dev = ExpressionPtr(new Add(arguments)), InvalidArgument);
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(10, 20)));
+  EXPECT_THROW(dev = ExpressionPtr(new Add(arguments)), InvalidArgument);
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(30, 40)));
+  EXPECT_NO_THROW(dev = ExpressionPtr(new Add(arguments)));
+  arguments.push_back(OpenExpressionPtr(new OpenExpression(30, 40)));
+  EXPECT_NO_THROW(dev = ExpressionPtr(new Add(arguments)));
 }
 
 // Test for addition of expressions.
