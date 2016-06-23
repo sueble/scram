@@ -32,6 +32,7 @@
 #include "analysis.h"
 #include "boolean_graph.h"
 #include "event.h"
+#include "ext.h"
 #include "logger.h"
 #include "preprocessor.h"
 #include "settings.h"
@@ -188,58 +189,37 @@ int GetOrder(const Product& product);
 /// described by a gate as its root.
 class FaultTreeDescriptor {
  public:
+  /// Table of fault tree events with their ids as keys.
+  template <typename T>
+  using Table = std::unordered_map<std::string, const T*>;
+
   /// Gathers all information about a fault tree with a root gate.
   ///
   /// @param[in] root  The root gate of a fault tree.
   ///
-  /// @pre Gate marks must be clear.
-  ///
   /// @warning If the fault tree structure is changed,
   ///          this description does not incorporate the changed structure.
   ///          Moreover, the data may get corrupted.
-  explicit FaultTreeDescriptor(const mef::GatePtr& root);
+  explicit FaultTreeDescriptor(const mef::Gate& root);
 
   virtual ~FaultTreeDescriptor() = default;
 
   /// @returns The top gate that is passed to the analysis.
-  const mef::GatePtr& top_event() const { return top_event_; }
+  const mef::Gate& top_event() const { return top_event_; }
 
-  /// @returns The container of intermediate events.
+  /// @returns The container of fault tree events.
   ///
   /// @warning If the fault tree has changed,
   ///          this is only a snapshot of the past
-  const std::unordered_map<std::string, mef::GatePtr>& inter_events() const {
-    return inter_events_;
-  }
-
-  /// @returns The container of all basic events of this tree.
-  ///
-  /// @warning If the fault tree has changed,
-  ///          this is only a snapshot of the past
-  const std::unordered_map<std::string, mef::BasicEventPtr>&
-  basic_events() const {
-    return basic_events_;
-  }
-
-  /// @returns Basic events that are in some CCF groups.
-  ///
-  /// @warning If the fault tree has changed,
-  ///          this is only a snapshot of the past
-  const std::unordered_map<std::string, mef::BasicEventPtr>&
-  ccf_events() const {
-    return ccf_events_;
-  }
-
-  /// @returns The container of house events of the fault tree.
-  ///
-  /// @warning If the fault tree has changed,
-  ///          this is only a snapshot of the past
-  const std::unordered_map<std::string, mef::HouseEventPtr>&
-  house_events() const {
-    return house_events_;
-  }
+  /// @{
+  const Table<mef::Gate>& inter_events() const { return inter_events_; }
+  const Table<mef::BasicEvent>& basic_events() const { return basic_events_; }
+  const Table<mef::BasicEvent>& ccf_events() const { return ccf_events_; }
+  const Table<mef::HouseEvent>& house_events() const { return house_events_; }
+  /// @}
 
  private:
+  /// Traverses formulas recursively to find all events.
   /// Gathers information about the correctly initialized fault tree.
   /// Databases for events are manipulated
   /// to best reflect the state and structure of the fault tree.
@@ -249,37 +229,22 @@ class FaultTreeDescriptor {
   /// available for analysis like primary events of this fault tree.
   /// Moreover, all the nodes of this fault tree
   /// are expected to be defined fully and correctly.
-  /// Gates are marked upon visit.
-  /// The mark is checked to prevent revisiting.
-  ///
-  /// @param[in] gate  The gate to start traversal from.
-  void GatherEvents(const mef::GatePtr& gate) noexcept;
-
-  /// Traverses formulas recursively to find all events.
   ///
   /// @param[in] formula  The formula to get events from.
-  void GatherEvents(const mef::FormulaPtr& formula) noexcept;
+  void GatherEvents(const mef::Formula& formula) noexcept;
 
-  /// Clears marks from gates that were traversed.
-  /// Marks are set to empty strings.
-  /// This is important
-  /// because other code may assume that marks are empty.
-  void ClearMarks() noexcept;
+  const mef::Gate& top_event_;  ///< Top event of this fault tree.
 
-  mef::GatePtr top_event_;  ///< Top event of this fault tree.
-
-  /// Container for intermediate events.
-  std::unordered_map<std::string, mef::GatePtr> inter_events_;
-
-  /// Container for basic events.
-  std::unordered_map<std::string, mef::BasicEventPtr> basic_events_;
-
-  /// Container for house events of the tree.
-  std::unordered_map<std::string, mef::HouseEventPtr> house_events_;
+  /// Containers of gathered fault tree events.
+  /// @{
+  Table<mef::Gate> inter_events_;
+  Table<mef::BasicEvent> basic_events_;
+  Table<mef::HouseEvent> house_events_;
+  /// @}
 
   /// Container for basic events that are identified to be in some CCF group.
   /// These basic events are not necessarily in the same CCF group.
-  std::unordered_map<std::string, mef::BasicEventPtr> ccf_events_;
+  Table<mef::BasicEvent> ccf_events_;
 };
 
 /// Fault tree analysis functionality.
@@ -312,14 +277,12 @@ class FaultTreeAnalysis : public Analysis, public FaultTreeDescriptor {
   /// @param[in] root  The top event of the fault tree to analyze.
   /// @param[in] settings  Analysis settings for all calculations.
   ///
-  /// @pre The gates' visit marks are clean.
-  ///
   /// @note It is assumed that analysis is done only once.
   ///
   /// @warning If the fault tree structure is changed,
   ///          this analysis does not incorporate the changed structure.
   ///          Moreover, the analysis results may get corrupted.
-  FaultTreeAnalysis(const mef::GatePtr& root, const Settings& settings);
+  FaultTreeAnalysis(const mef::Gate& root, const Settings& settings);
 
   virtual ~FaultTreeAnalysis() = default;
 
@@ -395,9 +358,8 @@ void FaultTreeAnalyzer<Algorithm>::Analyze() noexcept {
   CLOCK(analysis_time);
 
   CLOCK(graph_creation);
-  graph_ = std::unique_ptr<BooleanGraph>(
-      new BooleanGraph(FaultTreeDescriptor::top_event(),
-                       Analysis::settings().ccf_analysis()));
+  graph_ = ext::make_unique<BooleanGraph>(FaultTreeDescriptor::top_event(),
+                                          Analysis::settings().ccf_analysis());
   LOG(DEBUG2) << "Boolean graph is created in " << DUR(graph_creation);
 
   CLOCK(prep_time);  // Overall preprocessing time.
@@ -411,8 +373,7 @@ void FaultTreeAnalyzer<Algorithm>::Analyze() noexcept {
 #endif
   CLOCK(algo_time);
   LOG(DEBUG2) << "Launching the algorithm...";
-  algorithm_ = std::unique_ptr<Algorithm>(new Algorithm(graph_.get(),
-                                                        Analysis::settings()));
+  algorithm_ = ext::make_unique<Algorithm>(graph_.get(), Analysis::settings());
   algorithm_->Analyze();
   LOG(DEBUG2) << "The algorithm finished in " << DUR(algo_time);
   LOG(DEBUG2) << "# of products: " << algorithm_->products().size();

@@ -20,12 +20,10 @@
 
 #include "initializer.h"
 
-#include <algorithm>
 #include <fstream>
-#include <set>
-#include <unordered_map>
 
 #include <boost/filesystem.hpp>
+#include <boost/range/algorithm.hpp>
 
 #include "cycle.h"
 #include "env.h"
@@ -136,18 +134,16 @@ void Initializer::CheckDuplicateFiles(
   using Path = std::pair<fs::path, std::string>;  // Path mapping.
   // Collection of input file locations in canonical path.
   std::vector<Path> files;
-  auto Comparator = [](const Path& lhs,
-                       const Path& rhs) { return lhs.first < rhs.first; };
+  auto Comparator = [](const Path& lhs, const Path& rhs) {
+    return lhs.first < rhs.first;
+  };
 
   for (auto& xml_file : xml_files)
     files.emplace_back(fs::canonical(xml_file), xml_file);
 
-  std::sort(files.begin(), files.end(), Comparator);
-
-  auto it = std::adjacent_find(files.begin(), files.end(),
-                               [](const Path& lhs, const Path& rhs) {
-    return lhs.first == rhs.first;
-  });
+  auto it = boost::adjacent_find(
+      boost::sort(files, Comparator),  // NOLINT(build/include_what_you_use)
+      [](const Path& lhs, const Path& rhs) { return lhs.first == rhs.first; });
 
   if (it != files.end()) {
     std::stringstream msg;
@@ -202,21 +198,21 @@ void Initializer::ProcessTbdElements() {
   // This element helps report errors.
   const xmlpp::Element* el_def;  // XML element with the definition.
   try {
-    for (const std::pair<ParameterPtr, const xmlpp::Element*>& param :
+    for (const std::pair<Parameter*, const xmlpp::Element*>& param :
          tbd_.parameters) {
       el_def = param.second;
       Initializer::DefineParameter(el_def, param.first);
     }
-    for (const std::pair<BasicEventPtr, const xmlpp::Element*>& event :
+    for (const std::pair<BasicEvent*, const xmlpp::Element*>& event :
          tbd_.basic_events) {
       el_def = event.second;
       Initializer::DefineBasicEvent(el_def, event.first);
     }
-    for (const std::pair<GatePtr, const xmlpp::Element*>& gate : tbd_.gates) {
+    for (const std::pair<Gate*, const xmlpp::Element*>& gate : tbd_.gates) {
       el_def = gate.second;
       Initializer::DefineGate(el_def, gate.first);
     }
-    for (const std::pair<CcfGroupPtr, const xmlpp::Element*>& group :
+    for (const std::pair<CcfGroup*, const xmlpp::Element*>& group :
          tbd_.ccf_groups) {
       el_def = group.second;
       Initializer::DefineCcfGroup(el_def, group.first);
@@ -358,13 +354,12 @@ GatePtr Initializer::RegisterGate(const xmlpp::Element* gate_node,
     err.msg(msg.str() + err.msg());
     throw;
   }
-  tbd_.gates.emplace_back(gate, gate_node);
+  tbd_.gates.emplace_back(gate.get(), gate_node);
   Initializer::AttachLabelAndAttributes(gate_node, gate.get());
   return gate;
 }
 
-void Initializer::DefineGate(const xmlpp::Element* gate_node,
-                             const GatePtr& gate) {
+void Initializer::DefineGate(const xmlpp::Element* gate_node, Gate* gate) {
   xmlpp::NodeSet formulas =
       gate_node->find("./*[name() != 'attributes' and name() != 'label']");
   // Assumes that there are no attributes and labels.
@@ -486,13 +481,13 @@ BasicEventPtr Initializer::RegisterBasicEvent(const xmlpp::Element* event_node,
     err.msg(msg.str() + err.msg());
     throw;
   }
-  tbd_.basic_events.emplace_back(basic_event, event_node);
+  tbd_.basic_events.emplace_back(basic_event.get(), event_node);
   Initializer::AttachLabelAndAttributes(event_node, basic_event.get());
   return basic_event;
 }
 
 void Initializer::DefineBasicEvent(const xmlpp::Element* event_node,
-                                   const BasicEventPtr& basic_event) {
+                                   BasicEvent* basic_event) {
   xmlpp::NodeSet expressions =
      event_node->find("./*[name() != 'attributes' and name() != 'label']");
 
@@ -552,7 +547,7 @@ ParameterPtr Initializer::RegisterParameter(const xmlpp::Element* param_node,
     err.msg(msg.str() + err.msg());
     throw;
   }
-  tbd_.parameters.emplace_back(parameter, param_node);
+  tbd_.parameters.emplace_back(parameter.get(), param_node);
 
   // Attach units.
   std::string unit = GetAttributeValue(param_node, "unit");
@@ -565,7 +560,7 @@ ParameterPtr Initializer::RegisterParameter(const xmlpp::Element* param_node,
 }
 
 void Initializer::DefineParameter(const xmlpp::Element* param_node,
-                                  const ParameterPtr& parameter) {
+                                  Parameter* parameter) {
   // Assuming that expression is the last child of the parameter definition.
   xmlpp::NodeSet expressions =
       param_node->find("./*[name() != 'attributes' and name() != 'label']");
@@ -705,7 +700,7 @@ ExpressionPtr Initializer::GetExpression(const xmlpp::Element* expr_element,
   try {
     ExpressionPtr expression = kExpressionExtractors_.at(expr_name)(
         expr_element->find("./*"), base_path, this);
-    expressions_.push_back(expression);  // For late validation.
+    expressions_.push_back(expression.get());  // For late validation.
     return expression;
   } catch (InvalidArgument& err) {
     std::stringstream msg;
@@ -806,16 +801,16 @@ CcfGroupPtr Initializer::RegisterCcfGroup(const xmlpp::Element* ccf_node,
 
   xmlpp::NodeSet members = ccf_node->find("./members");
   assert(members.size() == 1);
-  Initializer::ProcessCcfMembers(XmlElement(members[0]), ccf_group);
+  Initializer::ProcessCcfMembers(XmlElement(members[0]), ccf_group.get());
 
   Initializer::AttachLabelAndAttributes(ccf_node, ccf_group.get());
 
-  tbd_.ccf_groups.emplace_back(ccf_group, ccf_node);
+  tbd_.ccf_groups.emplace_back(ccf_group.get(), ccf_node);
   return ccf_group;
 }
 
 void Initializer::DefineCcfGroup(const xmlpp::Element* ccf_node,
-                                 const CcfGroupPtr& ccf_group) {
+                                 CcfGroup* ccf_group) {
   for (const xmlpp::Node* node : ccf_node->find("./*")) {
     const xmlpp::Element* element = XmlElement(node);
     std::string name = element->get_name();
@@ -838,7 +833,7 @@ void Initializer::DefineCcfGroup(const xmlpp::Element* ccf_node,
 }
 
 void Initializer::ProcessCcfMembers(const xmlpp::Element* members_node,
-                                    const CcfGroupPtr& ccf_group) {
+                                    CcfGroup* ccf_group) {
   for (const xmlpp::Node* node : members_node->find("./*")) {
     const xmlpp::Element* event_node = XmlElement(node);
     assert("basic-event" == event_node->get_name());
@@ -860,7 +855,7 @@ void Initializer::ProcessCcfMembers(const xmlpp::Element* members_node,
 }
 
 void Initializer::DefineCcfFactor(const xmlpp::Element* factor_node,
-                                  const CcfGroupPtr& ccf_group) {
+                                  CcfGroup* ccf_group) {
   // Checking the level for one factor input.
   std::string level = GetAttributeValue(factor_node, "level");
   if (level.empty()) {
@@ -888,7 +883,7 @@ void Initializer::ValidateInitialization() {
   // Check if all gates have no cycles.
   for (const std::pair<const std::string, GatePtr>& gate : model_->gates()) {
     std::vector<std::string> cycle;
-    if (cycle::DetectCycle<Gate, Formula>(gate.second.get(), &cycle)) {
+    if (cycle::DetectCycle(gate.second, &cycle)) {
       std::string msg =
           "Detected a cycle in " + gate.second->name() + " gate:\n";
       msg += cycle::PrintCycle(cycle);
@@ -925,7 +920,7 @@ void Initializer::ValidateExpressions() {
   for (const std::pair<const std::string, ParameterPtr>& p :
        model_->parameters()) {
     std::vector<std::string> cycle;
-    if (cycle::DetectCycle<Parameter, Expression>(p.second.get(), &cycle)) {
+    if (cycle::DetectCycle(p.second.get(), &cycle)) {
       throw ValidationError("Detected a cycle in " + p.second->name() +
                             " parameter:\n" + cycle::PrintCycle(cycle));
     }
@@ -933,7 +928,7 @@ void Initializer::ValidateExpressions() {
 
   // Validate expressions.
   try {
-    for (const ExpressionPtr& expression : expressions_) expression->Validate();
+    for (Expression* expression : expressions_) expression->Validate();
   } catch (InvalidArgument& err) {
     throw ValidationError(err.msg());
   }

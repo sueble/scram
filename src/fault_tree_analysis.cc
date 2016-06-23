@@ -20,10 +20,11 @@
 
 #include "fault_tree_analysis.h"
 
-#include <set>
+#include <algorithm>
 #include <utility>
 
-#include <boost/generator_iterator.hpp>
+#include <boost/container/flat_set.hpp>
+#include <boost/range/algorithm.hpp>
 
 namespace scram {
 namespace core {
@@ -38,20 +39,19 @@ void Print(const std::vector<Product>& products) {
     std::cerr << "Single Unity product." << std::endl;
     return;
   }
-  std::vector<std::set<std::string>> to_print;
+  using ProductSet = boost::container::flat_set<std::string>;
+  std::vector<ProductSet> to_print;
   for (const auto& product : products) {
-    std::set<std::string> ids;
+    ProductSet ids;
     for (const auto& literal : product) {
       ids.insert((literal.complement ? "~" : "") + literal.event.name());
     }
-    to_print.push_back(ids);
+    to_print.push_back(std::move(ids));
   }
-  std::sort(
-      to_print.begin(), to_print.end(),
-      [](const std::set<std::string>& lhs, const std::set<std::string>& rhs) {
-        if (lhs.size() == rhs.size()) return lhs < rhs;
-        return lhs.size() < rhs.size();
-      });
+  boost::sort(to_print, [](const ProductSet& lhs, const ProductSet& rhs) {
+    if (lhs.size() == rhs.size()) return lhs < rhs;
+    return lhs.size() < rhs.size();
+  });
   assert(!to_print.front().empty() && "Failure of the analysis with Unity!");
   std::vector<int> distribution(to_print.back().size());
   for (const auto& product : to_print) distribution[product.size() - 1]++;
@@ -78,46 +78,30 @@ int GetOrder(const Product& product) {
   return product.empty() ? 1 : product.size();
 }
 
-FaultTreeDescriptor::FaultTreeDescriptor(const mef::GatePtr& root)
+FaultTreeDescriptor::FaultTreeDescriptor(const mef::Gate& root)
     : top_event_(root) {
-  FaultTreeDescriptor::GatherEvents(top_event_);
-  FaultTreeDescriptor::ClearMarks();
+  FaultTreeDescriptor::GatherEvents(top_event_.formula());
 }
 
-void FaultTreeDescriptor::GatherEvents(const mef::GatePtr& gate) noexcept {
-  if (gate->mark() == "visited") return;
-  gate->mark("visited");
-  FaultTreeDescriptor::GatherEvents(gate->formula());
-}
-
-void FaultTreeDescriptor::GatherEvents(
-    const mef::FormulaPtr& formula) noexcept {
-  for (const mef::BasicEventPtr& basic_event : formula->basic_event_args()) {
-    basic_events_.emplace(basic_event->id(), basic_event);
+void FaultTreeDescriptor::GatherEvents(const mef::Formula& formula) noexcept {
+  for (const mef::BasicEventPtr& basic_event : formula.basic_event_args()) {
+    basic_events_.emplace(basic_event->id(), basic_event.get());
     if (basic_event->HasCcf())
-      ccf_events_.emplace(basic_event->id(), basic_event);
+      ccf_events_.emplace(basic_event->id(), basic_event.get());
   }
-  for (const mef::HouseEventPtr& house_event : formula->house_event_args()) {
-    house_events_.emplace(house_event->id(), house_event);
+  for (const mef::HouseEventPtr& house_event : formula.house_event_args()) {
+    house_events_.emplace(house_event->id(), house_event.get());
   }
-  for (const mef::GatePtr& gate : formula->gate_args()) {
-    inter_events_.emplace(gate->id(), gate);
-    FaultTreeDescriptor::GatherEvents(gate);
+  for (const mef::GatePtr& gate : formula.gate_args()) {
+    bool unvisited = inter_events_.emplace(gate->id(), gate.get()).second;
+    if (unvisited) FaultTreeDescriptor::GatherEvents(gate->formula());
   }
-  for (const mef::FormulaPtr& arg : formula->formula_args()) {
-    FaultTreeDescriptor::GatherEvents(arg);
-  }
-}
-
-void FaultTreeDescriptor::ClearMarks() noexcept {
-  top_event_->mark("");
-  for (const std::pair<const std::string, mef::GatePtr>& member :
-       inter_events_) {
-    member.second->mark("");
+  for (const mef::FormulaPtr& arg : formula.formula_args()) {
+    FaultTreeDescriptor::GatherEvents(*arg);
   }
 }
 
-FaultTreeAnalysis::FaultTreeAnalysis(const mef::GatePtr& root,
+FaultTreeAnalysis::FaultTreeAnalysis(const mef::Gate& root,
                                      const Settings& settings)
     : Analysis(settings),
       FaultTreeDescriptor(root) {}

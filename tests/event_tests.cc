@@ -96,7 +96,7 @@ TEST(MEFGateTest, Cycle) {
   middle->formula(std::move(formula_two));
   bottom->formula(std::move(formula_three));
   std::vector<std::string> cycle;
-  bool ret = cycle::DetectCycle<Gate, Formula>(top.get(), &cycle);
+  bool ret = cycle::DetectCycle(top, &cycle);
   EXPECT_TRUE(ret);
   std::vector<std::string> print_cycle;
   print_cycle.push_back("Top");
@@ -203,12 +203,12 @@ TEST(MEFGateTest, Inhibit) {
   top->formula(FormulaPtr(new Formula("and")));
   top->AddAttribute(inh_attr);
   EXPECT_THROW(top->Validate(), ValidationError);
-  top->formula()->AddArgument(A);
+  top->formula().AddArgument(A);
   EXPECT_THROW(top->Validate(), ValidationError);
-  top->formula()->AddArgument(B);
+  top->formula().AddArgument(B);
   EXPECT_THROW(top->Validate(), ValidationError);
 
-  top->formula()->AddArgument(C);
+  top->formula().AddArgument(C);
   EXPECT_THROW(top->Validate(), ValidationError);
 
   top = GatePtr(new Gate("top"));
@@ -219,8 +219,8 @@ TEST(MEFGateTest, Inhibit) {
   cond.name = "flavor";
   cond.value = "conditional";
   C->AddAttribute(cond);
-  top->formula()->AddArgument(A);  // Basic event.
-  top->formula()->AddArgument(C);  // Conditional event.
+  top->formula().AddArgument(A);  // Basic event.
+  top->formula().AddArgument(C);  // Conditional event.
   EXPECT_NO_THROW(top->Validate());
   A->AddAttribute(cond);
   EXPECT_THROW(top->Validate(), ValidationError);
