@@ -48,6 +48,7 @@
 
 #include "event.h"
 #include "ext.h"
+#include "linear_map.h"
 
 namespace scram {
 namespace core {
@@ -62,10 +63,10 @@ class NodeParentManager {
   friend class Gate;  ///< The main manipulator of parent information.
 
  public:
-  using Parent = std::pair<const int, GateWeakPtr>;  ///< Parent index and ptr.
+  using Parent = std::pair<int, GateWeakPtr>;  ///< Parent index and ptr.
 
   /// Map of parent gate positive indices and weak pointers to them.
-  using ParentMap = std::unordered_map<int, GateWeakPtr>;
+  using ParentMap = LinearMap<int, GateWeakPtr, std::vector, MoveEraser>;
 
   /// @returns Parents of a node.
   const ParentMap& parents() const { return parents_; }
@@ -77,6 +78,8 @@ class NodeParentManager {
   /// Adds a new parent of a node.
   ///
   /// @param[in] gate  Pointer to the parent gate.
+  ///
+  /// @pre The parent is not in the container.
   void AddParent(const GatePtr& gate);
 
   /// Removes a parent from the node.
@@ -305,14 +308,14 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   ///
   /// @tparam T  The type of the argument node.
   template <class T>
-  using Arg = std::pair<const int, std::shared_ptr<T>>;
+  using Arg = std::pair<int, std::shared_ptr<T>>;
 
   /// The associative container type to store the gate arguments.
   /// This container type maps the index of the argument to a pointer to it.
   ///
   /// @tparam T  The type of the argument node.
   template <class T>
-  using ArgMap = std::unordered_map<int, std::shared_ptr<T>>;
+  using ArgMap = LinearMap<int, std::shared_ptr<T>, std::vector, MoveEraser>;
 
   /// The ordered set of gate argument indices.
   using ArgSet = boost::container::flat_set<int>;
@@ -539,7 +542,7 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
     if (args_.count(-index)) return Gate::ProcessComplementArg(index);
 
     args_.insert(index);
-    Gate::mutable_args<T>().emplace(index, arg);
+    Gate::mutable_args<T>().data().emplace_back(index, arg);
     arg->AddParent(shared_from_this());
   }
 

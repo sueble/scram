@@ -34,7 +34,8 @@ namespace core {
 int Node::next_index_ = 1e6;  // Limit for basic events per fault tree!
 
 void NodeParentManager::AddParent(const GatePtr& gate) {
-  parents_.emplace(gate->index(), gate);
+  assert(!parents_.count(gate->index()) && "Adding an existing parent.");
+  parents_.data().emplace_back(gate->index(), gate);
 }
 
 Node::Node() noexcept : Node(next_index_++) {}
@@ -121,15 +122,8 @@ void Gate::InvertArgs() noexcept {
     inverted_args.insert(inverted_args.end(), -*it);
   args_ = std::move(inverted_args);
 
-  ArgMap<Gate> inverted_gates;
-  for (const auto& arg : gate_args_)
-    inverted_gates.emplace(-arg.first, arg.second);
-  gate_args_ = std::move(inverted_gates);
-
-  ArgMap<Variable> inverted_vars;
-  for (const auto& arg : variable_args_)
-    inverted_vars.emplace(-arg.first, arg.second);
-  variable_args_ = std::move(inverted_vars);
+  for (auto& arg : gate_args_) arg.first *= -1;
+  for (auto& arg : variable_args_) arg.first *= -1;
 }
 
 void Gate::InvertArg(int existing_arg) noexcept {
@@ -141,15 +135,11 @@ void Gate::InvertArg(int existing_arg) noexcept {
   args_.insert(-existing_arg);
 
   if (auto it_g = ext::find(gate_args_, existing_arg)) {
-    GatePtr arg = it_g->second;
-    gate_args_.erase(it_g);
-    gate_args_.emplace(-existing_arg, arg);
+    it_g->first *= -1;
 
   } else {
     auto it_v = variable_args_.find(existing_arg);
-    VariablePtr arg = it_v->second;
-    variable_args_.erase(it_v);
-    variable_args_.emplace(-existing_arg, arg);
+    it_v->first *= -1;
   }
 }
 
