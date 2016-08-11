@@ -44,16 +44,9 @@ struct DefaultEraser {
   /// @returns The iterator as the result of call to the container's ``erase``.
   ///
   /// @{
-  template <class T>
-  static typename T::iterator erase(typename T::iterator it, T* container) {
+  template <class T, class Iterator>
+  static typename T::iterator erase(Iterator it, T* container) {
     return container->erase(it);
-  }
-  template <class T>  // Workaround for the C++11 bug in libstdc++ 4.8.
-  static typename T::iterator erase(typename T::const_iterator it,
-                                    T* container) {
-    return DefaultEraser::erase(
-        std::next(container->begin(), std::distance(container->cbegin(), it)),
-        container);
   }
   /// @}
 };
@@ -91,6 +84,12 @@ struct MoveEraser {
   }
   /// @}
 };
+
+/// @todo Bug in Intel compiler with variadic-template-template arguments.
+#ifdef __INTEL_COMPILER
+template <typename T>
+using DefaultSequence = std::vector<T>;
+#endif
 
 /// An adaptor map with lookup complexity O(N)
 /// based on sequence (contiguous structure by default).
@@ -138,7 +137,11 @@ struct MoveEraser {
 /// @tparam Sequence  The underlying container type.
 template <typename Key, typename Value,
           class ErasePolicy = DefaultEraser,
+#ifdef __INTEL_COMPILER
+          template <typename> class Sequence = DefaultSequence>
+#else
           template <typename...> class Sequence = std::vector>
+#endif
 class linear_map {
   /// Non-member equality test operators.
   /// The complexity is O(N^2).
@@ -210,7 +213,6 @@ class linear_map {
     return *this;
   }
   linear_map& operator=(linear_map&& lm) noexcept {
-    assert(this != &lm && "Move into itself is undefined.");
     map_ = std::move(lm.map_);
     return *this;
   }

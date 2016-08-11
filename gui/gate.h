@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Olzhas Rakhimov
+ * Copyright (C) 2016 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,48 +15,37 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef GATE_H
+#define GATE_H
 
-#include <memory>
-
-#include <QMainWindow>
-
-#include "src/model.h"
-
-namespace Ui {
-class MainWindow;
-}
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
 
 namespace scram {
 namespace gui {
 
-class MainWindow : public QMainWindow
+/**
+ * @brief The abstract base class for various gate types.
+ */
+class Gate
 {
-    Q_OBJECT
-
 public:
-    explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    Gate(const Gate&) = delete;
+    Gate& operator=(const Gate&) = delete;
+
+    virtual ~Gate() = default;
 
     /**
-     * @brief Sets the model to display in the window.
+     * @brief Paints the shape of the gate without its inputs.
      *
-     * @param model  Fully initialized and validated model.
-     *               nullptr if no model present,
-     *               or to remove the current model.
+     * @param painter  The reciever of the image.
+     * @param option  Holder of reference units for the sizes.
      */
-    void setModel(std::shared_ptr<mef::Model> model)
-    {
-        m_model = std::move(model);
-    }
-
-private:
-    Ui::MainWindow *ui;
-    std::shared_ptr<mef::Model> m_model; ///< The main model to display.
+    virtual void paint(QPainter *painter,
+                       const QStyleOptionGraphicsItem *option) = 0;
 };
 
 } // namespace gui
 } // namespace scram
 
-#endif // MAINWINDOW_H
+#endif // GATE_H

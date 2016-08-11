@@ -42,14 +42,16 @@ class KeyClass {
 }  // namespace
 template class ext::linear_map<KeyClass, std::string>;
 
+// Move erase policy instantiation.
+template class ext::linear_map<KeyClass, std::string, ext::MoveEraser>;
+
+#ifndef __INTEL_COMPILER
 // Passing another underlying container types.
 template class ext::linear_map<int, int, ext::DefaultEraser,
                                boost::container::vector>;
-
-// Move erase policy instantiation.
-template class ext::linear_map<KeyClass, std::string, ext::MoveEraser>;
 template class ext::linear_map<KeyClass, std::string, ext::MoveEraser,
                                boost::container::vector>;
+#endif
 
 namespace scram {
 namespace test {
@@ -81,11 +83,6 @@ TEST(LinearMapTest, Constructors) {
   EXPECT_EQ(3, m_move.size());
   EXPECT_FALSE(m_move.empty());
   EXPECT_EQ(m_init_list, m_move);
-
-#ifndef NDEBUG
-  // Move into itself is undefined behavior!
-  EXPECT_DEATH(m_move = std::move(m_move), "");
-#endif
 
   // Assignments.
   IntMap m_assign_copy;
