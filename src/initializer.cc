@@ -33,22 +33,6 @@
 namespace scram {
 namespace mef {
 
-const std::map<std::string, Units> Initializer::kUnits_ = {
-    {"bool", kBool},
-    {"int", kInt},
-    {"float", kFloat},
-    {"hours", kHours},
-    {"hours-1", kInverseHours},
-    {"years", kYears},
-    {"years-1", kInverseYears},
-    {"fit", kFit},
-    {"demands", kDemands}};
-
-const char* const Initializer::kUnitToString_[] = {"unitless", "bool", "int",
-                                                   "float", "hours", "hours-1",
-                                                   "years", "years-1", "fit",
-                                                   "demands"};
-
 std::stringstream Initializer::schema_;
 
 namespace {
@@ -383,7 +367,11 @@ FormulaPtr Initializer::GetFormula(const xmlpp::Element* formula_node,
       type == "house-event") {
     type = "null";
   }
-  FormulaPtr formula(new Formula(type));
+
+  int pos = boost::find(kOperatorToString, type) - kOperatorToString.begin();
+  assert(pos < kNumOperators && "Unexpected operator type.");
+
+  FormulaPtr formula(new Formula(static_cast<Operator>(pos)));
   if (type == "atleast") {
     int vote_number = CastAttributeValue<int>(formula_node, "min");
     formula->vote_number(vote_number);
@@ -545,8 +533,9 @@ ParameterPtr Initializer::RegisterParameter(const xmlpp::Element* param_node,
   // Attach units.
   std::string unit = GetAttributeValue(param_node, "unit");
   if (!unit.empty()) {
-    assert(kUnits_.count(unit));
-    parameter->unit(kUnits_.at(unit));
+    int pos = boost::find(kUnitsToString, unit) - kUnitsToString.begin();
+    assert(pos < kNumUnits && "Unexpected unit kind.");
+    parameter->unit(static_cast<Units>(pos));
   }
   Initializer::AttachLabelAndAttributes(param_node, parameter.get());
   return parameter;
@@ -733,7 +722,7 @@ ExpressionPtr Initializer::GetParameterExpression(
     try {
       ParameterPtr param = model_->GetParameter(name, base_path);
       param->unused(false);
-      param_unit = kUnitToString_[param->unit()];
+      param_unit = kUnitsToString[param->unit()];
       expression = param;
     } catch (std::out_of_range&) {
       std::stringstream msg;
@@ -743,7 +732,7 @@ ExpressionPtr Initializer::GetParameterExpression(
     }
   } else {
     assert(expr_name == "system-mission-time");
-    param_unit = kUnitToString_[mission_time_->unit()];
+    param_unit = kUnitsToString[mission_time_->unit()];
     expression = mission_time_;
   }
   // Check units.
@@ -874,11 +863,11 @@ void Initializer::DefineCcfFactor(const xmlpp::Element* factor_node,
 
 void Initializer::ValidateInitialization() {
   // Check if all gates have no cycles.
-  for (const std::pair<const std::string, GatePtr>& gate : model_->gates()) {
+  for (const GatePtr& gate : model_->gates()) {
     std::vector<std::string> cycle;
-    if (cycle::DetectCycle(gate.second, &cycle)) {
+    if (cycle::DetectCycle(gate, &cycle)) {
       std::string msg =
-          "Detected a cycle in " + gate.second->name() + " gate:\n";
+          "Detected a cycle in " + gate->name() + " gate:\n";
       msg += cycle::PrintCycle(cycle);
       throw ValidationError(msg);
     }
@@ -886,13 +875,11 @@ void Initializer::ValidateInitialization() {
   // Check if all primary events have expressions for probability analysis.
   if (settings_.probability_analysis()) {
     std::string msg;
-    for (const std::pair<const std::string, BasicEventPtr>& event :
-         model_->basic_events()) {
-      if (!event.second->has_expression()) msg += event.second->name() + "\n";
+    for (const BasicEventPtr& event : model_->basic_events()) {
+      if (!event->has_expression()) msg += event->name() + "\n";
     }
-    for (const std::pair<const std::string, HouseEventPtr>& event :
-         model_->house_events()) {
-      if (!event.second->has_expression()) msg += event.second->name() + "\n";
+    for (const HouseEventPtr& event : model_->house_events()) {
+      if (!event->has_expression()) msg += event->name() + "\n";
     }
 
     if (!msg.empty())
@@ -902,19 +889,15 @@ void Initializer::ValidateInitialization() {
 
   Initializer::ValidateExpressions();
 
-  for (const std::pair<const std::string, CcfGroupPtr>& group :
-       model_->ccf_groups()) {
-    group.second->Validate();
-  }
+  for (const CcfGroupPtr& group : model_->ccf_groups()) group->Validate();
 }
 
 void Initializer::ValidateExpressions() {
   // Check for cycles in parameters. This must be done before expressions.
-  for (const std::pair<const std::string, ParameterPtr>& p :
-       model_->parameters()) {
+  for (const ParameterPtr& param : model_->parameters()) {
     std::vector<std::string> cycle;
-    if (cycle::DetectCycle(p.second.get(), &cycle)) {
-      throw ValidationError("Detected a cycle in " + p.second->name() +
+    if (cycle::DetectCycle(param.get(), &cycle)) {
+      throw ValidationError("Detected a cycle in " + param->name() +
                             " parameter:\n" + cycle::PrintCycle(cycle));
     }
   }
@@ -928,12 +911,11 @@ void Initializer::ValidateExpressions() {
 
   // Check distribution values for CCF groups.
   std::stringstream msg;
-  for (const std::pair<const std::string, CcfGroupPtr>& group :
-        model_->ccf_groups()) {
+  for (const CcfGroupPtr& group : model_->ccf_groups()) {
     try {
-      group.second->ValidateDistribution();
+      group->ValidateDistribution();
     } catch (ValidationError& err) {
-      msg << group.second->name() << " : " << err.msg() << "\n";
+      msg << group->name() << " : " << err.msg() << "\n";
     }
   }
   if (!msg.str().empty()) {
@@ -942,13 +924,12 @@ void Initializer::ValidateExpressions() {
   }
 
   // Check probability values for primary events.
-  for (const std::pair<const std::string, BasicEventPtr>& event :
-        model_->basic_events()) {
-    if (event.second->has_expression() == false) continue;
+  for (const BasicEventPtr& event : model_->basic_events()) {
+    if (event->has_expression() == false) continue;
     try {
-      event.second->Validate();
+      event->Validate();
     } catch (ValidationError& err) {
-      msg << event.second->name() << " : " << err.msg() << "\n";
+      msg << event->name() << " : " << err.msg() << "\n";
     }
   }
   if (!msg.str().empty()) {
@@ -960,19 +941,15 @@ void Initializer::ValidateExpressions() {
 void Initializer::SetupForAnalysis() {
   CLOCK(top_time);
   LOG(DEBUG2) << "Collecting top events of fault trees...";
-  for (const std::pair<const std::string, FaultTreePtr>& ft :
-       model_->fault_trees()) {
-    ft.second->CollectTopEvents();
+  for (const FaultTreePtr& ft : model_->fault_trees()) {
+    ft->CollectTopEvents();
   }
   LOG(DEBUG2) << "Top event collection is finished in " << DUR(top_time);
 
   CLOCK(ccf_time);
   LOG(DEBUG2) << "Applying CCF models...";
   // CCF groups must apply models to basic event members.
-  for (const std::pair<const std::string, CcfGroupPtr>& group :
-       model_->ccf_groups()) {
-    group.second->ApplyModel();
-  }
+  for (const CcfGroupPtr& group : model_->ccf_groups()) group->ApplyModel();
   LOG(DEBUG2) << "Application of CCF models finished in " << DUR(ccf_time);
 }
 

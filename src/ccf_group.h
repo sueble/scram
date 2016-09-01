@@ -25,12 +25,12 @@
 #ifndef SCRAM_SRC_CCF_GROUP_H_
 #define SCRAM_SRC_CCF_GROUP_H_
 
-#include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <boost/noncopyable.hpp>
 
 #include "element.h"
 #include "event.h"
@@ -40,7 +40,10 @@ namespace scram {
 namespace mef {
 
 /// Abstract base class for all common cause failure models.
-class CcfGroup : public Element, public Role, public Id {
+class CcfGroup : public Element,
+                 public Role,
+                 public Id,
+                 private boost::noncopyable {
  public:
   /// Constructor to be used by derived classes.
   ///
@@ -52,15 +55,10 @@ class CcfGroup : public Element, public Role, public Id {
   explicit CcfGroup(std::string name, std::string base_path = "",
                     RoleSpecifier role = RoleSpecifier::kPublic);
 
-  CcfGroup(const CcfGroup&) = delete;
-  CcfGroup& operator=(const CcfGroup&) = delete;
-
   virtual ~CcfGroup() = default;
 
   /// @returns Members of the CCF group with original names as keys.
-  const std::map<std::string, BasicEventPtr>& members() const {
-    return members_;
-  }
+  const ElementTable<BasicEventPtr>& members() const { return members_; }
 
   /// Adds a basic event into this CCF group.
   /// This function asserts that each basic event has unique string id.
@@ -152,9 +150,13 @@ class CcfGroup : public Element, public Role, public Id {
   ///           for each level of groupings for CCF events.
   virtual ExpressionMap CalculateProbabilities() = 0;
 
+  /// Stabilizes the order of CCF group members.
+  ///
+  /// @returns Ordered members.
+  std::vector<BasicEvent*> StabilizeMembers();
+
   /// Members of CCF groups.
-  /// @todo Consider other cross-platform stable data structures or approaches.
-  std::map<std::string, BasicEventPtr> members_;
+  ElementTable<BasicEventPtr> members_;
   ExpressionPtr distribution_;  ///< The probability distribution of the group.
   ExpressionMap factors_;  ///< CCF factors for models to get CCF probabilities.
 };
@@ -228,7 +230,6 @@ class PhiFactorModel : public CcfGroup {
   /// @throws ValidationError  There is an issue with the setup.
   ///
   /// @todo Problem with sampling the factors and not getting exactly 1.
-  ///       Currently only accepts constant expressions.
   void Validate() const override;
 
  private:
