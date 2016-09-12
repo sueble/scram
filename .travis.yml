@@ -22,22 +22,21 @@ addons:
         packages:
             - gcc-4.9
             - g++-4.9
-            - libboost-program-options1.58-dev
-            - libboost-filesystem1.58-dev
-            - libboost-system1.58-dev
-            - libboost-math1.58-dev
-            - libboost-date-time1.58-dev
             - libxml2-dev
-            - libxml++2.6-dev
+            - libglibmm-2.4-dev
             - libgoogle-perftools-dev
             - qt5-default
         sources:
             - ubuntu-toolchain-r-test
-            - sourceline: 'ppa:kojoley/boost'
 
-before_script:
+before_install:
     - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 20
     - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 20
+
+install:
+    - .travis/install.sh  # Dependencies are built with gcc or clang.
+
+before_script:
     - mkdir build
     - cd build
 

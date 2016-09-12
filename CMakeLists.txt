@@ -61,8 +61,6 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
     "${CMAKE_CXX_FLAGS_DEBUG} -Wno-missing-braces -Wshadow -Wunused-exception-parameter")
 
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
-  # TODO: Bug in Intel compiler '-Wnon-virtual-dtor' side effect on implicit ctors.
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=2304")
   # TODO: Bug in Intel compiler with multi-initialization with auto.
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=3373")
   # TODO: Bug in Intel compiler w/o GCC 5 built-in math with overlflow.
@@ -126,15 +124,11 @@ if(WITH_TCMALLOC)
   set(LIBS ${LIBS} ${Tcmalloc_LIBRARIES})
 endif()
 
-# Debian installs useful LibXML2 files to /usr/include/libxml2/libxml.
-# libxml2 is required for relaxng schema validation.
-find_package(LibXml2 REQUIRED)
-add_definitions(${LIBXML2_DEFINITIONS})
-set(LIBS ${LIBS} ${LIBXML2_LIBRARIES})
-
 # Find LibXML++ and dependencies.
-find_package(LibXML++ REQUIRED)
+set(LIBXML++_MIN_VERSION "2.38.1")  # TODO: Fix the minimum version check.
+find_package(LibXML++ "${LIBXML++_MIN_VERSION}" REQUIRED)
 set(LIBS ${LIBS} ${LibXML++_LIBRARIES})
+
 message(STATUS ${LIBS})
 
 # Include the boost header files and the program_options library.
@@ -194,10 +188,10 @@ endif()
 
 # Include all the discovered system directories.
 include_directories(SYSTEM "${Boost_INCLUDE_DIR}")
-include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")
+include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")  # TODO: libxml++ dependency.
 include_directories(SYSTEM "${LibXML++_INCLUDE_DIR}")
 include_directories(SYSTEM "${LibXML++Config_INCLUDE_DIR}")
-include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})
+include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})  # TODO: libxml++ dependency.
 
 add_subdirectory("${SCRAM_SOURCE_DIR}")
 
