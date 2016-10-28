@@ -14,7 +14,7 @@ endif()
 project(SCRAM)
 set(SCRAM_VERSION_MAJOR 0)  # Indicate major API change after 1.0.0
 set(SCRAM_VERSION_MINOR 11)  # New features and improvements.
-set(SCRAM_VERSION_MICRO 3)  # Bug fixes.
+set(SCRAM_VERSION_MICRO 4)  # Bug fixes.
 
 ####################### Begin Options ###################
 
@@ -23,7 +23,8 @@ set(BUILD_SHARED_LIBS TRUE)  # Change this for static building.
 # Linking of external libraries, such as BOOST.
 option(WITH_STATIC_LIBS "Try to link against static libraries" OFF)
 
-option(WITH_TCMALLOC "Use TCMalloc" ON)
+option(WITH_TCMALLOC "Use TCMalloc if available (#1 preference)" ON)
+option(WITH_JEMALLOC "Use JEMalloc if available (#2 preference)" ON)
 
 option(WITH_COVERAGE "Instrument for coverage analysis" OFF)
 option(WITH_PROFILE "Instrument for performance profiling" OFF)
@@ -119,13 +120,20 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 ######################## Begin find libraries ######################
 
-set(LIBS "")
-
-# Optional TCMalloc for optimization.
-if(WITH_TCMALLOC AND NOT WITH_PROFILE)
+set(MALLOC "System Malloc")
+# Optional alternative Malloc for optimization.
+if(NOT WITH_PROFILE)
   find_package(Tcmalloc)
-  set(LIBS ${LIBS} ${Tcmalloc_LIBRARIES})
+  find_package(JeMalloc)
+  if(WITH_TCMALLOC AND Tcmalloc_FOUND)
+    set(LIBS ${LIBS} ${Tcmalloc_LIBRARIES})
+    set(MALLOC "TCMalloc")
+  elseif(WITH_JEMALLOC AND JEMALLOC_FOUND)
+    set(LIBS ${LIBS} ${JEMALLOC_LIBRARIES})
+    set(MALLOC "JEMalloc")
+  endif()
 endif()
+message(STATUS "The memory allocator: ${MALLOC}")
 
 # Find LibXML++ and dependencies.
 set(LIBXML++_MIN_VERSION "2.38.1")  # TODO: Fix the minimum version check.
@@ -195,6 +203,8 @@ include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")  # TODO: libxml++ dependenc
 include_directories(SYSTEM "${LibXML++_INCLUDE_DIR}")
 include_directories(SYSTEM "${LibXML++Config_INCLUDE_DIR}")
 include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})  # TODO: libxml++ dependency.
+
+include_directories("${PROJECT_SOURCE_DIR}")  # Include the core headers via "src".
 
 add_subdirectory("${SCRAM_SOURCE_DIR}")
 
