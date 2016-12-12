@@ -6,6 +6,9 @@ src/version.cc
 # Qt Generated Project Configuration
 CMakeLists.txt.user
 
+# Irrelevant modules
+scripts/translators
+
 # Build directories
 build/
 

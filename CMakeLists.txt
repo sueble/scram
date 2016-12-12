@@ -18,7 +18,9 @@ set(SCRAM_VERSION_MICRO 4)  # Bug fixes.
 
 ####################### Begin Options ###################
 
-set(BUILD_SHARED_LIBS TRUE)  # Change this for static building.
+option(BUILD_SHARED_LIBS OFF)
+
+option(INSTALL_LIBS "Install the generated libraries" ON)
 
 # Linking of external libraries, such as BOOST.
 option(WITH_STATIC_LIBS "Try to link against static libraries" OFF)
@@ -44,7 +46,7 @@ CHECK_CXX_COMPILER_FLAG("-std=c++1y" COMPILER_SUPPORTS_CXX14)
 if(NOT COMPILER_SUPPORTS_CXX14)
   message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support.")
 endif()
-add_definitions("-std=c++1y")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 
 set(CMAKE_CXX_FLAGS_DEBUG
   "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -Wno-sign-compare -Wnon-virtual-dtor -Wno-missing-field-initializers")
@@ -67,8 +69,6 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   # TODO: Bug in Intel compiler with multi-initialization with auto.
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=3373")
-  # TODO: Bug in Intel compiler w/o GCC 5 built-in math with overlflow.
-  add_definitions(-D_GLIB_TEST_OVERFLOW_FALLBACK)  # TODO: Remove after glib2 version 2.48
 endif()
 
 if(WIN32)
@@ -106,7 +106,9 @@ set(CMAKE_SKIP_BUILD_RPATH FALSE)
 # (but later on when installing).
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+if(INSTALL_LIBS)
+  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
+endif()
 
 # Add the automatically determined parts of the RPATH,
 # which point to directories outside the build tree
@@ -156,7 +158,7 @@ endif()
 unset(Boost_INCLUDE_DIR CACHE)
 unset(Boost_LIBRARY_DIRS CACHE)
 find_package(Boost ${BOOST_MIN_VERSION} COMPONENTS
-  program_options filesystem system date_time
+  program_options filesystem system date_time random
   REQUIRED)
 
 if(Boost_USE_STATIC_LIBS)
