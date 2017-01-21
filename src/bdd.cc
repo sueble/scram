@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Olzhas Rakhimov
+ * Copyright (C) 2015-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 #include <boost/multiprecision/miller_rabin.hpp>
 #include <boost/range/algorithm.hpp>
 
-#include "ext.h"
+#include "ext/find_iterator.h"
 #include "logger.h"
 #include "zbdd.h"
 
@@ -39,32 +39,30 @@ int GetPrimeNumber(int n) {
   return n;
 }
 
-Bdd::Bdd(const BooleanGraph* fault_tree, const Settings& settings)
+Bdd::Bdd(const Pdag* graph, const Settings& settings)
     : kSettings_(settings),
-      coherent_(fault_tree->coherent()),
+      coherent_(graph->coherent()),
       kOne_(new Terminal<Ite>(true)),
       function_id_(2) {
   CLOCK(init_time);
-  LOG(DEBUG3) << "Converting Boolean graph into BDD...";
-  if (fault_tree->root()->IsConstant()) {
-    // Constant case should only happen to the top gate.
-    if (fault_tree->root()->state() == kNullState) {
-      root_ = {true, kOne_};
+  LOG(DEBUG3) << "Converting PDAG into BDD...";
+  if (graph->IsTrivial()) {
+    const Gate& top_gate = graph->root();
+    assert(top_gate.args().size() == 1);
+    assert(top_gate.args<Gate>().empty());
+    int child = *top_gate.args().begin();
+    if (top_gate.constant()) {
+      // Constant case should only happen to the top gate.
+      root_ = {child < 0, kOne_};
     } else {
-      root_ = {false, kOne_};
+      const Variable& var = top_gate.args<Variable>().begin()->second;
+      root_ = {child < 0,
+               FindOrAddVertex(var.index(), kOne_, kOne_, true, var.order())};
     }
-  } else if (fault_tree->root()->type() == kNull) {
-    const GatePtr& top_gate = fault_tree->root();
-    assert(top_gate->args().size() == 1);
-    assert(top_gate->args<Gate>().empty());
-    int child = *top_gate->args().begin();
-    VariablePtr var = top_gate->args<Variable>().begin()->second;
-    root_ = {child < 0,
-             FindOrAddVertex(var->index(), kOne_, kOne_, true, var->order())};
   } else {
     std::unordered_map<int, std::pair<Function, int>> gates;
-    root_ = ConvertGraph(*fault_tree->root(), &gates);
-    root_.complement ^= fault_tree->complement();
+    root_ = ConvertGraph(graph->root(), &gates);
+    root_.complement ^= graph->complement();
   }
   ClearMarks(false);
   TestStructure(root_.vertex);
@@ -74,7 +72,7 @@ Bdd::Bdd(const BooleanGraph* fault_tree, const Settings& settings)
   LOG(DEBUG4) << "# of entries in OR table: " << or_table_.size();
   ClearMarks(false);
   LOG(DEBUG4) << "# of ITE in BDD: " << CountIteNodes(root_.vertex);
-  LOG(DEBUG3) << "Finished Boolean graph conversion in " << DUR(init_time);
+  LOG(DEBUG3) << "Finished PDAG conversion in " << DUR(init_time);
   ClearMarks(false);
   // Clear tables if no more calculations are expected.
   ClearTables();
@@ -151,7 +149,7 @@ ItePtr Bdd::FindOrAddVertex(const Gate& gate, const VertexPtr& high,
 Bdd::Function Bdd::ConvertGraph(
     const Gate& gate,
     std::unordered_map<int, std::pair<Function, int>>* gates) noexcept {
-  assert(!gate.IsConstant() && "Unexpected constant gate!");
+  assert(!gate.constant() && "Unexpected constant gate!");
   Function result;  // For the NRVO, due to memoization.
   // Memoization check.
   if (auto it_entry = ext::find(*gates, gate.index())) {
@@ -163,17 +161,17 @@ Bdd::Function Bdd::ConvertGraph(
     return result;
   }
   std::vector<Function> args;
-  for (const Gate::Arg<Variable>& arg : gate.args<Variable>()) {
+  for (const Gate::ConstArg<Variable>& arg : gate.args<Variable>()) {
     args.push_back(
-        {arg.first < 0, FindOrAddVertex(arg.second->index(), kOne_, kOne_, true,
-                                        arg.second->order())});
-    index_to_order_.emplace(arg.second->index(), arg.second->order());
+        {arg.first < 0, FindOrAddVertex(arg.second.index(), kOne_, kOne_, true,
+                                        arg.second.order())});
+    index_to_order_.emplace(arg.second.index(), arg.second.order());
   }
-  for (const Gate::Arg<Gate>& arg : gate.args<Gate>()) {
-    Function res = ConvertGraph(*arg.second, gates);
-    if (arg.second->module()) {
+  for (const Gate::ConstArg<Gate>& arg : gate.args<Gate>()) {
+    Function res = ConvertGraph(arg.second, gates);
+    if (arg.second.module()) {
       args.push_back(
-          {arg.first < 0, FindOrAddVertex(*arg.second, kOne_, kOne_, true)});
+          {arg.first < 0, FindOrAddVertex(arg.second, kOne_, kOne_, true)});
     } else {
       bool complement = (arg.first < 0) ^ res.complement;
       args.push_back({complement, res.vertex});

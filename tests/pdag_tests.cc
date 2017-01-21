@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015-2016 Olzhas Rakhimov
+ * Copyright (C) 2015-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "boolean_graph.h"
+#include "pdag.h"
 
 #include <gtest/gtest.h>
 
@@ -28,13 +28,13 @@ namespace scram {
 namespace core {
 namespace test {
 
-TEST(BooleanGraphTest, Print) {
+TEST(PdagTest, Print) {
   std::unique_ptr<mef::Initializer> init;
   ASSERT_NO_THROW(
       init.reset(new mef::Initializer(
           {"./share/scram/input/fta/correct_formulas.xml"}, Settings())));
   const mef::FaultTreePtr& ft = *init->model()->fault_trees().begin();
-  BooleanGraph graph(*ft->top_events().front());
+  Pdag graph(*ft->top_events().front());
   graph.Print();
 }
 
@@ -43,17 +43,15 @@ static_assert(kNumOperators == 8, "New gate types are not considered!");
 class GateTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    var_one = std::make_shared<Variable>();
-    var_two = std::make_shared<Variable>();
-    var_three = std::make_shared<Variable>();
+    var_one = std::make_shared<Variable>(&graph);
+    var_two = std::make_shared<Variable>(&graph);
+    var_three = std::make_shared<Variable>(&graph);
     vars_ = {var_one, var_two, var_three};
-    for (int i = 0; i < 2; ++i) vars_.emplace_back(new Variable());  // Extra.
+    for (int i = 0; i < 2; ++i)
+      vars_.emplace_back(new Variable(&graph));  // Extra.
   }
 
-  void TearDown() override {
-    Node::ResetIndex();
-    Variable::ResetIndex();
-  }
+  void TearDown() override {}
 
   /// Sets up the main gate with the default variables.
   ///
@@ -66,18 +64,17 @@ class GateTest : public ::testing::Test {
     assert(num_vars < 6);
     assert(!(type == kVote && num_vars < 2));
 
-    g = std::make_shared<Gate>(type);
+    g = std::make_shared<Gate>(type, &graph);
     if (type == kVote)
       g->vote_number(2);
     for (int i = 0; i < num_vars; ++i)
-      g->AddArg(vars_[i]->index(), vars_[i]);
+      g->AddArg(vars_[i]);
 
-    assert(g->state() == kNormalState);
+    assert(!g->constant());
     assert(g->type() == type);
     assert(g->args().size() == num_vars);
     assert(g->args<Variable>().size() == num_vars);
     assert(g->args<Gate>().empty());
-    assert(g->args<Constant>().empty());
   }
 
   GatePtr g;  // Main gate for manipulations.
@@ -87,23 +84,24 @@ class GateTest : public ::testing::Test {
   VariablePtr var_three;
 
  private:
+  Pdag graph;  // The manager of unique indices.
   std::vector<VariablePtr> vars_;  // For convenience only.
 };
 
 #ifndef NDEBUG
 TEST_F(GateTest, AddArgDeathTests) {
   DefineGate(kNull, 1);
-  EXPECT_DEATH(g->AddArg(var_two->index(), var_two), "");
+  EXPECT_DEATH(g->AddArg(var_two), "");
   DefineGate(kNot, 1);
-  EXPECT_DEATH(g->AddArg(var_two->index(), var_two), "");
+  EXPECT_DEATH(g->AddArg(var_two), "");
   DefineGate(kXor, 2);
-  EXPECT_DEATH(g->AddArg(var_three->index(), var_three), "");
+  EXPECT_DEATH(g->AddArg(var_three), "");
   DefineGate(kAnd, 1);
   EXPECT_DEATH(g->AddArg(1, var_two), "");  // Wrong index.
   DefineGate(kAnd, 1);
   EXPECT_DEATH(g->AddArg(0, var_two), "");  // Wrong index.
   DefineGate(kAnd, 2);
-  g->Nullify();  // Constant state.
+  g->MakeConstant(false);  // Constant state.
   EXPECT_DEATH(g->AddArg(var_two->index(), var_two), "");  // Wrong index.
   DefineGate(kVote, 3);
   g->vote_number(-1);  // Negative vote number.
@@ -119,14 +117,13 @@ TEST_F(GateTest, AddArgDeathTests) {
 /// @param num_vars  The number of variables to initialize the gate.
 #define ADD_ARG_IGNORE_TEST(short_type, num_vars)  \
   DefineGate(k##short_type, num_vars);             \
-  g->AddArg(var_one->index(), var_one);            \
-  ASSERT_EQ(kNormalState, g->state());             \
+  g->AddArg(var_one);                              \
+  ASSERT_FALSE(g->constant());                     \
   EXPECT_EQ(num_vars, g->args().size());           \
   EXPECT_EQ(num_vars, g->args<Variable>().size()); \
-  EXPECT_TRUE(g->args<Gate>().empty());            \
-  EXPECT_TRUE(g->args<Constant>().empty())
+  EXPECT_TRUE(g->args<Gate>().empty())
 
-/// Tests addition of an existing argument to Boolean graph gates
+/// Tests addition of an existing argument to PDAG gates
 /// that do not change the type of the gate.
 ///
 /// @param short_type  Short name of the gate type, i.e., 'And'.
@@ -164,15 +161,16 @@ TEST_DUP_ARG_TYPE_CHANGE(Nand, Not)
 
 TEST_F(GateTest, DuplicateArgXor) {
   DefineGate(kXor, 1);
-  g->AddArg(var_one->index(), var_one);
-  EXPECT_EQ(kNullState, g->state());
-  EXPECT_TRUE(g->args().empty());
+  g->AddArg(var_one);
+  ASSERT_TRUE(g->constant());
+  ASSERT_EQ(1, g->args().size());
+  EXPECT_GT(0, *g->args().begin());
 }
 
 TEST_F(GateTest, DuplicateArgVoteToNull) {
   DefineGate(kVote, 2);
-  g->AddArg(var_one->index(), var_one);
-  EXPECT_EQ(kNormalState, g->state());
+  g->AddArg(var_one);
+  ASSERT_FALSE(g->constant());
   EXPECT_EQ(kNull, g->type());
   EXPECT_EQ(1, g->args().size());
   EXPECT_EQ(var_two->index(), g->args<Variable>().begin()->first);
@@ -181,8 +179,8 @@ TEST_F(GateTest, DuplicateArgVoteToNull) {
 TEST_F(GateTest, DuplicateArgVoteToAnd) {
   DefineGate(kVote, 3);
   g->vote_number(3);  // K equals to the number of input arguments.
-  g->AddArg(var_one->index(), var_one);
-  EXPECT_EQ(kNormalState, g->state());
+  g->AddArg(var_one);
+  ASSERT_FALSE(g->constant());
   EXPECT_EQ(kAnd, g->type());
   EXPECT_EQ(2, g->args().size());
   ASSERT_EQ(1, g->args<Variable>().size());
@@ -202,8 +200,8 @@ TEST_F(GateTest, DuplicateArgVoteToAnd) {
 TEST_F(GateTest, DuplicateArgVoteToOrWithOneClone) {
   DefineGate(kVote, 3);
   g->vote_number(2);
-  g->AddArg(var_one->index(), var_one);
-  EXPECT_EQ(kNormalState, g->state());
+  g->AddArg(var_one);
+  ASSERT_FALSE(g->constant());
   EXPECT_EQ(kOr, g->type());
   EXPECT_EQ(2, g->args().size());
   ASSERT_EQ(1, g->args<Variable>().size());
@@ -224,8 +222,8 @@ TEST_F(GateTest, DuplicateArgVoteToOrWithOneClone) {
 TEST_F(GateTest, DuplicateArgVoteToOrWithTwoClones) {
   DefineGate(kVote, 5);
   g->vote_number(3);
-  g->AddArg(var_one->index(), var_one);
-  EXPECT_EQ(kNormalState, g->state());
+  g->AddArg(var_one);
+  ASSERT_FALSE(g->constant());
   EXPECT_EQ(kOr, g->type());
   EXPECT_EQ(2, g->args().size());
   EXPECT_TRUE(g->args<Variable>().empty());
@@ -240,19 +238,19 @@ TEST_F(GateTest, DuplicateArgVoteToOrWithTwoClones) {
   ASSERT_EQ(kAnd, and_gate->type());
   ASSERT_EQ(kVote, clone_one->type());
 
-  EXPECT_EQ(kNormalState, clone_one->state());
+  ASSERT_FALSE(clone_one->constant());
   EXPECT_EQ(3, clone_one->vote_number());
   EXPECT_EQ(4, clone_one->args().size());
   EXPECT_EQ(4, clone_one->args<Variable>().size());
 
-  EXPECT_EQ(kNormalState, and_gate->state());
+  ASSERT_FALSE(and_gate->constant());
   EXPECT_EQ(2, and_gate->args().size());
   ASSERT_EQ(1, and_gate->args<Variable>().size());
   EXPECT_EQ(var_one->index(), and_gate->args<Variable>().begin()->first);
   ASSERT_EQ(1, and_gate->args<Gate>().size());
 
   GatePtr clone_two = and_gate->args<Gate>().begin()->second;
-  EXPECT_EQ(kNormalState, clone_two->state());
+  ASSERT_FALSE(clone_two->constant());
   EXPECT_EQ(kOr, clone_two->type());  // Special case. K/N is in general.
   EXPECT_EQ(1, clone_two->vote_number());  // This is the reason.
   EXPECT_EQ(4, clone_two->args().size());
@@ -264,23 +262,23 @@ TEST_F(GateTest, DuplicateArgVoteToOrWithTwoClones) {
 ///
 /// @param short_type  Short name of the gate, i.e., 'And'.
 ///                    It must have the same root in Operator, i.e., 'kAnd'.
-/// @param const_set  The notion of constant set (Null, Unity).
-#define TEST_ADD_COMPLEMENT_ARG(short_type, const_set) \
-  TEST_F(GateTest, ComplementArg##short_type) {        \
-    DefineGate(k##short_type, 1);                      \
-    g->AddArg(-var_one->index(), var_one);             \
-    ASSERT_EQ(k##const_set##State, g->state());        \
-    EXPECT_TRUE(g->args().empty());                    \
-    EXPECT_TRUE(g->args<Variable>().empty());          \
-    EXPECT_TRUE(g->args<Gate>().empty());              \
-    EXPECT_TRUE(g->args<Constant>().empty());          \
+/// @param const_state  The notion of Boolean constant in the gate (TRUE/FALSE).
+#define TEST_ADD_COMPLEMENT_ARG(short_type, const_state) \
+  TEST_F(GateTest, ComplementArg##short_type) {          \
+    DefineGate(k##short_type, 1);                        \
+    g->AddArg(var_one, true);                            \
+    ASSERT_TRUE(g->constant());                          \
+    ASSERT_EQ(1, g->args().size());                      \
+    ASSERT_##const_state(*g->args().begin() > 0);        \
+    EXPECT_TRUE(g->args<Variable>().empty());            \
+    EXPECT_TRUE(g->args<Gate>().empty());                \
   }
 
-TEST_ADD_COMPLEMENT_ARG(And, Null)
-TEST_ADD_COMPLEMENT_ARG(Or, Unity)
-TEST_ADD_COMPLEMENT_ARG(Nand, Unity)
-TEST_ADD_COMPLEMENT_ARG(Nor, Null)
-TEST_ADD_COMPLEMENT_ARG(Xor, Unity)
+TEST_ADD_COMPLEMENT_ARG(And, FALSE)
+TEST_ADD_COMPLEMENT_ARG(Or, TRUE)
+TEST_ADD_COMPLEMENT_ARG(Nand, TRUE)
+TEST_ADD_COMPLEMENT_ARG(Nor, FALSE)
+TEST_ADD_COMPLEMENT_ARG(Xor, TRUE)
 
 #undef TEST_ADD_COMPLEMENT_ARG
 
@@ -294,14 +292,13 @@ TEST_ADD_COMPLEMENT_ARG(Xor, Unity)
   TEST_F(GateTest, ComplementArgVoteTo##final_type) {           \
     DefineGate(kVote, num_vars);                                \
     g->vote_number(v_num);                                      \
-    g->AddArg(-var_one->index(), var_one);                      \
-    ASSERT_EQ(kNormalState, g->state());                        \
+    g->AddArg(var_one, true);                                   \
+    ASSERT_FALSE(g->constant());                                \
     EXPECT_EQ(k##final_type, g->type());                        \
     EXPECT_EQ(num_vars - 1, g->args().size());                  \
     EXPECT_EQ(num_vars - 1, g->args<Variable>().size());        \
     EXPECT_EQ(v_num - 1, g->vote_number());                     \
     EXPECT_TRUE(g->args<Gate>().empty());                       \
-    EXPECT_TRUE(g->args<Constant>().empty());                   \
   }
 
 TEST_ADD_COMPLEMENT_ARG_KN(2, 2, Null)  // Join operation.
@@ -316,26 +313,26 @@ TEST_ADD_COMPLEMENT_ARG_KN(3, 3, And)  // Join operation.
 /// @param arg_state  The true or false state of the gate argument.
 /// @param num_vars  The initial number of gate arguments.
 /// @param init_type  The initial type of the gate.
-/// @param const_set  The notion of constant set (Null, Unity) as gate's state.
-#define TEST_CONSTANT_ARG_STATE(arg_state, num_vars, init_type, const_set) \
-  TEST_F(GateTest, arg_state##ConstantArg##init_type) {                    \
-    DefineGate(k##init_type, num_vars);                                    \
-    g->ProcessConstantArg(var_one, arg_state);                             \
-    EXPECT_EQ(k##const_set##State, g->state());                            \
-    EXPECT_TRUE(g->args().empty());                                        \
-    EXPECT_TRUE(g->args<Variable>().empty());                              \
-    EXPECT_TRUE(g->args<Gate>().empty());                                  \
-    EXPECT_TRUE(g->args<Constant>().empty());                              \
+/// @param const_state  The notion of Boolean constant in the gate (TRUE/FALSE).
+#define TEST_CONSTANT_ARG_STATE(arg_state, num_vars, init_type, const_state) \
+  TEST_F(GateTest, arg_state##ConstantArg##init_type) {                      \
+    DefineGate(k##init_type, num_vars);                                      \
+    g->ProcessConstantArg(var_one, arg_state);                               \
+    ASSERT_TRUE(g->constant());                                              \
+    ASSERT_EQ(1, g->args().size());                                          \
+    ASSERT_##const_state(*g->args().begin() > 0);                            \
+    EXPECT_TRUE(g->args<Variable>().empty());                                \
+    EXPECT_TRUE(g->args<Gate>().empty());                                    \
   }
 
-TEST_CONSTANT_ARG_STATE(true, 1, Null, Unity)
-TEST_CONSTANT_ARG_STATE(false, 1, Null, Null)
-TEST_CONSTANT_ARG_STATE(false, 1, Not, Unity)
-TEST_CONSTANT_ARG_STATE(true, 1, Not, Null)
-TEST_CONSTANT_ARG_STATE(true, 2, Or, Unity)
-TEST_CONSTANT_ARG_STATE(false, 2, And, Null)
-TEST_CONSTANT_ARG_STATE(true, 2, Nor, Null)
-TEST_CONSTANT_ARG_STATE(false, 2, Nand, Unity)
+TEST_CONSTANT_ARG_STATE(true, 1, Null, TRUE)
+TEST_CONSTANT_ARG_STATE(false, 1, Null, FALSE)
+TEST_CONSTANT_ARG_STATE(false, 1, Not, TRUE)
+TEST_CONSTANT_ARG_STATE(true, 1, Not, FALSE)
+TEST_CONSTANT_ARG_STATE(true, 2, Or, TRUE)
+TEST_CONSTANT_ARG_STATE(false, 2, And, FALSE)
+TEST_CONSTANT_ARG_STATE(true, 2, Nor, FALSE)
+TEST_CONSTANT_ARG_STATE(false, 2, Nand, TRUE)
 
 #undef TEST_CONSTANT_ARG_STATE
 
@@ -354,12 +351,11 @@ TEST_CONSTANT_ARG_STATE(false, 2, Nand, Unity)
     if (v_num)                                                          \
       g->vote_number(v_num);                                            \
     g->ProcessConstantArg(var_one, arg_state);                          \
-    ASSERT_EQ(kNormalState, g->state());                                \
+    ASSERT_FALSE(g->constant());                                        \
     EXPECT_EQ(k##final_type, g->type());                                \
     EXPECT_EQ(num_vars - 1, g->args().size());                          \
     EXPECT_EQ(num_vars - 1, g->args<Variable>().size());                \
     EXPECT_TRUE(g->args<Gate>().empty());                               \
-    EXPECT_TRUE(g->args<Constant>().empty());                           \
   }
 
 TEST_CONSTANT_ARG_VNUM(true, 3, 2, Vote, Or)

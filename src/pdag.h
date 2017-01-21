@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2014-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,20 +15,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file boolean_graph.h
-/// Classes and facilities to represent simplified fault trees
-/// as Boolean graphs with event and gate indices instead of ID names.
+/// @file pdag.h
+/// Classes and facilities to represent fault trees
+/// as PDAGs with event and gate indices instead of ID names.
 /// These facilities are designed to work
 /// with FaultTreeAnalysis and Preprocessor classes.
 ///
 /// The terminologies of the graphs and Boolean logic are mixed
-/// to represent the Boolean graph;
+/// to represent the PDAG;
 /// however, if there is a conflict,
 /// the Boolean terminology is preferred.
 /// For example, instead of "children", "arguments" are preferred.
 
-#ifndef SCRAM_SRC_BOOLEAN_GRAPH_H_
-#define SCRAM_SRC_BOOLEAN_GRAPH_H_
+#ifndef SCRAM_SRC_PDAG_H_
+#define SCRAM_SRC_PDAG_H_
 
 #include <cstdint>
 
@@ -41,9 +41,11 @@
 
 #include <boost/container/flat_set.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/range/adaptor/transformed.hpp>
 
-#include "ext.h"
-#include "linear_map.h"
+#include "ext/find_iterator.h"
+#include "ext/index_map.h"
+#include "ext/linear_map.h"
 
 namespace scram {
 
@@ -98,26 +100,23 @@ class NodeParentManager : private boost::noncopyable {
   ParentMap parents_;  ///< All registered parents of this node.
 };
 
-/// An abstract base class that represents a node in a Boolean graph.
+class Pdag;  // Manager of the graph, node indices and uniqueness.
+
+/// An abstract base class that represents a node in a PDAG.
 /// The index of the node is a unique identifier for the node.
 /// The node holds weak pointers to the parents
 /// that are managed by the parents.
 class Node : public NodeParentManager {
  public:
-  /// Creates a graph node with its index assigned sequentially.
-  Node() noexcept;
-
-  /// Creates a graph node with its index.
+  /// Creates a unique graph node as a member of a PDAG.
   ///
-  /// @param[in] index  An unique positive index of this node.
-  ///
-  /// @warning The index is not validated upon instantiation.
-  explicit Node(int index) noexcept;
+  /// @param[in] graph  The graph this node belongs to.
+  explicit Node(Pdag* graph) noexcept;
 
   virtual ~Node() = 0;  ///< Abstract class.
 
-  /// Resets the starting index.
-  static void ResetIndex() { next_index_ = 1e6; }
+  /// @returns The host graph of the node.
+  Pdag& graph() { return graph_; }
 
   /// @returns The index of this node.
   int index() const { return index_; }
@@ -209,50 +208,36 @@ class Node : public NodeParentManager {
   }
 
  private:
-  static int next_index_;  ///< Automatic indexation of the next new node.
   int index_;  ///< Index of this node.
   int order_;  ///< Ordering of nodes in the graph.
   int visits_[3];  ///< Traversal array with first, second, and last visits.
   int opti_value_;  ///< Failure propagation optimization value.
   int pos_count_;  ///< The number of occurrences as a positive node.
   int neg_count_;  ///< The number of occurrences as a negative node.
+  Pdag& graph_;  ///< The host graph for the node.
 };
 
-/// Representation of a node that is a Boolean constant
-/// with True or False state.
+/// Representation of a node that is a Boolean constant TRUE.
+/// The Node index 1 is reserved for this special argument.
+/// There's only one constant per graph.
+/// FALSE is represented as NOT TRUE with -1 as its index.
 class Constant : public Node {
- public:
-  /// Constructs a new constant indexed node.
-  ///
-  /// @param[in] state  Binary state of the Boolean constant.
-  explicit Constant(bool state) noexcept;
+  friend class Pdag;  // Only one constant per graph must be enforced by PDAG.
 
-  /// @returns The state of the constant.
-  bool state() const { return state_; }
+ public:
+  /// @returns The constant Boolean value.
+  bool value() const { return true; }
 
  private:
-  bool state_;  ///< The Boolean value for the constant state.
+  /// Constructs a new Constant node with index 1.
+  using Node::Node;
 };
 
 /// Boolean variables in a Boolean formula or graph.
 /// Variables can represent the basic events of fault trees.
-///
-/// Indexation of the variables is special.
-/// It starts from 1 and ends with the number of the basic events
-/// in the fault tree.
-/// This indexation technique helps
-/// preprocessing and analysis algorithms
-/// optimize their work with basic events.
 class Variable : public Node {
  public:
-  /// Creates a new indexed variable with its index assigned sequentially.
-  Variable() noexcept;
-
-  /// Resets the starting index for variables.
-  static void ResetIndex() { next_variable_ = 1; }
-
- private:
-  static int next_variable_;  ///< The next index for a new variable.
+  using Node::Node;
 };
 
 using NodePtr = std::shared_ptr<Node>;  ///< Shared base nodes in the graph.
@@ -264,7 +249,7 @@ using VariablePtr = std::shared_ptr<Variable>;  ///< Shared Boolean variables.
 /// The operator defines a type and logic of a gate.
 ///
 /// @warning If a new operator is added,
-///          all the preprocessing and Boolean graph algorithms
+///          all the preprocessing and PDAG algorithms
 ///          must be reviewed and updated.
 ///          The algorithms may assume
 ///          for performance and simplicity reasons
@@ -284,16 +269,7 @@ enum Operator : std::uint8_t {
 /// This number is useful for optimizations and algorithms.
 const int kNumOperators = 8;  // Update this number if operators change.
 
-/// State of a gate as a set of Boolean variables.
-/// This state helps detect null and unity sets
-/// that are formed upon Boolean operations.
-enum State : std::uint8_t {
-  kNormalState,  ///< The default case with any set that is not null or unity.
-  kNullState,  ///< The set is null. This indicates no failure.
-  kUnityState  ///< The set is unity. This set guarantees failure.
-};
-
-/// An indexed gate for use in BooleanGraph.
+/// An indexed gate for use in a PDAG.
 /// Initially this gate can represent any type of gate or logic;
 /// however, this gate can be only of OR and AND type
 /// at the end of all simplifications and processing.
@@ -306,9 +282,16 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// the positive or negative index (indicating a complement)
   /// and the pointer to the argument node.
   ///
+  /// The constant version is to simulate transitive const
+  /// so that the reference count of the argument cannot be changed.
+  ///
   /// @tparam T  The type of the argument node.
+  /// @{
   template <class T>
   using Arg = std::pair<int, std::shared_ptr<T>>;
+  template <class T>
+  using ConstArg = std::pair<int, const T&>;
+  /// @}
 
   /// An associative container type to store the gate arguments.
   /// This container type maps the index of the argument to the pointer to it.
@@ -326,12 +309,13 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// to manage parent-child hierarchy.
   ///
   /// @param[in] type  The type of this gate.
-  explicit Gate(Operator type) noexcept;
+  /// @param[in,out] graph  The host PDAG.
+  Gate(Operator type, Pdag* graph) noexcept;
 
   /// Destructs parent information from the arguments.
   ~Gate() noexcept {
     assert(Node::parents().empty());
-    EraseAllArgs();
+    EraseArgs();
   }
 
   /// Clones arguments and parameters.
@@ -348,20 +332,20 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// @returns Type of this gate.
   Operator type() const { return type_; }
 
-  /// Changes the gate type information.
-  /// This function is expected to be used
-  /// with only simple AND, OR, NOT, NULL gates.
+  /// Changes the logic of the gate.
+  /// Depending on the original and new type of the gate,
+  /// the graph or gate properties may be changed or recorded.
   ///
-  /// @param[in] t  The type for this gate.
-  void type(Operator t) {
-    assert(t == kAnd || t == kOr || t == kNot || t == kNull);
-    type_ = t;
-  }
+  /// @param[in] type  A new type for this gate.
+  ///
+  /// @pre The new logic is compatible with the existing arguments
+  ///      and preserves the gate invariants.
+  /// @pre The previous type is not equal to the new one.
+  void type(Operator type);
 
   /// @returns Vote number.
   ///
-  /// @warning The function does not validate the vote number,
-  ///          nor does it check for the VOTE type of the gate.
+  /// @pre The vote number is relevant to the gate logic.
   int vote_number() const { return vote_number_; }
 
   /// Sets the vote number for this gate.
@@ -369,15 +353,11 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   ///
   /// @param[in] number  The vote number of VOTE gate.
   ///
-  /// @warning The function does not validate the vote number,
-  ///          nor does it check for the VOTE type of the gate.
+  /// @pre The vote number is appropriate for the gate logic and arguments.
   void vote_number(int number) { vote_number_ = number; }
 
-  /// @returns The state of this gate.
-  State state() const { return state_; }
-
   /// @returns true if this gate has become constant.
-  bool IsConstant() const { return state_ != kNormalState; }
+  bool constant() const { return constant_ != nullptr; }
 
   /// @returns The ordered set of argument indices of this gate.
   const ArgSet& args() const { return args_; }
@@ -388,7 +368,21 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   ///
   /// @returns The map container of the gate arguments with the given type.
   template <class T>
-  const ArgMap<T>& args() const;
+  const ArgMap<T>& args();
+
+  /// Provides const access to gate arguments
+  /// w/o exposing the shared pointers.
+  /// The arguments are provided by reference.
+  ///
+  /// @tparam  The type of the arguments.
+  ///
+  /// @returns Forward-iterable range with ConstArg value type.
+  template <class T>
+  auto args() const {
+    return boost::adaptors::transform(
+        const_cast<Gate*>(this)->args<T>(),
+        [](const Arg<T>& arg) { return ConstArg<T>{arg.first, *arg.second}; });
+  }
 
   /// Marks are used for linear traversal of graphs.
   /// This can be an alternative
@@ -496,8 +490,8 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
 
     if (auto it = ext::find(variable_args_, index))
       return it->second;
-
-    return constant_args_.find(index)->second;
+    assert(constant_ && std::abs(index) == constant_->index());
+    return constant_;
   }
 
   /// Adds an argument node to this gate.
@@ -535,7 +529,7 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   void AddArg(int index, const std::shared_ptr<T>& arg) noexcept {
     assert(index);
     assert(std::abs(index) == arg->index());
-    assert(state_ == kNormalState);
+    assert(!constant_);
     assert(!((type_ == kNot || type_ == kNull) && !args_.empty()));
     assert(!(type_ == kXor && args_.size() > 1));
     assert(vote_number_ >= 0);
@@ -548,6 +542,16 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
     args_.insert(index);
     mutable_args<T>().data().emplace_back(index, arg);
     arg->AddParent(shared_from_this());
+  }
+  /// Wrapper to add gate arguments with index retrieval from the arg.
+  template <class T>
+  void AddArg(const std::shared_ptr<T>& arg, bool complement = false) noexcept {
+    return AddArg(complement ? -arg->index() : arg->index(), arg);
+  }
+  /// Wrapper to add arguments from the containers.
+  template <class T>
+  void AddArg(const Arg<T>& arg) noexcept {
+    return AddArg(arg.first, arg.second);
   }
 
   /// Transfers this gate's argument to another gate.
@@ -571,7 +575,7 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// and apply the De Morgan's Law.
   ///
   /// @pre No constant arguments are present.
-  void InvertArgs() noexcept;
+  void NegateArgs() noexcept;
 
   /// Replaces an argument with the complement of it.
   /// This is a helper function to propagate a complement gate
@@ -580,7 +584,28 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// @param[in] existing_arg  Positive or negative index of the argument.
   ///
   /// @pre No constant arguments are present.
-  void InvertArg(int existing_arg) noexcept;
+  void NegateArg(int existing_arg) noexcept;
+
+  /// Turns all non-coherent arguments of type gate (NOT, NAND, etc.)
+  /// into complement arguments.
+  ///
+  /// This is a helper function for gate normalization
+  /// to efficiently normalize non-coherent gates.
+  void NegateNonCoherentGateArgs() noexcept {
+    for (Arg<Gate>& arg : gate_args_) {
+      switch (arg.second->type()) {
+        case kNor:
+        case kNand:
+        case kNot:
+          args_.erase(arg.first);
+          args_.insert(-arg.first);
+          arg.first = -arg.first;
+          break;
+        default:
+          assert("Update the logic if new gate types are introduced.");
+      }
+    }
+  }
 
   /// Adds arguments of an argument gate to this gate.
   /// This is a helper function for gate coalescing.
@@ -630,27 +655,18 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   void EraseArg(int index) noexcept;
 
   /// Clears all the arguments of this gate.
-  void EraseAllArgs() noexcept;
+  void EraseArgs() noexcept;
 
-  /// Sets the state of this gate to null
-  /// and clears all its arguments.
+  /// Sets the logic of this gate to pass-through
+  /// and clears all its arguments except for a Boolean constant.
   /// This function is expected to be used only once.
-  void Nullify() noexcept {
-    assert(state_ == kNormalState);
-    state_ = kNullState;
-    EraseAllArgs();
-  }
-
-  /// Sets the state of this gate to unity
-  /// and clears all its arguments.
-  /// This function is expected to be used only once.
-  void MakeUnity() noexcept {
-    assert(state_ == kNormalState);
-    state_ = kUnityState;
-    EraseAllArgs();
-  }
+  ///
+  /// @param[in] state  The value for the Boolean constant.
+  void MakeConstant(bool state) noexcept;
 
  private:
+  using std::enable_shared_from_this<Gate>::shared_from_this;
+
   /// Mutable getter for the gate arguments.
   ///
   /// @tparam T  The type of the argument nodes.
@@ -658,7 +674,7 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// @returns The map container of the argument nodes with the given type.
   template <class T>
   ArgMap<T>& mutable_args() {
-    return const_cast<ArgMap<T>&>(static_cast<const Gate*>(this)->args<T>());
+    return const_cast<ArgMap<T>&>(args<T>());
   }
 
   /// Process an addition of an argument
@@ -723,7 +739,6 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   void RemoveConstantArg(int index) noexcept;
 
   Operator type_;  ///< Type of this gate.
-  State state_;  ///< Indication if this gate's state is normal, null, or unity.
   bool mark_;  ///< Marking for linear traversal of a graph.
   bool module_;  ///< Indication of an independent module gate.
   bool coherent_;  ///< Indication of a coherent graph.
@@ -737,29 +752,37 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// @{
   ArgMap<Gate> gate_args_;
   ArgMap<Variable> variable_args_;
-  ArgMap<Constant> constant_args_;
   /// @}
+
+  /// The single constant argument for the whole graph.
+  /// The gate is considered constant if this argument is set.
+  /// nullptr if the gate doesn't have the Constant argument.
+  ConstantPtr constant_;
 };
 
 /// @returns The Gate type arguments of a gate.
 template <>
-inline const Gate::ArgMap<Gate>& Gate::args<Gate>() const { return gate_args_; }
+inline const Gate::ArgMap<Gate>& Gate::args<Gate>() { return gate_args_; }
 
 /// @returns The Variable type arguments of a gate.
 template <>
-inline const Gate::ArgMap<Variable>& Gate::args<Variable>() const {
+inline const Gate::ArgMap<Variable>& Gate::args<Variable>() {
   return variable_args_;
 }
 
-/// @returns The Constant type arguments of a gate.
+/// Specialization to handle Boolean constants in arguments.
+/// @copydoc Gate::AddArg
 template <>
-inline const Gate::ArgMap<Constant>& Gate::args<Constant>() const {
-  return constant_args_;
+inline void Gate::AddArg<Constant>(int index, const ConstantPtr& arg) noexcept {
+  /// @todo Merge the logic of constant argument erasure.
+  assert(!constant_);
+  args_.insert(index);
+  constant_ = arg;
+  arg->AddParent(shared_from_this());
+  ProcessConstantArg(arg, arg->value());  // Remove right away.
 }
 
-class Preprocessor;  ///< @todo This can be decoupled.
-
-/// BooleanGraph is a propositional directed acyclic graph (PDAG).
+/// PDAG is a propositional directed acyclic graph.
 /// This class provides a simpler representation of a fault tree
 /// that takes into account the indices of events
 /// instead of IDs and pointers.
@@ -768,20 +791,47 @@ class Preprocessor;  ///< @todo This can be decoupled.
 /// This class is designed
 /// to help preprocessing and other graph transformation functions.
 ///
-/// @warning Never hold a shared pointer to any other indexed gate
-///          except for the root gate of a Boolean graph.
-///          Extra reference count will prevent
-///          automatic deletion of the node
-///          and management of the structure of the graph.
-///          Moreover, the graph may become
-///          a multiple-top-event fault tree,
-///          which is not the assumption of
-///          all the other preprocessing and analysis algorithms.
-class BooleanGraph : private boost::noncopyable {
-  friend class Preprocessor;  ///< The main manipulator of Boolean graphs.
-
+/// @pre There are no shared pointers to any other graph gate
+///      except for the root gate of the graph upon graph transformations.
+///      Extra reference count will prevent
+///      automatic deletion of the node
+///      and management of the structure of the graph.
+///      Moreover, the graph may become
+///      a multi-root graph,
+///      which is not the assumption of
+///      all the other preprocessing and analysis algorithms.
+class Pdag : private boost::noncopyable {
  public:
-  /// Constructs a BooleanGraph
+  static const int kVariableStartIndex = 2;  ///< The shift value for mapping.
+  /// Sequential mapping of Variable indices to other data of type T.
+  template<typename T>
+  using IndexMap = ext::index_map<kVariableStartIndex, T>;
+
+  /// Generator of unique indices for graph nodes.
+  class NodeIndexGenerator {
+    friend class Node;  // Access for a new index request.
+    /// @returns A new unique index in the graph.
+    ///
+    /// @param[in,out] graph  A graph within which the index is unique.
+    int operator()(Pdag* graph) const { return ++graph->node_index_; }
+  };
+
+  /// Registers pass-through or Null logic gates belonging to the graph.
+  class NullGateRegistrar {
+    friend class Gate;
+    /// @param[in] gate  A Null gate with a single argument.
+    void operator()(GatePtr gate) const {
+      assert(gate->type() == kNull && "Only Null logic gates are expected.");
+      if (gate->graph().register_null_gates_)
+        gate->graph().null_gates_.emplace_back(std::move(gate));
+    }
+  };
+
+  /// Constructs a graph with no root gate
+  /// ready for general purpose (test) Boolean formulas.
+  Pdag() noexcept;
+
+  /// Constructs a PDAG
   /// starting from the top gate of a fault tree.
   /// Upon construction,
   /// features of the fault tree are recorded
@@ -790,54 +840,106 @@ class BooleanGraph : private boost::noncopyable {
   /// @param[in] root  The top gate of the fault tree.
   /// @param[in] ccf  Incorporation of CCF gates and events for CCF groups.
   ///
-  /// @post The BooleanGraph is stable as long as
+  /// @pre No new Variable nodes are introduced after the construction.
+  ///
+  /// @post The PDAG is stable as long as
   ///       the argument fault tree and its underlying containers are stable.
   ///       If the fault tree has been manipulated (event addition, etc.),
-  ///       its BooleanGraph representation is not guaranteed to be the same.
-  explicit BooleanGraph(const mef::Gate& root, bool ccf = false) noexcept;
+  ///       its PDAG representation is not guaranteed to be the same.
+  ///
+  /// @post The index assignment for variables is special:
+  ///       index in [kVariableStartIndex, num of vars + kVariableStartIndex).
+  ///       This indexing technique helps
+  ///       preprocessing and analysis algorithms
+  ///       optimize their work with basic events.
+  ///
+  /// @post All Gate indices >= (num of vars + kVariableStartIndex).
+  explicit Pdag(const mef::Gate& root, bool ccf = false) noexcept;
 
   /// @returns true if the fault tree is coherent.
   bool coherent() const { return coherent_; }
 
+  /// @param[in] flag  true if fault tree doesn't contain non-coherent gates.
+  ///
+  /// @todo Implement automatic tracking/marking of coherence.
+  void coherent(bool flag) { coherent_ = flag; }
+
   /// @returns true if all gates of the fault tree are normalized AND/OR.
   bool normal() const { return normal_; }
 
-  /// @returns The current root gate of the graph.
-  const GatePtr& root() const { return root_; }
+  /// @param[in] flag  true if the graph has been normalized.
+  ///
+  /// @todo Consider processing and tracking internally.
+  void normal(bool flag) { normal_ = flag; }
 
-  /// @returns true if the root must be complemented.
-  bool complement() const { return root_sign_ < 0; }
+  /// @returns The shared pointer to current root gate of the graph.
+  ///          nullptr iff the graph has been constructed root-less.
+  const GatePtr& root() { return root_; }
+
+  /// @returns The current root gate of the graph.
+  ///
+  /// @pre The graph has been constructed with a root gate.
+  const Gate& root() const { return *root_; }
+
+  /// Sets the root gate.
+  /// This function is helpful for transformations.
+  ///
+  /// @param[in] gate  Replacement root gate.
+  void root(const GatePtr& gate) {
+    assert(gate && "The graph cannot be made root-less.");
+    assert(this == &gate->graph() && "The gate is from a different graph.");
+    root_ = gate;
+  }
+
+  /// @returns true if graph = ~root.
+  /// @{
+  bool complement() const { return complement_; }
+  bool& complement() { return complement_; }  // Allows XOR setting.
+  /// @}
+
+  /// @returns The single Boolean constant for the whole graph.
+  ///
+  /// @todo Consider limiting access to transform functions and gates.
+  const ConstantPtr& constant() const { return constant_; }
+
+  /// @returns true if the graph contains pass-through gates with a constant.
+  bool HasConstants() const { return !constant_->parents().empty(); }
+
+  /// @returns true if the graph has at least one pass-through logic gate.
+  bool HasNullGates() const { return !null_gates_.empty(); }
+
+  /// @returns true if the graph represents a trivial Boolean function;
+  ///               that is, graph = Constant or graph = Variable.
+  ///               The only gate is the root pass-through to the simple arg.
+  ///
+  /// @note The root gate may be swapped with a new one.
+  bool IsTrivial() const {
+    return !complement_ && root_->type() == kNull &&
+           root_->args<Gate>().empty();
+  }
+
+  /// Attempts to make the graph trivial if possible.
+  ///
+  /// @returns true if the graph is trivial or made trivial.
+  bool IsTrivial() noexcept;
 
   /// @returns Original basic event
   ///          as initialized in this indexed fault tree.
-  ///          The position of a basic event equals (its index - 1).
-  const std::vector<mef::BasicEvent*>& basic_events() const {
+  ///          The Variable indices map directly to the original basic events.
+  ///
+  /// @pre No new Variable nodes are introduced after the construction.
+  const IndexMap<const mef::BasicEvent*>& basic_events() const {
     return basic_events_;
   }
 
-  /// Helper function to map the results of the indexation
-  /// to the original basic events.
-  /// This function, for example, helps transform
-  /// products with indices into
-  /// products with IDs or pointers.
-  ///
-  /// @param[in] index  Positive index of the basic event.
-  ///
-  /// @returns Pointer to the original basic event from its index.
-  mef::BasicEvent* GetBasicEvent(int index) const {
-    assert(index > 0);
-    assert(index <= basic_events_.size());
-    return basic_events_[index - 1];
-  }
-
-  /// Prints the Boolean graph in the Aralia format.
+  /// Prints the PDAG in the Aralia format.
   /// This is a helper for logging and debugging.
   /// The output is the standard error.
   ///
   /// @warning Node visits are used.
   void Print();
 
-  /// Writes Boolean graph properties into logs.
+  /// Writes PDAG properties into logs.
   ///
   /// @pre The graph is valid and well formed.
   /// @pre Logging cutoff level is Debug 4 or higher.
@@ -847,65 +949,25 @@ class BooleanGraph : private boost::noncopyable {
   /// @warning Gate marks are manipulated.
   void Log() noexcept;
 
- private:
-  /// Sets the root gate.
-  /// This function is helpful for preprocessing.
+  /// Removes gates of Null logic with a single argument (maybe constant).
+  /// That one child arg is transferred to the parent gate,
+  /// and the original argument gate is removed from the parent gate.
   ///
-  /// @param[in] gate  Replacement root gate.
-  void root(const GatePtr& gate) { root_ = gate; }
-
-  /// Holder for nodes that are created from fault tree events.
-  /// This is a helper structure
-  /// for functions that transform a fault tree into a Boolean graph.
-  struct ProcessedNodes {  /// @{
-    std::unordered_map<const mef::Gate*, GatePtr> gates;
-    std::unordered_map<const mef::BasicEvent*, VariablePtr> variables;
-    std::unordered_map<const mef::HouseEvent*, ConstantPtr> constants;
-  };  /// @}
-
-  /// Processes a Boolean formula of a gate into a Boolean graph.
+  /// All Boolean constants from the PDAG are removed
+  /// according to the Boolean logic of the gates
+  /// upon passing these args to parent gates.
   ///
-  /// @param[in] formula  The Boolean formula to be processed.
-  /// @param[in] ccf  A flag to replace basic events with CCF gates.
-  /// @param[in,out] nodes  The mapping of processed nodes.
+  /// @post If there's still a Null logic gate,
+  ///       then it's the root of the graph with a single variable/constant,
+  ///       and no further processing is required.
   ///
-  /// @returns Pointer to the newly created indexed gate.
+  /// @post If there's still a constant,
+  ///       it belongs to the root gate,
+  ///       and the whole graph is constant,
+  ///       so no further processing is required.
   ///
-  /// @pre The Operator enum in the MEF is the same as in Boolean graph.
-  GatePtr ProcessFormula(const mef::Formula& formula, bool ccf,
-                         ProcessedNodes* nodes) noexcept;
-
-  /// Processes a Boolean formula's basic events
-  /// into variable arguments of an indexed gate in the Boolean graph.
-  /// Basic events are saved for reference in analysis.
-  ///
-  /// @param[in,out] parent  The parent gate to own the arguments.
-  /// @param[in] basic_event  The basic event argument of the formula.
-  /// @param[in] ccf  A flag to replace basic events with CCF gates.
-  /// @param[in,out] nodes  The mapping of processed nodes.
-  void ProcessBasicEvent(const GatePtr& parent, mef::BasicEvent* basic_event,
-                         bool ccf, ProcessedNodes* nodes) noexcept;
-
-  /// Processes a Boolean formula's house events
-  /// into constant arguments of an indexed gate of the Boolean graph.
-  /// Newly created constants are registered for removal for Preprocessor.
-  ///
-  /// @param[in,out] parent  The parent gate to own the arguments.
-  /// @param[in] house_event  The house event argument of the formula.
-  /// @param[in,out] nodes  The mapping of processed nodes.
-  void ProcessHouseEvent(const GatePtr& parent,
-                         const mef::HouseEvent& house_event,
-                         ProcessedNodes* nodes) noexcept;
-
-  /// Processes a Boolean formula's gates
-  /// into gate arguments of an indexed gate of the Boolean graph.
-  ///
-  /// @param[in,out] parent  The parent gate to own the arguments.
-  /// @param[in] gate  The gate argument of the formula.
-  /// @param[in] ccf  A flag to replace basic events with CCF gates.
-  /// @param[in,out] nodes  The mapping of processed nodes.
-  void ProcessGate(const GatePtr& parent, const mef::Gate& gate, bool ccf,
-                   ProcessedNodes* nodes) noexcept;
+  /// @warning Gate marks will get cleared by this function.
+  void RemoveNullGates() noexcept;
 
   /// Sets the visit marks to False for all indexed gates,
   /// starting from the root gate,
@@ -1016,38 +1078,120 @@ class BooleanGraph : private boost::noncopyable {
   /// @note Gate marks are used for linear time traversal.
   void ClearNodeOrders(const GatePtr& gate) noexcept;
 
-  GatePtr root_;  ///< The root gate of this graph.
-  int root_sign_;  ///< The negative or positive sign of the root node.
+ private:
+  /// Holder for nodes that are created from fault tree events.
+  /// This is a helper structure
+  /// for functions that transform a fault tree into a PDAG.
+  struct ProcessedNodes {  /// @{
+    std::unordered_map<const mef::Gate*, GatePtr> gates;
+    std::unordered_map<const mef::BasicEvent*, VariablePtr> variables;
+  };  /// @}
+
+  /// Gathers and initializes Variables from Basic Events.
+  /// The gates are gathered but not initialized
+  /// to give the sequential indices for the Variables
+  /// for establishing the construction invariant.
+  ///
+  /// @param[in] formula  The Boolean formula with the source variables.
+  /// @param[in] ccf  A flag to gather CCF basic events and gates.
+  /// @param[in,out] nodes  The mapping of gathered Variables.
+  void GatherVariables(const mef::Formula& formula, bool ccf,
+                       ProcessedNodes* nodes) noexcept;
+
+  /// Initializes Variable from a Basic Event or
+  /// continues the initialization of CCF Events
+  /// belonging to the corresponding CCF gates.
+  ///
+  /// @param[in] basic_event  A Basic Event belonging to a formula.
+  /// @param[in] ccf  A flag to gather CCF basic events and gates.
+  /// @param[in,out] nodes  The mapping of gathered Variables.
+  void GatherVariables(const mef::BasicEvent& basic_event, bool ccf,
+                       ProcessedNodes* nodes) noexcept;
+
+  /// Processes a Boolean formula of a gate into a PDAG.
+  ///
+  /// @param[in] formula  The Boolean formula to be processed.
+  /// @param[in] ccf  A flag to replace basic events with CCF gates.
+  /// @param[in,out] nodes  The mapping of processed nodes.
+  ///
+  /// @returns Pointer to the newly created indexed gate.
+  ///
+  /// @pre The Operator enum in the MEF is the same as in PDAG.
+  GatePtr ConstructGate(const mef::Formula& formula, bool ccf,
+                        ProcessedNodes* nodes) noexcept;
+
+  /// Processes a Boolean formula's basic events
+  /// into variable arguments of an indexed gate in the PDAG.
+  /// Basic events are saved for reference in analysis.
+  ///
+  /// @param[in,out] parent  The parent gate to own the arguments.
+  /// @param[in] basic_event  The basic event argument of the formula.
+  /// @param[in] ccf  A flag to replace basic events with CCF gates.
+  /// @param[in,out] nodes  The mapping of processed nodes.
+  void AddArg(const GatePtr& parent, const mef::BasicEvent& basic_event,
+              bool ccf, ProcessedNodes* nodes) noexcept;
+
+  /// Processes a Boolean formula's house events
+  /// into constant arguments of an indexed gate of the PDAG.
+  ///
+  /// @param[in,out] parent  The parent gate to own the arguments.
+  /// @param[in] house_event  The house event argument of the formula.
+  void AddArg(const GatePtr& parent,
+              const mef::HouseEvent& house_event) noexcept;
+
+  /// Processes a Boolean formula's gates
+  /// into gate arguments of an indexed gate of the PDAG.
+  ///
+  /// @param[in,out] parent  The parent gate to own the arguments.
+  /// @param[in] gate  The gate argument of the formula.
+  /// @param[in] ccf  A flag to replace basic events with CCF gates.
+  /// @param[in,out] nodes  The mapping of processed nodes.
+  void AddArg(const GatePtr& parent, const mef::Gate& gate, bool ccf,
+              ProcessedNodes* nodes) noexcept;
+
+  /// Propagate NULL type gates bottom-up.
+  /// This is a helper function for algorithms
+  /// that may produce and need to remove NULL type gates.
+  ///
+  /// @param[in,out] gate  The gate that is NULL type.
+  ///
+  /// @post Null logic gates have no parents.
+  void PropagateNullGate(const GatePtr& gate) noexcept;
+
+  int node_index_;  ///< Automatic index of the new node.
+  bool complement_;  ///< The indication of a complement graph.
   bool coherent_;  ///< Indication that the graph does not contain negation.
   bool normal_;  ///< Indication for the graph containing only OR and AND gates.
-  std::vector<mef::BasicEvent*> basic_events_;  ///< Mapping for basic events.
-  /// Registered house events upon the creation of the Boolean graph.
-  std::vector<std::weak_ptr<Constant>> constants_;
-  /// Registered NULL type gates upon the creation of the Boolean graph.
-  std::vector<std::weak_ptr<Gate>> null_gates_;
+  bool register_null_gates_;  ///< Automatically register pass-through gates.
+  GatePtr root_;  ///< The root gate of this graph.
+  ConstantPtr constant_;  ///< The single constant TRUE for the whole graph.
+  /// Mapping for basic events and their Variable indices.
+  IndexMap<const mef::BasicEvent*> basic_events_;
+  /// Container for NULL type gates to be tracked and cleaned by algorithms.
+  /// NULL type gates are created by gates with only one argument.
+  std::vector<GateWeakPtr> null_gates_;
 };
 
-/// Prints Boolean graph nodes in the Aralia format.
+/// Prints PDAG nodes in the Aralia format.
 /// @{
-std::ostream& operator<<(std::ostream& os, const ConstantPtr& constant);
-std::ostream& operator<<(std::ostream& os, const VariablePtr& variable);
+std::ostream& operator<<(std::ostream& os, const Constant& constant);
+std::ostream& operator<<(std::ostream& os, const Variable& variable);
 std::ostream& operator<<(std::ostream& os, const GatePtr& gate);
 /// @}
 
-/// Prints the BooleanGraph as a fault tree in the Aralia format.
+/// Prints the PDAG as a fault tree in the Aralia format.
 /// This function is mostly for debugging purposes.
-/// The output is not meant to be human readable.
 ///
 /// @param[in,out] os  Output stream.
-/// @param[in] ft  The fault tree to be printed.
+/// @param[in] graph  The PDAG to be printed.
 ///
 /// @returns The provided output stream in its original state.
 ///
 /// @warning Visits of nodes must be clean.
 ///          Visit information may get changed.
-std::ostream& operator<<(std::ostream& os, const BooleanGraph* ft);
+std::ostream& operator<<(std::ostream& os, Pdag* graph);
 
 }  // namespace core
 }  // namespace scram
 
-#endif  // SCRAM_SRC_BOOLEAN_GRAPH_H_
+#endif  // SCRAM_SRC_PDAG_H_

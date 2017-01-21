@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2014-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,8 +22,9 @@
 #ifndef SCRAM_SRC_EXPRESSION_RANDOM_DEVIATE_H_
 #define SCRAM_SRC_EXPRESSION_RANDOM_DEVIATE_H_
 
-#include <utility>
 #include <vector>
+
+#include <boost/range/iterator_range.hpp>
 
 #include "src/expression.h"
 
@@ -36,7 +37,7 @@ class RandomDeviate : public Expression {
  public:
   using Expression::Expression;
 
-  bool IsConstant() noexcept override { return false; }
+  bool IsDeviate() noexcept override { return true; }
 };
 
 /// Uniform distribution.
@@ -56,7 +57,7 @@ class UniformDeviate : public RandomDeviate {
   double Min() noexcept override { return min_.Min(); }
 
  private:
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   Expression& min_;  ///< Minimum value of the distribution.
   Expression& max_;  ///< Maximum value of the distribution.
@@ -87,7 +88,7 @@ class NormalDeviate : public RandomDeviate {
   double Min() noexcept override { return mean_.Min() - 6 * sigma_.Max(); }
 
  private:
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   Expression& mean_;  ///< Mean value of normal distribution.
   Expression& sigma_;  ///< Standard deviation of normal distribution.
@@ -122,7 +123,7 @@ class LogNormalDeviate : public RandomDeviate {
   double Min() noexcept override { return 0; }
 
  private:
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   /// Computes the scale parameter of the distribution.
   ///
@@ -165,7 +166,7 @@ class GammaDeviate : public RandomDeviate {
   double Min() noexcept override { return 0; }
 
  private:
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   Expression& k_;  ///< The shape parameter of the gamma distribution.
   Expression& theta_;  ///< The scale factor of the gamma distribution.
@@ -194,7 +195,7 @@ class BetaDeviate : public RandomDeviate {
   double Min() noexcept override { return 0; }
 
  private:
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   Expression& alpha_;  ///< The alpha shape parameter.
   Expression& beta_;  ///< The beta shape parameter.
@@ -213,18 +214,6 @@ class Histogram : public RandomDeviate {
   ///
   /// @throws InvalidArgument  The boundaries container size is not equal to
   ///                          weights container size + 1.
-  ///
-  /// @note This description of histogram sampling is mostly for probabilities.
-  ///       Therefore, it is not flexible.
-  ///       Currently, it allows sampling both boundaries and weights.
-  ///       This behavior makes checking
-  ///       for valid arrangement of the boundaries mandatory
-  ///       for each sampling.
-  ///       Moreover, the first starting point is assumed but not defined.
-  ///       The starting point is assumed to be 0,
-  ///       which leaves only positive values for boundaries.
-  ///       This behavior is restrictive
-  ///       and should be handled accordingly.
   Histogram(std::vector<ExpressionPtr> boundaries,
             std::vector<ExpressionPtr> weights);
 
@@ -237,15 +226,16 @@ class Histogram : public RandomDeviate {
 
   double Mean() noexcept override;
   double Max() noexcept override {
-    return (*std::prev(boundaries_.second))->Max();
+    return (*std::prev(boundaries_.end()))->Max();
   }
-  double Min() noexcept override { return 0; }
+  double Min() noexcept override { return (*boundaries_.begin())->Min(); }
 
  private:
   /// Access to args.
-  using Iterator = std::vector<ExpressionPtr>::const_iterator;
+  using IteratorRange =
+      boost::iterator_range<std::vector<ExpressionPtr>::const_iterator>;
 
-  double GetSample() noexcept override;
+  double DoSample() noexcept override;
 
   /// Checks if values of boundary expressions are strictly increasing.
   ///
@@ -257,8 +247,8 @@ class Histogram : public RandomDeviate {
   /// @throws InvalidArgument  The mean values are negative.
   void CheckWeights() const;
 
-  std::pair<Iterator, Iterator> boundaries_;  ///< Boundaries of the intervals.
-  std::pair<Iterator, Iterator> weights_;  ///< Weights of the intervals.
+  IteratorRange boundaries_;  ///< Boundaries of the intervals.
+  IteratorRange weights_;  ///< Weights of the intervals.
 };
 
 }  // namespace mef
