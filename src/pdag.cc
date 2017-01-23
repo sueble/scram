@@ -95,6 +95,75 @@ GatePtr Gate::Clone() noexcept {
   return clone;
 }
 
+/// Specialization to handle True constant arg addition.
+template <>
+void Gate::AddConstantArg<true>() noexcept {
+  switch (type_) {
+    case kNull:
+    case kOr:
+      MakeConstant(true);
+      break;
+    case kNand:
+      ReduceLogic(kNot);
+      break;
+    case kAnd:
+      ReduceLogic(kNull);
+      break;
+    case kNor:
+    case kNot:
+      MakeConstant(false);
+      break;
+    case kXor:  // Special handling due to its internal negation.
+      assert(args_.size() == 1);
+      type(kNot);
+      break;
+    case kVote:  // (K - 1) / (N - 1).
+      assert(args_.size() >= 2);
+      assert(vote_number_ > 0);
+      --vote_number_;
+      if (vote_number_ == 1)
+        type(kOr);
+      break;
+  }
+}
+
+/// Specialization to handle False constant arg addition.
+template <>
+void Gate::AddConstantArg<false>() noexcept {
+  switch (type_) {
+    case kNull:
+    case kAnd:
+      MakeConstant(false);
+      break;
+    case kNand:
+    case kNot:
+      MakeConstant(true);
+      break;
+    case kNor:
+      ReduceLogic(kNot);
+      break;
+    case kOr:
+      ReduceLogic(kNull);
+      break;
+    case kXor:
+      assert(args_.size() == 1);
+      type(kNull);
+      break;
+    case kVote:  // K / (N - 1).
+      assert(args_.size() >= 2);
+      ReduceLogic(kAnd, vote_number_);
+      break;
+  }
+}
+
+/// Convenient wrapper to dispatch appropriate constant arg handler.
+template <>
+void Gate::AddArg<Constant>(int index, const ConstantPtr& arg) noexcept {
+  assert(!constant_);
+  assert(arg->value());
+  return index > 0 ? AddConstantArg<true>() : AddConstantArg<false>();
+}
+
 void Gate::TransferArg(int index, const GatePtr& recipient) noexcept {
   assert(!constant() && "Improper use case.");
   assert(index != 0);
@@ -209,86 +278,8 @@ void Gate::ProcessConstantArg(const NodePtr& arg, bool state) noexcept {
   int index = GetArgSign(arg) * arg->index();
   if (index < 0)
     state = !state;
-  if (state) {  // Unity state or True index.
-    ProcessTrueArg(index);
-  } else {  // Null state or False index.
-    ProcessFalseArg(index);
-  }
-}
-
-void Gate::ProcessTrueArg(int index) noexcept {
-  switch (type_) {
-    case kNull:
-    case kOr:
-      MakeConstant(true);
-      break;
-    case kNand:
-    case kAnd:
-      RemoveConstantArg(index);
-      break;
-    case kNor:
-    case kNot:
-      MakeConstant(false);
-      break;
-    case kXor:  // Special handling due to its internal negation.
-      assert(args_.size() == 2);
-      EraseArg(index);
-      assert(args_.size() == 1);
-      type(kNot);
-      break;
-    case kVote:  // (K - 1) / (N - 1).
-      assert(args_.size() > 2);
-      EraseArg(index);
-      assert(vote_number_ > 0);
-      --vote_number_;
-      if (vote_number_ == 1)
-        type(kOr);
-      break;
-  }
-}
-
-void Gate::ProcessFalseArg(int index) noexcept {
-  switch (type_) {
-    case kNor:
-    case kXor:
-    case kOr:
-      RemoveConstantArg(index);
-      break;
-    case kNull:
-    case kAnd:
-      MakeConstant(false);
-      break;
-    case kNand:
-    case kNot:
-      MakeConstant(true);
-      break;
-    case kVote:  // K / (N - 1).
-      assert(args_.size() > 2);
-      EraseArg(index);
-      if (vote_number_ == args_.size())
-        type(kAnd);
-      break;
-  }
-}
-
-void Gate::RemoveConstantArg(int index) noexcept {
-  assert(args_.size() > 1 && "One-arg gate must have become constant.");
   EraseArg(index);
-  if (args_.size() == 1) {
-    switch (type_) {
-      case kXor:
-      case kOr:
-      case kAnd:
-        type(kNull);
-        break;
-      case kNor:
-      case kNand:
-        type(kNot);
-        break;
-      default:
-        assert(false && "NULL/NOT one-arg gates should not appear.");
-    }
-  }  // More complex cases with K/N gates are handled by the caller functions.
+  return state ? AddConstantArg<true>() : AddConstantArg<false>();
 }
 
 void Gate::EraseArg(int index) noexcept {
@@ -327,9 +318,8 @@ void Gate::EraseArgs() noexcept {
 }
 
 void Gate::MakeConstant(bool state) noexcept {
-  /* assert(!constant()); */
+  assert(!constant());
   EraseArgs();
-  /// @todo Consider using AddArg. (watch out for circular call.)
   type(kNull);
   constant_ = Node::graph().constant();
   int index = state ? constant_->index() : -constant_->index();
@@ -469,7 +459,7 @@ Pdag::Pdag(const mef::Gate& root, bool ccf) noexcept : Pdag() {
 }
 
 void Pdag::Print() {
-  ClearNodeVisits();
+  Clear<kVisit>();
   std::cerr << "\n" << this << std::endl;
 }
 
@@ -633,7 +623,7 @@ bool Pdag::IsTrivial() noexcept {
 void Pdag::RemoveNullGates() noexcept {
   BLOG(DEBUG5, HasConstants()) << "Got CONST gates to clear!";
   BLOG(DEBUG5, HasNullGates()) << "Got NULL gates to clear!";
-  ClearGateMarks();  // New gates may get created without marks!
+  Clear<kGateMark>();  // New gates may get created without marks!
   register_null_gates_ = false;
   for (const GateWeakPtr& ptr : null_gates_) {
     if (ptr.expired())
@@ -658,151 +648,6 @@ void Pdag::PropagateNullGate(const GatePtr& gate) noexcept {
   }
 }
 
-void Pdag::ClearGateMarks() noexcept { ClearGateMarks(root_); }
-
-void Pdag::ClearGateMarks(const GatePtr& gate) noexcept {
-  if (!gate->mark())
-    return;
-  gate->mark(false);
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearGateMarks(arg.second);
-  }
-}
-
-void Pdag::ClearNodeVisits() noexcept {
-  LOG(DEBUG5) << "Clearing node visit times...";
-  ClearGateMarks();
-  ClearNodeVisits(root_);
-  if (!constant_->parents().empty())
-    constant_->ClearVisits();
-  ClearGateMarks();
-  LOG(DEBUG5) << "Node visit times are clear!";
-}
-
-void Pdag::ClearNodeVisits(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-
-  if (gate->Visited())
-    gate->ClearVisits();
-
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearNodeVisits(arg.second);
-  }
-  for (const auto& arg : gate->args<Variable>()) {
-    if (arg.second->Visited())
-      arg.second->ClearVisits();
-  }
-}
-
-void Pdag::ClearOptiValues() noexcept {
-  LOG(DEBUG5) << "Clearing OptiValues...";
-  ClearGateMarks();
-  ClearOptiValues(root_);
-  ClearGateMarks();
-  LOG(DEBUG5) << "Node OptiValues are clear!";
-}
-
-void Pdag::ClearOptiValues(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-
-  gate->opti_value(0);
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearOptiValues(arg.second);
-  }
-  for (const auto& arg : gate->args<Variable>()) {
-    arg.second->opti_value(0);
-  }
-  assert(!gate->constant());
-}
-
-void Pdag::ClearNodeCounts() noexcept {
-  LOG(DEBUG5) << "Clearing node counts...";
-  ClearGateMarks();
-  ClearNodeCounts(root_);
-  ClearGateMarks();
-  LOG(DEBUG5) << "Node counts are clear!";
-}
-
-void Pdag::ClearNodeCounts(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-
-  gate->ResetCount();
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearNodeCounts(arg.second);
-  }
-  for (const auto& arg : gate->args<Variable>()) {
-    arg.second->ResetCount();
-  }
-  assert(!gate->constant());
-}
-
-void Pdag::ClearDescendantMarks() noexcept {
-  LOG(DEBUG5) << "Clearing gate descendant marks...";
-  ClearGateMarks();
-  ClearDescendantMarks(root_);
-  ClearGateMarks();
-  LOG(DEBUG5) << "Descendant marks are clear!";
-}
-
-void Pdag::ClearDescendantMarks(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-  gate->descendant(0);
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearDescendantMarks(arg.second);
-  }
-}
-
-void Pdag::ClearAncestorMarks() noexcept {
-  LOG(DEBUG5) << "Clearing gate descendant marks...";
-  ClearGateMarks();
-  ClearAncestorMarks(root_);
-  ClearGateMarks();
-  LOG(DEBUG5) << "Descendant marks are clear!";
-}
-
-void Pdag::ClearAncestorMarks(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-  gate->ancestor(0);
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearAncestorMarks(arg.second);
-  }
-}
-
-void Pdag::ClearNodeOrders() noexcept {
-  LOG(DEBUG5) << "Clearing node order marks...";
-  ClearGateMarks();
-  ClearNodeOrders(root_);
-  ClearGateMarks();
-  LOG(DEBUG5) << "Node order marks are clear!";
-}
-
-void Pdag::ClearNodeOrders(const GatePtr& gate) noexcept {
-  if (gate->mark())
-    return;
-  gate->mark(true);
-  if (gate->order())
-    gate->order(0);
-
-  for (const auto& arg : gate->args<Gate>()) {
-    ClearNodeOrders(arg.second);
-  }
-  for (const auto& arg : gate->args<Variable>()) {
-    if (arg.second->order())
-      arg.second->order(0);
-  }
-  assert(!gate->constant());
-}
-
 namespace {  // Helper facilities to log the PDAG.
 
 /// Container for properties of PDAGs.
@@ -819,13 +664,7 @@ struct GraphLogger {
   ///
   /// @param[in] gate  The starting gate for traversal.
   void GatherInformation(const GatePtr& gate) noexcept {
-    if (gate->mark())
-      return;
-    gate->mark(true);
-    Log(gate);
-    for (const auto& arg : gate->args<Gate>()) {
-      GatherInformation(arg.second);
-    }
+    TraverseGates(gate, [this](const GatePtr& node) { Log(node); });
   }
 
   /// Collects data from a gate.
@@ -879,9 +718,10 @@ struct GraphLogger {
 void Pdag::Log() noexcept {
   if (DEBUG4 > scram::Logger::report_level())
     return;
-  ClearGateMarks();
+  Clear<kGateMark>();
   GraphLogger logger(root_);
   logger.GatherInformation(root_);
+  Clear<kGateMark>();
   LOG(DEBUG4) << "PDAG with root G" << root_->index();
   LOG(DEBUG4) << "Total # of gates: " << logger.Count(logger.gates);
   LOG(DEBUG4) << "# of modules: " << logger.num_modules;
@@ -915,8 +755,6 @@ void Pdag::Log() noexcept {
 
   BLOG(DEBUG4, !constant_->parents().empty()) << "Total # of constants: "
                                               << constant_->parents().size();
-
-  ClearGateMarks();
 }
 
 std::ostream& operator<<(std::ostream& os, const Constant& constant) {

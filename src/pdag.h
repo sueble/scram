@@ -106,6 +106,8 @@ class Pdag;  // Manager of the graph, node indices and uniqueness.
 /// The index of the node is a unique identifier for the node.
 /// The node holds weak pointers to the parents
 /// that are managed by the parents.
+///
+/// @pre A node does not outlive its PDAG.
 class Node : public NodeParentManager {
  public:
   /// Creates a unique graph node as a member of a PDAG.
@@ -394,6 +396,9 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// Sets the mark of this gate.
   ///
   /// @param[in] flag  Marking with the meaning for the marker.
+  ///
+  /// @pre The marks are assigned in a top-down traversal.
+  /// @pre The marks are continuous.
   void mark(bool flag) { mark_ = flag; }
 
   /// @returns Pre-assigned index of one of gate's descendants.
@@ -632,7 +637,7 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// Changes the state of a gate
   /// or removes a constant argument.
   /// The function determines its actions depending on
-  /// the type of a gate and state of an argument.
+  /// the type of the gate and state of an argument.
   ///
   /// @param[in] arg  The pointer the argument of this gate.
   /// @param[in] state  False or True constant state of the argument.
@@ -700,43 +705,22 @@ class Gate : public Node, public std::enable_shared_from_this<Gate> {
   /// @param[in] index  Positive or negative index of the argument.
   void ProcessComplementArg(int index) noexcept;
 
-  /// Processes Boolean constant argument with True value.
+  /// Processes the addition of a constant to the gate.
   ///
-  /// @param[in] index  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants.
-  /// @note This function may change the state of the gate.
-  /// @note This function may change type and parameters of the gate.
-  void ProcessTrueArg(int index) noexcept;
+  /// @tparam State  The Boolean Constant value.
+  template <bool State>
+  void AddConstantArg() noexcept;
 
-  /// Processes Boolean constant argument with False value.
+  /// Downgrades the logic of the gate
+  /// if the number of arguments meets a certain number.
   ///
-  /// @param[in] index  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants.
-  /// @note This function may change the state of the gate.
-  /// @note This function may change type and parameters of the gate.
-  void ProcessFalseArg(int index) noexcept;
-
-  /// Removes Boolean constant arguments from a gate
-  /// taking into account the logic.
-  /// This is a helper function
-  /// for NULL and UNITY set or constant propagation for the graph.
-  /// If the final gate is empty,
-  /// its state is turned into NULL or UNITY
-  /// depending on the logic of the gate
-  /// and the logic of the Boolean constant propagation.
-  ///
-  /// @param[in] index  The positive or negative index of the argument.
-  ///
-  /// @note This is a helper function that propagates constants,
-  ///       so it is coupled with the logic of
-  ///       the constant propagation algorithms.
-  ///
-  /// @warning This function does not handle complex K/N gate parents.
-  ///          The logic is not simple for K/N gates,
-  ///          so it must be handled by the caller.
-  void RemoveConstantArg(int index) noexcept;
+  /// @param[in] target_type  The logic compatible with the current one.
+  /// @param[in] num_args  The number of required arguments.
+  void ReduceLogic(Operator target_type, int num_args = 1) noexcept {
+    assert(!args_.empty());
+    if (args_.size() == num_args)
+      type(target_type);
+  }
 
   Operator type_;  ///< Type of this gate.
   bool mark_;  ///< Marking for linear traversal of a graph.
@@ -773,14 +757,7 @@ inline const Gate::ArgMap<Variable>& Gate::args<Variable>() {
 /// Specialization to handle Boolean constants in arguments.
 /// @copydoc Gate::AddArg
 template <>
-inline void Gate::AddArg<Constant>(int index, const ConstantPtr& arg) noexcept {
-  /// @todo Merge the logic of constant argument erasure.
-  assert(!constant_);
-  args_.insert(index);
-  constant_ = arg;
-  arg->AddParent(shared_from_this());
-  ProcessConstantArg(arg, arg->value());  // Remove right away.
-}
+void Gate::AddArg<Constant>(int index, const ConstantPtr& arg) noexcept;
 
 /// PDAG is a propositional directed acyclic graph.
 /// This class provides a simpler representation of a fault tree
@@ -825,6 +802,17 @@ class Pdag : private boost::noncopyable {
       if (gate->graph().register_null_gates_)
         gate->graph().null_gates_.emplace_back(std::move(gate));
     }
+  };
+
+  /// Various kinds of marks applied to the nodes.
+  enum NodeMark {
+    kGateMark,  ///< General graph traversal (dirty upon traversal end!).
+    kVisit,  ///< General visit times for graph nodes.
+    kCount,
+    kOptiValue,
+    kDescendant,
+    kAncestor,
+    kOrder
   };
 
   /// Constructs a graph with no root gate
@@ -969,114 +957,26 @@ class Pdag : private boost::noncopyable {
   /// @warning Gate marks will get cleared by this function.
   void RemoveNullGates() noexcept;
 
-  /// Sets the visit marks to False for all indexed gates,
-  /// starting from the root gate,
-  /// that have been visited top-down.
-  /// Any function updating and using the visit marks of gates
-  /// must ensure to clean visit marks
-  /// before running algorithms.
-  /// However, cleaning after finishing algorithms is not mandatory.
+  /// Clears marks from graph nodes.
   ///
-  /// @warning If the marks have not been assigned in a top-down traversal,
-  ///          this function will fail silently.
-  void ClearGateMarks() noexcept;
+  /// @tparam Mark  The kind of the mark.
+  template <NodeMark Mark>
+  void Clear() noexcept {
+    Clear<kGateMark>();
+    Clear<Mark>(root_);
+    Clear<kGateMark>();
+  }
 
-  /// Sets the visit marks of descendant gates to False
-  /// starting from the given gate as the root.
-  /// The top-down traversal marking is assumed.
+  /// Determines the proper "clear" state for the graph node mark,
+  /// and set the clear mark to nodes starting from the given gate.
   ///
-  /// @param[in,out] gate  The root gate to be traversed and marks.
+  /// @tparam Mark  The kind of the mark.
   ///
-  /// @warning If the marks have not been assigned in a top-down traversal,
-  ///          starting from the given gate,
-  ///          this function will fail silently.
-  void ClearGateMarks(const GatePtr& gate) noexcept;
-
-  /// Clears visit time information from all indexed nodes
-  /// that have been visited.
-  /// Any member function updating and using the visit information of nodes
-  /// must ensure to clean visit times
-  /// before running algorithms.
-  /// However, cleaning after finishing algorithms is not mandatory.
+  /// @param[in,out] gate  The root gate to start the traversal and cleaning.
   ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeVisits() noexcept;
-
-  /// Clears visit information from descendant nodes
-  /// starting from the given gate as the root.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeVisits(const GatePtr& gate) noexcept;
-
-  /// Clears optimization values of all nodes in the graph.
-  /// The optimization values are set to 0.
-  /// Resets the number of failed arguments of gates.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearOptiValues() noexcept;
-
-  /// Clears optimization values of nodes.
-  /// The optimization values are set to 0.
-  /// Resets the number of failed arguments of gates.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearOptiValues(const GatePtr& gate) noexcept;
-
-  /// Clears counts of all nodes in the graph.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeCounts() noexcept;
-
-  /// Clears counts of nodes.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeCounts(const GatePtr& gate) noexcept;
-
-  /// Clears descendant indices of all gates in the graph.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearDescendantMarks() noexcept;
-
-  /// Clears descendant marks of gates.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearDescendantMarks(const GatePtr& gate) noexcept;
-
-  /// Clears ancestor indices of all gates in the graph.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearAncestorMarks() noexcept;
-
-  /// Clears ancestor marks of gates.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearAncestorMarks(const GatePtr& gate) noexcept;
-
-  /// Clears ordering marks of nodes in the graph.
-  ///
-  /// @post Node order marks are set to 0.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeOrders() noexcept;
-
-  /// Clears ordering marks of descendant nodes of a gate.
-  ///
-  /// @param[in,out] gate  The root gate to be traversed and cleaned.
-  ///
-  /// @post The root and descendant node order marks are set to 0.
-  ///
-  /// @note Gate marks are used for linear time traversal.
-  void ClearNodeOrders(const GatePtr& gate) noexcept;
+  /// @pre The gate marks are usable for traversal (clear, continuous, etc.).
+  template <NodeMark Mark>
+  void Clear(const GatePtr& gate) noexcept;
 
  private:
   /// Holder for nodes that are created from fault tree events.
@@ -1171,6 +1071,86 @@ class Pdag : private boost::noncopyable {
   /// NULL type gates are created by gates with only one argument.
   std::vector<GateWeakPtr> null_gates_;
 };
+
+/// Traverses and visits gates and nodes in the graph.
+///
+/// @tparam Mark  The "visited" gate mark.
+/// @tparam T  The visitor type.
+///
+/// @param[in,out] gate  The starting gate.
+/// @param[in] visit  The visitor for graph nodes.
+///
+/// @{
+template <bool Mark = true, typename T>
+void TraverseGates(const GatePtr& gate, T&& visit) noexcept {
+  if (gate->mark() == Mark)
+    return;
+  gate->mark(Mark);
+  visit(gate);
+  for (const auto& arg : gate->args<Gate>()) {
+    TraverseGates<Mark>(arg.second, visit);
+  }
+}
+template <typename T>
+void TraverseNodes(const GatePtr& gate, T&& visit) noexcept {
+  if (gate->mark())
+    return;
+  gate->mark(true);
+  visit(gate);
+  for (const auto& arg : gate->args<Gate>()) {
+    TraverseNodes(arg.second, visit);
+  }
+  for (const auto& arg : gate->args<Variable>()) {
+    visit(arg.second);
+  }
+}
+/// @}
+
+/// Specializations for various node mark clearance operations.
+///
+/// @param[in,out] gate  The starting gate.
+/// @{
+template <>
+inline void Pdag::Clear<Pdag::kGateMark>(const GatePtr& gate) noexcept {
+  TraverseGates<false>(gate, [](auto&&) {});
+}
+template <>
+inline void Pdag::Clear<Pdag::kVisit>(const GatePtr& gate) noexcept {
+  TraverseNodes(gate, [](auto&& node) {
+    if (node->Visited())
+      node->ClearVisits();
+  });
+}
+template <>
+inline void Pdag::Clear<Pdag::kOptiValue>(const GatePtr& gate) noexcept {
+  TraverseNodes(gate, [](auto&& node) { node->opti_value(0); });
+}
+template <>
+inline void Pdag::Clear<Pdag::kCount>(const GatePtr& gate) noexcept {
+  TraverseNodes(gate, [](auto&& node) { node->ResetCount(); });
+}
+template <>
+inline void Pdag::Clear<Pdag::kDescendant>(const GatePtr& gate) noexcept {
+  TraverseGates(gate, [](const GatePtr& arg) { arg->descendant(0); });
+}
+template <>
+inline void Pdag::Clear<Pdag::kAncestor>(const GatePtr& gate) noexcept {
+  TraverseGates(gate, [](const GatePtr& arg) { arg->ancestor(0); });
+}
+template <>
+inline void Pdag::Clear<Pdag::kOrder>(const GatePtr& gate) noexcept {
+  TraverseNodes(gate, [](auto&& node) {
+    if (node->order())
+      node->order(0);
+  });
+}
+/// @}
+
+/// Specialization to clear the generic mark for the whole graph.
+template <>
+inline void Pdag::Clear<Pdag::kGateMark>() noexcept {
+  Clear<Pdag::kGateMark>(root_);
+}
 
 /// Prints PDAG nodes in the Aralia format.
 /// @{
