@@ -22,6 +22,7 @@
 
 #include <fstream>
 #include <ostream>
+#include <utility>
 #include <vector>
 
 #include <boost/date_time.hpp>
@@ -49,6 +50,10 @@ void Reporter::Report(const core::RiskAnalysis& risk_an, std::ostream& out) {
       prob_analysis = risk_an.probability_analyses().at(id).get();
     }
     ReportResults(id, *fta.second, prob_analysis, &results);
+
+    if (prob_analysis) {
+      ReportResults(id, *prob_analysis, &results);
+    }
 
     if (risk_an.settings().importance_analysis()) {
       ReportResults(id, *risk_an.importance_analyses().at(id), &results);
@@ -133,6 +138,8 @@ void Reporter::ReportCalculatedQuantity<core::ProbabilityAnalysis>(
   }
   XmlStreamElement limits = methods.AddChild("limits");
   limits.AddChild("mission-time").AddText(settings.mission_time());
+  if (settings.time_step())
+    limits.AddChild("time-step").AddText(settings.time_step());
 }
 
 /// Describes the importance analysis and techniques.
@@ -210,11 +217,15 @@ void Reporter::ReportModelFeatures(const mef::Model& model,
   XmlStreamElement model_features = information->AddChild("model-features");
   if (!model.name().empty())
     model_features.SetAttribute("name", model.name());
-  model_features.AddChild("gates").AddText(model.gates().size());
-  model_features.AddChild("basic-events").AddText(model.basic_events().size());
-  model_features.AddChild("house-events").AddText(model.house_events().size());
-  model_features.AddChild("ccf-groups").AddText(model.ccf_groups().size());
-  model_features.AddChild("fault-trees").AddText(model.fault_trees().size());
+  auto feature = [&model_features](const char* name, const auto& container) {
+    if (!container.empty())
+      model_features.AddChild(name).AddText(container.size());
+  };
+  feature("gates", model.gates());
+  feature("basic-events", model.basic_events());
+  feature("house-events", model.house_events());
+  feature("ccf-groups", model.ccf_groups());
+  feature("fault-trees", model.fault_trees());
 }
 
 void Reporter::ReportPerformance(const core::RiskAnalysis& risk_an,
@@ -310,6 +321,24 @@ void Reporter::ReportResults(const std::string& ft_name,
   LOG(DEBUG2) << "Finished reporting products in " << DUR(cs_time);
 }
 
+void Reporter::ReportResults(const std::string& ft_name,
+                             const core::ProbabilityAnalysis& prob_analysis,
+                             XmlStreamElement* results) {
+  if (!prob_analysis.p_time().empty()) {
+    XmlStreamElement curve = results->AddChild("curve");
+    curve.SetAttribute("name", ft_name)
+        .SetAttribute("description", "Probability values over time")
+        .SetAttribute("X-title", "Mission time")
+        .SetAttribute("Y-title", "Probability")
+        .SetAttribute("X-unit", "hours");
+    for (const std::pair<double, double>& p_vs_time : prob_analysis.p_time()) {
+      curve.AddChild("point")
+          .SetAttribute("X", p_vs_time.second)
+          .SetAttribute("Y", p_vs_time.first);
+    }
+  }
+}
+
 void Reporter::ReportResults(
     const std::string& ft_name,
     const core::ImportanceAnalysis& importance_analysis,
@@ -322,17 +351,19 @@ void Reporter::ReportResults(
     importance.AddChild("warning").AddText(importance_analysis.warnings());
   }
 
-  for (const core::ImportanceAnalysis::ImportanceRecord& entry :
-       importance_analysis.important_events()) {
-    const core::ImportanceFactors& factors = entry.second;
-    auto add_data = [&factors](XmlStreamElement* element) {
-      element->SetAttribute("MIF", factors.mif)
+  for (const core::ImportanceRecord& entry : importance_analysis.importance()) {
+    const core::ImportanceFactors& factors = entry.factors;
+    const mef::BasicEvent& event = entry.event;
+    auto add_data = [&event, &factors](XmlStreamElement* element) {
+      element->SetAttribute("occurrence", factors.occurrence)
+          .SetAttribute("probability", event.p())
+          .SetAttribute("MIF", factors.mif)
           .SetAttribute("CIF", factors.cif)
           .SetAttribute("DIF", factors.dif)
           .SetAttribute("RAW", factors.raw)
           .SetAttribute("RRW", factors.rrw);
     };
-    ReportBasicEvent(*entry.first, &importance, add_data);
+    ReportBasicEvent(event, &importance, add_data);
   }
 }
 

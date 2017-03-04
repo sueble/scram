@@ -7,7 +7,7 @@ PROJECT_DIR=$PWD
 cd /tmp
 
 # Boost
-wget https://sourceforge.net/projects/iscram/files/deps/boost-scram.tar.gz
+wget http://s3.amazonaws.com/scram-travis/boost-scram.tar.gz
 tar -xf ./boost-scram.tar.gz
 sudo mv ./boost-scram/lib/* /usr/lib/
 sudo mv ./boost-scram/include/* /usr/include/

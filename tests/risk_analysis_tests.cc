@@ -268,22 +268,10 @@ TEST_F(RiskAnalysisTest, ImportanceDefault) {
   settings.importance_analysis(true);
   ASSERT_NO_THROW(ProcessInputFile(with_prob));
   ASSERT_NO_THROW(analysis->Analyze());
-  // Check importance values.
-  std::vector<std::pair<std::string, ImportanceFactors>> expected_results = {
-      {"PumpOne", {0.51, 0.4737, 0.7895, 1.316, 1.9}},
-      {"PumpTwo", {0.38, 0.4118, 0.8235, 1.176, 1.7}},
-      {"ValveOne", {0.34, 0.2105, 0.5263, 1.316, 1.267}},
-      {"ValveTwo", {0.228, 0.1765, 0.5882, 1.176, 1.214}}};
-
-  for (const auto& entry : expected_results) {
-    const ImportanceFactors& result = importance(entry.first);
-    const ImportanceFactors& test = entry.second;
-    EXPECT_NEAR(test.mif, result.mif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.cif, result.cif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.dif, result.dif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.raw, result.raw, 1e-3) << entry.first;
-    EXPECT_NEAR(test.rrw, result.rrw, 1e-3) << entry.first;
-  }
+  TestImportance({{"PumpOne", {2, 0.51, 0.4737, 0.7895, 1.316, 1.9}},
+                  {"PumpTwo", {2, 0.38, 0.4118, 0.8235, 1.176, 1.7}},
+                  {"ValveOne", {2, 0.34, 0.2105, 0.5263, 1.316, 1.267}},
+                  {"ValveTwo", {2, 0.228, 0.1765, 0.5882, 1.176, 1.214}}});
 }
 
 TEST_F(RiskAnalysisTest, ImportanceNeg) {
@@ -293,21 +281,10 @@ TEST_F(RiskAnalysisTest, ImportanceNeg) {
   ASSERT_NO_THROW(analysis->Analyze());
   EXPECT_NEAR(0.04459, p_total(), 1e-3);
   // Check importance values with negative event.
-  std::vector<std::pair<std::string, ImportanceFactors>> expected_results = {
-      {"PumpOne", {0.0765, 0.1029, 0.1568, 2.613, 1.115}},
-      {"PumpTwo", {0.057, 0.08948, 0.1532, 2.189, 1.098}},
-      {"ValveOne", {0.94, 0.8432, 0.8495, 21.237, 6.379}},
-      {"ValveTwo", {0.0558, 0.06257, 0.1094, 2.189, 1.067}}};
-
-  for (const auto& entry : expected_results) {
-    const ImportanceFactors& result = importance(entry.first);
-    const ImportanceFactors& test = entry.second;
-    EXPECT_NEAR(test.mif, result.mif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.cif, result.cif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.dif, result.dif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.raw, result.raw, 1e-3) << entry.first;
-    EXPECT_NEAR(test.rrw, result.rrw, 1e-3) << entry.first;
-  }
+  TestImportance({{"PumpOne", {3, 0.0765, 0.1029, 0.1568, 2.613, 1.115}},
+                  {"PumpTwo", {2, 0.057, 0.08948, 0.1532, 2.189, 1.098}},
+                  {"ValveOne", {3, 0.94, 0.8432, 0.8495, 21.237, 6.379}},
+                  {"ValveTwo", {2, 0.0558, 0.06257, 0.1094, 2.189, 1.067}}});
 }
 
 // Apply the rare event approximation.
@@ -318,22 +295,10 @@ TEST_F(RiskAnalysisTest, ImportanceRareEvent) {
   ASSERT_NO_THROW(ProcessInputFile(with_prob));
   ASSERT_NO_THROW(analysis->Analyze());
   EXPECT_DOUBLE_EQ(0.012, p_total());  // Adjusted probability.
-  // Check importance values.
-  std::vector<std::pair<std::string, ImportanceFactors>> expected_results = {
-      {"PumpOne", {0.12, 0.6, 0.624, 10.4, 2.5}},
-      {"PumpTwo", {0.1, 0.5833, 0.6125, 8.75, 2.4}},
-      {"ValveOne", {0.12, 0.4, 0.424, 10.6, 1.667}},
-      {"ValveTwo", {0.1, 0.4167, 0.4458, 8.917, 1.714}}};
-
-  for (const auto& entry : expected_results) {
-    const ImportanceFactors& result = importance(entry.first);
-    const ImportanceFactors& test = entry.second;
-    EXPECT_NEAR(test.mif, result.mif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.cif, result.cif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.dif, result.dif, 1e-3) << entry.first;
-    EXPECT_NEAR(test.raw, result.raw, 1e-3) << entry.first;
-    EXPECT_NEAR(test.rrw, result.rrw, 1e-3) << entry.first;
-  }
+  TestImportance({{"PumpOne", {2, 0.12, 0.6, 0.624, 10.4, 2.5}},
+                  {"PumpTwo", {2, 0.1, 0.5833, 0.6125, 8.75, 2.4}},
+                  {"ValveOne", {2, 0.12, 0.4, 0.424, 10.6, 1.667}},
+                  {"ValveTwo", {2, 0.1, 0.4167, 0.4458, 8.917, 1.714}}});
 }
 
 // Apply the minimal cut set upper bound approximation.
@@ -368,6 +333,31 @@ TEST_P(RiskAnalysisTest, AnalyzeMC) {
   ASSERT_NO_THROW(analysis->Analyze());
 }
 
+TEST_P(RiskAnalysisTest, AnalyzeProbabilityOverTime) {
+  std::string tree_input = "./share/scram/input/core/single_exponential.xml";
+  settings.probability_analysis(true).time_step(24).mission_time(120);
+  std::vector<double> curve = {0,        2.399e-4, 4.7989e-4,
+                               7.197e-4, 9.595e-4, 1.199e-3};
+  ASSERT_NO_THROW(ProcessInputFile(tree_input));
+  ASSERT_NO_THROW(analysis->Analyze());
+  ASSERT_FALSE(analysis->probability_analyses().empty());
+  auto it = curve.begin();
+  double time = 0;
+  for (const std::pair<double, double>& p_vs_time :
+       analysis->probability_analyses().begin()->second->p_time()) {
+    ASSERT_NE(curve.end(), it);
+    if (time >= settings.mission_time()) {
+      EXPECT_EQ(settings.mission_time(), p_vs_time.second);
+    } else {
+      EXPECT_EQ(time, p_vs_time.second);
+    }
+    EXPECT_NEAR(*it, p_vs_time.first, *it * 0.001);
+    time += settings.time_step();
+    ++it;
+  }
+  ASSERT_TRUE(time);
+}
+
 // Test Reporting capabilities
 // Tests the output against the schema. However the contents of the
 // output are not verified or validated.
@@ -390,6 +380,12 @@ TEST_F(RiskAnalysisTest, ReportProbability) {
   std::string tree_input =
       "./share/scram/input/fta/correct_tree_input_with_probs.xml";
   settings.probability_analysis(true);
+  CheckReport(tree_input);
+}
+
+TEST_F(RiskAnalysisTest, ReportProbabilityCurve) {
+  std::string tree_input = "./share/scram/input/core/single_exponential.xml";
+  settings.probability_analysis(true).time_step(24).mission_time(720);
   CheckReport(tree_input);
 }
 

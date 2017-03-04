@@ -14,7 +14,7 @@ endif()
 project(SCRAM)
 set(SCRAM_VERSION_MAJOR 0)  # Indicate major API change after 1.0.0
 set(SCRAM_VERSION_MINOR 11)  # New features and improvements.
-set(SCRAM_VERSION_MICRO 5)  # Bug fixes.
+set(SCRAM_VERSION_MICRO 6)  # Bug fixes.
 
 ####################### Begin Options ###################
 
@@ -64,10 +64,9 @@ set(CMAKE_CXX_FLAGS_DEBUG
   "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -Wno-sign-compare -Wnon-virtual-dtor -Wno-missing-field-initializers")
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  CHECK_COMPILER_VERSION("4.9")
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wpedantic")
+  CHECK_COMPILER_VERSION("4.9")  # TODO: Wpedantic with gcc 4.9 errors with default arg lambdas.
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 5)
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wshadow -Wsuggest-override")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wshadow -Wpedantic")
   endif()
   if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6)
     # TODO: Boost sign bit shift fails to compile on GCC 6.1
@@ -86,10 +85,10 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   CHECK_COMPILER_VERSION("17.0.1")
   # TODO: CMAKE_CXX_STANDARD has no effect on icc.
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-  # TODO: Failure to deduce lambda return type with Boost on Ubuntu 14.04.
+  # TODO: Failure to deduce lambda return type with Boost 1.56.
   add_definitions("-DBOOST_RESULT_OF_USE_DECLTYPE=1")
-  # TODO: Bug in Intel compiler with multi-initialization with auto.
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=3373")
+  # TODO: Bug in Intel compiler with multi-initialization with auto and final-is-not-override.
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=3373,1125")
 endif()
 
 if(WIN32)
@@ -222,10 +221,9 @@ endif()
 
 # Include all the discovered system directories.
 include_directories(SYSTEM "${Boost_INCLUDE_DIR}")
-include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")  # TODO: libxml++ dependency.
 include_directories(SYSTEM "${LibXML++_INCLUDE_DIR}")
 include_directories(SYSTEM "${LibXML++Config_INCLUDE_DIR}")
-include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})  # TODO: libxml++ dependency.
+include_directories(SYSTEM ${Glibmm_INCLUDE_DIRS})
 
 include_directories("${PROJECT_SOURCE_DIR}")  # Include the core headers via "src".
 

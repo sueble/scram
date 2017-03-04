@@ -33,7 +33,6 @@ TEST(SettingsTest, IncorrectSetup) {
   EXPECT_THROW(s.approximation("approx"), InvalidArgument);
   // Incorrect limit order for products.
   EXPECT_THROW(s.limit_order(-1), InvalidArgument);
-  EXPECT_THROW(s.limit_order(33), InvalidArgument);
   // Incorrect cut-off probability.
   EXPECT_THROW(s.cut_off(-1), InvalidArgument);
   EXPECT_THROW(s.cut_off(10), InvalidArgument);
@@ -50,6 +49,8 @@ TEST(SettingsTest, IncorrectSetup) {
   EXPECT_THROW(s.seed(-1), InvalidArgument);
   // Incorrect mission time.
   EXPECT_THROW(s.mission_time(-10), InvalidArgument);
+  // Incorrect time step.
+  EXPECT_THROW(s.time_step(-1), InvalidArgument);
 }
 
 TEST(SettingsTest, CorrectSetup) {
@@ -66,6 +67,7 @@ TEST(SettingsTest, CorrectSetup) {
   // Correct limit order for products.
   EXPECT_NO_THROW(s.limit_order(1));
   EXPECT_NO_THROW(s.limit_order(32));
+  EXPECT_NO_THROW(s.limit_order(1e9));
 
   // Correct cut-off probability.
   EXPECT_NO_THROW(s.cut_off(1));
@@ -91,6 +93,11 @@ TEST(SettingsTest, CorrectSetup) {
   EXPECT_NO_THROW(s.mission_time(0));
   EXPECT_NO_THROW(s.mission_time(10));
   EXPECT_NO_THROW(s.mission_time(1e6));
+
+  // Correct time step.
+  EXPECT_NO_THROW(s.time_step(0));
+  EXPECT_NO_THROW(s.time_step(10));
+  EXPECT_NO_THROW(s.time_step(1e6));
 }
 
 TEST(SettingsTest, SetupForPrimeImplicants) {
