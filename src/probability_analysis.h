@@ -37,6 +37,25 @@ class MissionTime;
 
 namespace core {
 
+/// Safety Integrity Level metrics.
+///
+/// @note Averages and histograms are with respect to time.
+struct Sil {
+  double pfd_avg = 0;  ///< The average probability of failure on demand (PFD).
+  double pfh_avg = 0;  ///< The average probability of failure hourly (PFH).
+
+  /// The SIL PFD and PFD fractions histogram in reverse order, i.e., 4 to 1.
+  /// The starting boundary is implicitly 0.
+  /// The last boundary is explicit 1.
+  /// The range is half open: (lower-bound, upper-bound].
+  /// @{
+  std::array<std::pair<const double, double>, 6> pfd_fractions{
+      {{1e-5, 0}, {1e-4, 0}, {1e-3, 0}, {1e-2, 0}, {1e-1, 0}, {1, 0}}};
+  std::array<std::pair<const double, double>, 6> pfh_fractions{
+      {{1e-9, 0}, {1e-8, 0}, {1e-7, 0}, {1e-6, 0}, {1e-5, 0}, {1, 0}}};
+  /// @}
+};
+
 /// Main quantitative analysis class.
 class ProbabilityAnalysis : public Analysis {
  public:
@@ -66,10 +85,19 @@ class ProbabilityAnalysis : public Analysis {
   double p_total() const { return p_total_; }
 
   /// @returns The probability values over the mission time in time steps.
+  ///          The empty container implies no calculation has been done.
   ///
   /// @pre The analysis is done.
   const std::vector<std::pair<double, double>>& p_time() const {
     return p_time_;
+  }
+
+  /// @returns The Safety Integrity Level calculation results.
+  ///
+  /// @pre The analysis is done with a request for the SIL.
+  const Sil& sil() const {
+    assert(sil_ && "The SIL is not done!");
+    return *sil_;
   }
 
  protected:
@@ -88,9 +116,13 @@ class ProbabilityAnalysis : public Analysis {
   virtual std::vector<std::pair<double, double>>
   CalculateProbabilityOverTime() noexcept = 0;
 
+  /// Computes probability metrics related to the SIL.
+  void ComputeSil() noexcept;
+
   double p_total_;  ///< Total probability of the top event.
   mef::MissionTime* mission_time_;  ///< The mission time expression.
   std::vector<std::pair<double, double>> p_time_;  ///< {probability, time}.
+  std::unique_ptr<Sil> sil_;  ///< The Safety Integrity Level results.
 };
 
 /// Quantitative calculator of a probability value of a single cut set.
