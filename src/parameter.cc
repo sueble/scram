@@ -26,8 +26,7 @@ namespace scram {
 namespace mef {
 
 MissionTime::MissionTime(double time, Units unit)
-    : Expression({}),
-      unit_(unit),
+    : unit_(unit),
       value_(time) {
   value(time);
 }
@@ -38,20 +37,10 @@ void MissionTime::value(double time) {
   value_ = time;
 }
 
-Parameter::Parameter(std::string name, std::string base_path,
-                     RoleSpecifier role)
-    : Expression({}),
-      Element(std::move(name)),
-      Role(role, std::move(base_path)),
-      Id(*this, *this),
-      unit_(kUnitless),
-      unused_(true),
-      expression_(nullptr) {}
-
-void Parameter::expression(const ExpressionPtr& expression) {
+void Parameter::expression(Expression* expression) {
   if (expression_)
     throw LogicError("Parameter expression is already set.");
-  expression_ = expression.get();
+  expression_ = expression;
   Expression::AddArg(expression);
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2014-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,25 +30,25 @@ Component::Component(std::string name, std::string base_path,
     : Element(std::move(name)),
       Role(role, std::move(base_path)) {}
 
-void Component::AddGate(const GatePtr& gate) {
+void Component::Add(const GatePtr& gate) {
   AddEvent(gate, &gates_);
 }
 
-void Component::AddBasicEvent(const BasicEventPtr& basic_event) {
+void Component::Add(const BasicEventPtr& basic_event) {
   AddEvent(basic_event, &basic_events_);
 }
 
-void Component::AddHouseEvent(const HouseEventPtr& house_event) {
+void Component::Add(const HouseEventPtr& house_event) {
   AddEvent(house_event, &house_events_);
 }
 
-void Component::AddParameter(const ParameterPtr& parameter) {
+void Component::Add(const ParameterPtr& parameter) {
   if (parameters_.insert(parameter).second == false) {
     throw ValidationError("Duplicate parameter " + parameter->name());
   }
 }
 
-void Component::AddCcfGroup(const CcfGroupPtr& ccf_group) {
+void Component::Add(const CcfGroupPtr& ccf_group) {
   if (ccf_groups_.count(ccf_group->name())) {
     throw ValidationError("Duplicate CCF group " + ccf_group->name());
   }
@@ -65,7 +65,7 @@ void Component::AddCcfGroup(const CcfGroupPtr& ccf_group) {
   ccf_groups_.insert(ccf_group);
 }
 
-void Component::AddComponent(std::unique_ptr<Component> component) {
+void Component::Add(std::unique_ptr<Component> component) {
   if (components_.count(component->name())) {
     throw ValidationError("Duplicate component " + component->name());
   }
@@ -118,10 +118,12 @@ void FaultTree::MarkNonTopGates(Gate* gate,
 
 void FaultTree::MarkNonTopGates(const Formula& formula,
                                 const std::unordered_set<Gate*>& gates) {
-  for (const GatePtr& gate : formula.gate_args()) {
-    if (gates.count(gate.get())) {
-      MarkNonTopGates(gate.get(), gates);
-      gate->mark(NodeMark::kPermanent);  // Any non clear mark can be assigned.
+  for (const Formula::EventArg& event_arg : formula.event_args()) {
+    if (auto* gate = boost::get<Gate*>(&event_arg)) {
+      if (gates.count(*gate)) {
+        MarkNonTopGates(*gate, gates);
+        (*gate)->mark(NodeMark::kPermanent);  // Any non clear mark can be used.
+      }
     }
   }
   for (const FormulaPtr& arg : formula.formula_args()) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2014-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,20 +27,14 @@ namespace test {
 
 namespace {
 
-class TestElement : public Element {
- public:
-  TestElement() : Element("", /*optional=*/true) {}
-};
-
 class NamedElement : public Element {
  public:
-  explicit NamedElement(std::string name) : Element(std::move(name)) {}
+  using Element::Element;
 };
 
 }  // namespace
 
 TEST(ElementTest, Name) {
-  EXPECT_NO_THROW(TestElement());
   EXPECT_THROW(NamedElement(""), LogicError);
 
   EXPECT_THROW(NamedElement(".name"), InvalidArgument);
@@ -60,7 +54,7 @@ TEST(ElementTest, Name) {
 }
 
 TEST(ElementTest, Label) {
-  TestElement el;
+  NamedElement el("name");
   EXPECT_EQ("", el.label());
   EXPECT_THROW(el.label(""), LogicError);
   ASSERT_NO_THROW(el.label("label"));
@@ -68,7 +62,7 @@ TEST(ElementTest, Label) {
 }
 
 TEST(ElementTest, Attribute) {
-  TestElement el;
+  NamedElement el("name");
   Attribute attr;
   attr.name = "impact";
   attr.value = "0.1";
@@ -97,25 +91,19 @@ TEST(ElementTest, Role) {
 
 namespace {
 
-class NameId : public Element, public Role, public Id {
+class NameId : public Id {
  public:
-  NameId()
-      : Element("", true),
-        Role(RoleSpecifier::kPublic, "path"),
-        Id(*this, *this) {}
-  explicit NameId(std::string name, RoleSpecifier role = RoleSpecifier::kPublic,
-                  std::string path = "")
-      : Element(name), Role(role, path), Id(*this, *this) {}
+  using Id::Id;
 };
 
 }  // namespace
 
 TEST(ElementTest, Id) {
-  EXPECT_THROW(NameId(), LogicError);
+  EXPECT_THROW(NameId(""), LogicError);
   EXPECT_NO_THROW(NameId("name"));
-  EXPECT_THROW(NameId("name", RoleSpecifier::kPrivate, ""), LogicError);
+  EXPECT_THROW(NameId("name", "", RoleSpecifier::kPrivate), LogicError);
   NameId id_public("name");
-  NameId id_private("name", RoleSpecifier::kPrivate, "path");
+  NameId id_private("name", "path", RoleSpecifier::kPrivate);
   EXPECT_NE(id_public.id(), id_private.id());
 }
 

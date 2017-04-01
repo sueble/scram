@@ -1,3 +1,5 @@
+.. _uncertainty_analysis:
+
 ####################
 Uncertainty Analysis
 ####################
@@ -35,11 +37,10 @@ Monte Carlo (MC) Simulations
 #. If uncertainty analysis is not requested,
    perform the standard analysis with average probabilities.
 #. Set the seed for the PRNG for entire analysis. (Can be set by the user)
-#. Determine the number of samples. (Can be set by the user)
+#. Determine the number of samples/trials. (Can be set by the user)
 #. Sample probability distributions and calculate the total probability.
 #. Statistical analysis of the resulting distributions.
 #. Sensitivity analysis. *Not Supported Yet*
-#. Bayesian statistics. *Not Supported Yet*
 #. Report the results of analysis:
    mean, sigma, quantiles, probability density histogram.
 

@@ -2,15 +2,13 @@
 
 set -ev
 
+# Boost
+sudo apt-get install \
+  libboost-{program-options,math,random,filesystem,system,date-time}1.58-dev
+
 # Installing dependencies from source.
 PROJECT_DIR=$PWD
 cd /tmp
-
-# Boost
-wget http://s3.amazonaws.com/scram-travis/boost-scram.tar.gz
-tar -xf ./boost-scram.tar.gz
-sudo mv ./boost-scram/lib/* /usr/lib/
-sudo mv ./boost-scram/include/* /usr/include/
 
 # Libxml++
 LIBXMLPP='libxml++-2.38.1'

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2014-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,23 +22,12 @@
 
 #include <boost/range/algorithm.hpp>
 
-#include "ccf_group.h"
+#include "ext/algorithm.h"
 
 namespace scram {
 namespace mef {
 
-Event::Event(std::string name, std::string base_path, RoleSpecifier role)
-    : Element(std::move(name)),
-      Role(role, std::move(base_path)),
-      Id(*this, *this),
-      orphan_(true) {}
-
 Event::~Event() = default;
-PrimaryEvent::~PrimaryEvent() = default;
-
-CcfEvent::CcfEvent(std::string name, const CcfGroup* ccf_group)
-    : BasicEvent(std::move(name), ccf_group->base_path(), ccf_group->role()),
-      ccf_group_(*ccf_group) {}
 
 void Gate::Validate() const {
   // Detect inhibit flavor.
@@ -51,10 +40,12 @@ void Gate::Validate() const {
                           "INHIBIT gate must have only 2 children");
   }
   int num_conditional = boost::count_if(
-      formula_->basic_event_args(),
-      [](const BasicEventPtr& event) {
-        return event->HasAttribute("flavor") &&
-               event->GetAttribute("flavor").value == "conditional";
+      formula_->event_args(), [](const Formula::EventArg& event) {
+        if (!boost::get<BasicEvent*>(&event))
+          return false;
+        auto& basic_event = boost::get<BasicEvent*>(event);
+        return basic_event->HasAttribute("flavor") &&
+               basic_event->GetAttribute("flavor").value == "conditional";
       });
   if (num_conditional != 1)
     throw ValidationError(Element::name() + " : INHIBIT gate must have" +
@@ -82,6 +73,22 @@ void Formula::vote_number(int number) {
     throw LogicError("Trying to re-assign a vote number");
 
   vote_number_ = number;
+}
+
+void Formula::AddArgument(EventArg event_arg) {
+  auto up_cast = [](const EventArg& var_arg) {
+    return boost::apply_visitor([](auto* arg) -> Event* { return arg; },
+                                var_arg);
+  };
+  Event* event = up_cast(event_arg);
+  if (ext::any_of(event_args_, [&event, &up_cast](const EventArg& arg) {
+        return up_cast(arg)->id() == event->id();
+      })) {
+    throw DuplicateArgumentError("Duplicate argument " + event->name());
+  }
+  event_args_.push_back(event_arg);
+  if (event->orphan())
+    event->orphan(false);
 }
 
 void Formula::Validate() const {

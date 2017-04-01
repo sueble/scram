@@ -17,8 +17,6 @@
 
 #include "initializer.h"
 
-#include <vector>
-
 #include <gtest/gtest.h>
 
 #include "error.h"
@@ -65,9 +63,9 @@ TEST(InitializerTest, FailSchemaValidation) {
 // Unsupported operations.
 TEST(InitializerTest, UnsupportedFeature) {
   std::string dir = "./share/scram/input/fta/";
-  std::vector<std::string> incorrect_inputs = {"../unsupported_feature.xml",
-                                               "../unsupported_gate.xml",
-                                               "../unsupported_expression.xml"};
+  const char* incorrect_inputs[] = {"../unsupported_feature.xml",
+                                    "../unsupported_gate.xml",
+                                    "../unsupported_expression.xml"};
   for (const auto& input : incorrect_inputs) {
     EXPECT_THROW(Initializer({dir + input}, core::Settings()), ValidationError)
         << " Filename:  " << input;
@@ -76,18 +74,38 @@ TEST(InitializerTest, UnsupportedFeature) {
 
 TEST(InitializerTest, EmptyAttributeElementText) {
   std::string dir = "./share/scram/input/fta/";
-  std::vector<std::string> incorrect_inputs = {"../empty_element.xml",
-                                               "../empty_attribute.xml"};
+  const char* incorrect_inputs[] = {"../empty_element.xml",
+                                    "../empty_attribute.xml"};
   for (const auto& input : incorrect_inputs) {
     EXPECT_THROW(Initializer({dir + input}, core::Settings()), ValidationError)
         << " Filename:  " << input;
   }
 }
 
+TEST(InitializerTest, CorrectEtaInputs) {
+  std::string dir = "./share/scram/input/eta/";
+  const char* correct_inputs[] = {"simplest_correct.xml"};
+  for (const auto& input : correct_inputs) {
+    EXPECT_NO_THROW(Initializer({dir + input}, core::Settings()))
+        << " Filename: " << input;
+  }
+}
+
+TEST(InitializerTest, IncorrectEtaInputs) {
+  std::string dir = "./share/scram/input/eta/";
+  const char* incorrect_inputs[] = {
+      "doubly_defined_event_tree.xml", "doubly_defined_sequence.xml",
+  };
+  for (const auto& input : incorrect_inputs) {
+    EXPECT_THROW(Initializer({dir + input}, core::Settings()), ValidationError)
+        << " Filename: " << input;
+  }
+}
+
 // Test correct inputs without probability information.
 TEST(InitializerTest, CorrectFtaInputs) {
   std::string dir = "./share/scram/input/fta/";
-  std::vector<std::string> correct_inputs = {
+  const char* correct_inputs[] = {
       "correct_tree_input.xml",
       "correct_formulas.xml",
       "component_definition.xml",
@@ -102,6 +120,8 @@ TEST(InitializerTest, CorrectFtaInputs) {
       "orphan_primary_event.xml",
       "very_long_mcs.xml",
       "unordered_structure.xml",
+      "ccf_unordered_factors.xml",
+      "missing_ccf_level_number.xml",
       "non_top_gate.xml",
       "unused_parameter.xml",
       "nested_formula.xml",
@@ -116,7 +136,8 @@ TEST(InitializerTest, CorrectFtaInputs) {
 // Test correct inputs with probability information.
 TEST(InitializerTest, CorrectProbabilityInputs) {
   std::string dir = "./share/scram/input/fta/";
-  std::vector<std::string> correct_inputs = {
+  const char* correct_inputs[] = {
+      "missing_bool_constant.xml",  // House event is implicitly false.
       "correct_tree_input_with_probs.xml",
       "trailing_spaces.xml",
       "correct_expressions.xml",
@@ -135,7 +156,7 @@ TEST(InitializerTest, CorrectProbabilityInputs) {
 TEST(InitializerTest, IncorrectFtaInputs) {
   std::string dir = "./share/scram/input/fta/";
 
-  std::vector<std::string> incorrect_inputs = {
+  const char* incorrect_inputs[] = {
       "int_overflow.xml",
       "invalid_probability.xml",
       "doubly_defined_gate.xml",
@@ -146,7 +167,7 @@ TEST(InitializerTest, IncorrectFtaInputs) {
       "doubly_defined_component.xml",
       "extra_ccf_level_beta_factor.xml",
       "missing_gate_definition.xml",
-      "missing_ccf_level_number.xml",
+      "missing_ccf_factor.xml",
       "missing_ccf_members.xml",
       "missing_arg_expression.xml",
       "undefined_event.xml",
@@ -190,8 +211,7 @@ TEST(InitializerTest, IncorrectFtaInputs) {
 // Test failures triggered only in with probability analysis.
 TEST(InitializerTest, IncorrectProbabilityInputs) {
   std::string dir = "./share/scram/input/fta/";
-  std::vector<std::string> incorrect_inputs = {"missing_bool_constant.xml",
-                                               "missing_expression.xml"};
+  const char* incorrect_inputs[] = {"missing_expression.xml"};
 
   core::Settings settings;
   settings.probability_analysis(true);

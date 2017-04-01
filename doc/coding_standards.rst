@@ -180,7 +180,7 @@ Core C++ Code
 
 - Domain-specific ``Probability`` naming rules:
 
-    * If a probability variable is a member variable of a class
+    * If a probability variable is a member variable of a class,
       abbreviate it to ``p_``.
       Its getter/setter functions should have
       corresponding names, i.e., ``p()`` and ``p(double value)``.
@@ -419,7 +419,7 @@ General
 -------
 
 - Prefer the :ref:`Aralia_format` for the Boolean formula documentation.
-  This format uses the C-style bit-wise logical operators for equations.
+  This format uses the C-style bit-wise logical operators for formulas.
 
 
 reST Documentation Style

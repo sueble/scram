@@ -36,14 +36,16 @@ TEST(CcfGroupTest, AddMemberRepeated) {
 TEST(CcfGroupTest, AddMemberAfterDistribution) {
   BetaFactorModel ccf_group("general");
 
-  BasicEventPtr member(new BasicEvent("id"));
-  ASSERT_NO_THROW(ccf_group.AddMember(member));
-
-  ExpressionPtr distr(new ConstantExpression(1));
-  ASSERT_NO_THROW(ccf_group.AddDistribution(distr));
+  BasicEventPtr member_one(new BasicEvent("id"));
+  ASSERT_NO_THROW(ccf_group.AddMember(member_one));
 
   BasicEventPtr member_two(new BasicEvent("two"));
-  EXPECT_THROW(ccf_group.AddMember(member), IllegalOperation);
+  EXPECT_NO_THROW(ccf_group.AddMember(member_two));
+
+  ASSERT_NO_THROW(ccf_group.AddDistribution(&ConstantExpression::kOne));
+
+  BasicEventPtr member_three(new BasicEvent("three"));
+  EXPECT_THROW(ccf_group.AddMember(member_three), IllegalOperation);
 }
 
 }  // namespace test
