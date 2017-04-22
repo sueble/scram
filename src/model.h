@@ -60,6 +60,9 @@ class Model : public Element, private boost::noncopyable {
   /// @returns Defined constructs in the model.
   /// @{
   const ElementTable<EventTreePtr>& event_trees() const { return event_trees_; }
+  const ElementTable<FunctionalEventPtr>& functional_events() const {
+    return functional_events_;
+  }
   const ElementTable<SequencePtr>& sequences() const { return sequences_; }
   const ElementTable<FaultTreePtr>& fault_trees() const { return fault_trees_; }
   const IdTable<ParameterPtr>& parameters() const {
@@ -86,6 +89,7 @@ class Model : public Element, private boost::noncopyable {
   ///
   /// @{
   void Add(EventTreePtr element);
+  void Add(const FunctionalEventPtr& element);
   void Add(const SequencePtr& element);
   void Add(FaultTreePtr element);
   void Add(const ParameterPtr& element);
@@ -143,13 +147,12 @@ class Model : public Element, private boost::noncopyable {
     ///
     /// @param[in] entity  The candidate entity.
     ///
-    /// @returns false if the entity is duplicate and hasn't been added.
-    bool Add(const std::shared_ptr<T>& entity) {
-      if (entities_by_id.insert(entity).second == false)
-        return false;
-
-      entities_by_path.insert(entity);
-      return true;
+    /// @returns The result of insert call to IdTable.
+    auto insert(const std::shared_ptr<T>& entity) {
+      auto it = entities_by_id.insert(entity);
+      if (it.second)
+        entities_by_path.insert(entity);
+      return it;
     }
 
     IdTable<std::shared_ptr<T>> entities_by_id;  ///< Entity id as a key.
@@ -176,6 +179,7 @@ class Model : public Element, private boost::noncopyable {
   /// A collection of defined constructs in the model.
   /// @{
   ElementTable<EventTreePtr> event_trees_;
+  ElementTable<FunctionalEventPtr> functional_events_;
   ElementTable<SequencePtr> sequences_;
   ElementTable<FaultTreePtr> fault_trees_;
   LookupTable<Gate> gates_;

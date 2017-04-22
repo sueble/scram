@@ -34,7 +34,7 @@
       </element>
       <element name="time"> <data type="string"/> </element>
       <element name="performance">
-        <oneOrMore>
+        <zeroOrMore>
           <element name="calculation-time">
             <attribute name="name"> <data type="NCName"/> </attribute>
             <optional>
@@ -58,7 +58,7 @@
               </element>
             </optional>
           </element>
-        </oneOrMore>
+        </zeroOrMore>
       </element>
       <oneOrMore>
         <ref name="calculated-quantity"/>
@@ -217,6 +217,15 @@
         <attribute name="probability"> <ref name="probability-data"/> </attribute>
       </optional>
       <optional>
+        <attribute name="distribution">
+          <list>
+            <oneOrMore>
+              <data type="nonNegativeInteger"/>
+            </oneOrMore>
+          </list>
+        </attribute>
+      </optional>
+      <optional>
         <element name="warning"> <text/> </element>
       </optional>
       <zeroOrMore>
@@ -228,7 +237,7 @@
   <define name="product">
     <element name="product">
       <attribute name="order">
-        <data type="nonNegativeInteger"/>
+        <data type="positiveInteger"/>
       </attribute>
       <optional>
         <attribute name="probability"> <ref name="probability-data"/> </attribute>
@@ -258,9 +267,9 @@
       </element>
       <element name="ccf-event">
         <attribute name="ccf-group"> <data type="NCName"/> </attribute>
-        <attribute name="order"> <data type="nonNegativeInteger"/> </attribute>
+        <attribute name="order"> <data type="positiveInteger"/> </attribute>
         <attribute name="group-size">
-          <data type="nonNegativeInteger"/>
+          <data type="positiveInteger"/>
         </attribute>
         <oneOrMore>
           <element name="basic-event">
@@ -320,7 +329,7 @@
 
   <define name="quantiles">
     <element name="quantiles">
-      <attribute name="number"> <data type="nonNegativeInteger"/> </attribute>
+      <attribute name="number"> <data type="positiveInteger"/> </attribute>
       <oneOrMore>
         <ref name="quantile"/>
       </oneOrMore>
@@ -335,7 +344,7 @@
 
   <define name="histogram">
     <element name="histogram">
-      <attribute name="number"> <data type="nonNegativeInteger"/> </attribute>
+      <attribute name="number"> <data type="positiveInteger"/> </attribute>
       <oneOrMore>
         <ref name="bin"/>
       </oneOrMore>
@@ -349,7 +358,7 @@
   </define>
 
   <define name="bin-data">
-    <attribute name="number"> <data type="nonNegativeInteger"/> </attribute>
+    <attribute name="number"> <data type="positiveInteger"/> </attribute>
     <attribute name="value"> <data type="double"/> </attribute>
     <attribute name="lower-bound"> <data type="double"/> </attribute>
     <attribute name="upper-bound"> <data type="double"/> </attribute>
@@ -427,10 +436,10 @@
           <element name="ccf-event">
             <attribute name="ccf-group"> <data type="NCName"/> </attribute>
             <attribute name="order">
-              <data type="nonNegativeInteger"/>
+              <data type="positiveInteger"/>
             </attribute>
             <attribute name="group-size">
-              <data type="nonNegativeInteger"/>
+              <data type="positiveInteger"/>
             </attribute>
             <ref name="importance-factors"/>
             <oneOrMore>

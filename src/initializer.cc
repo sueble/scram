@@ -183,14 +183,13 @@ void Initializer::ProcessInputFiles(const std::vector<std::string>& xml_files) {
   LOG(DEBUG1) << "Processing input files";
   CheckFileExistence(xml_files);
   CheckDuplicateFiles(xml_files);
-  std::vector<std::string>::const_iterator it;
-  try {
-    for (it = xml_files.begin(); it != xml_files.end(); ++it) {
-      ProcessInputFile(*it);
+  for (const auto& xml_file : xml_files) {
+    try {
+      ProcessInputFile(xml_file);
+    } catch (ValidationError& err) {
+      err.msg("In file '" + xml_file + "', " + err.msg());
+      throw;
     }
-  } catch (ValidationError& err) {
-    err.msg("In file '" + *it + "', " + err.msg());
-    throw;
   }
   CLOCK(def_time);
   ProcessTbdElements();
@@ -314,6 +313,16 @@ CcfGroupPtr Initializer::Register(const xmlpp::Element* ccf_node,
 }
 
 template <>
+FunctionalEventPtr Initializer::Register(const xmlpp::Element* xml_node,
+                                         const std::string& /*base_path*/,
+                                         RoleSpecifier /*container_role*/) {
+  FunctionalEventPtr functional_event =
+      ConstructElement<FunctionalEvent>(xml_node);
+  Register(functional_event, xml_node);
+  return functional_event;
+}
+
+template <>
 SequencePtr Initializer::Register(const xmlpp::Element* xml_node,
                                   const std::string& /*base_path*/,
                                   RoleSpecifier /*container_role*/) {
@@ -433,25 +442,27 @@ void Initializer::Define(const xmlpp::Element* xml_node, Sequence* sequence) {
 /// @}
 
 void Initializer::ProcessTbdElements() {
-  const xmlpp::Element* el_def;  // XML element with the definition for reports.
-  try {
-    for (const auto& tbd_element : tbd_) {
-      el_def = tbd_element.second;
-      boost::apply_visitor(
-          [this, &el_def](auto* tbd_construct) {
-            this->Define(el_def, tbd_construct);
-          },
-          tbd_element.first);
+  for (const auto& tbd_element : tbd_) {
+    try {
+        boost::apply_visitor(
+            [this, &tbd_element](auto* tbd_construct) {
+              this->Define(tbd_element.second, tbd_construct);
+            },
+            tbd_element.first);
+    } catch (ValidationError& err) {
+      const xmlpp::Node* root = tbd_element.second->find("/opsa-mef")[0];
+      err.msg("In file '" + doc_to_file_.at(root) + "', " + err.msg());
+      throw;
     }
-  } catch (ValidationError& err) {
-    const xmlpp::Node* root = el_def->find("/opsa-mef")[0];
-    err.msg("In file '" + doc_to_file_.at(root) + "', " + err.msg());
-    throw;
   }
 }
 
 void Initializer::DefineEventTree(const xmlpp::Element* et_node) {
   EventTreePtr event_tree = ConstructElement<EventTree>(et_node);
+  for (const xmlpp::Node* node : et_node->find("./define-functional-event")) {
+    event_tree->Add(Register<FunctionalEvent>(
+        XmlElement(node), event_tree->name(), RoleSpecifier::kPublic));
+  }
   for (const xmlpp::Node* node : et_node->find("./define-sequence")) {
     event_tree->Add(Register<Sequence>(XmlElement(node), event_tree->name(),
                                        RoleSpecifier::kPublic));
@@ -531,51 +542,38 @@ void Initializer::ProcessModelData(const xmlpp::Element* model_data) {
 
 FormulaPtr Initializer::GetFormula(const xmlpp::Element* formula_node,
                                    const std::string& base_path) {
-  Operator type = [&formula_node]() {
-    if (formula_node->get_attribute("name"))
+  Operator formula_type = [&formula_node]() {
+    if (formula_node->get_attribute("name") ||
+        formula_node->get_name() == "constant")
       return kNull;
     int pos = boost::find(kOperatorToString, formula_node->get_name()) -
               std::begin(kOperatorToString);
     assert(pos < kNumOperators && "Unexpected operator type.");
     return static_cast<Operator>(pos);
   }();
-  FormulaPtr formula(new Formula(type));
-  if (type == kVote) {
-    formula->vote_number(CastAttributeValue<int>(formula_node, "min"));
-  } else if (type == kNull) {  // Special case of pass-through.
-    formula_node = formula_node->get_parent();
-  }
-  // Process arguments of this formula.
-  ProcessFormula(formula_node, base_path, formula.get());
 
-  try {
-    formula->Validate();
-  } catch (ValidationError& err) {
-    err.msg(GetLine(formula_node) + err.msg());
-    throw;
-  }
-  return formula;
-}
+  FormulaPtr formula(new Formula(formula_type));
 
-void Initializer::ProcessFormula(const xmlpp::Element* formula_node,
-                                 const std::string& base_path,
-                                 Formula* formula) {
-  for (const xmlpp::Node* node : formula_node->find("./*")) {
+  auto add_arg = [this, &formula, &base_path](const xmlpp::Node* node) {
     const xmlpp::Element* element = XmlElement(node);
-    std::string name = GetAttributeValue(element, "name");
+    if (element->get_name() == "constant") {
+      formula->AddArgument(GetAttributeValue(element, "value") == "true"
+                               ? &HouseEvent::kTrue
+                               : &HouseEvent::kFalse);
+      return;
+    }
 
+    std::string name = GetAttributeValue(element, "name");
     if (name.empty()) {
       formula->AddArgument(GetFormula(element, base_path));
-      continue;
+      return;
     }
 
-    std::string element_type = element->get_name();
-    // This is for the case "<event name="id" type="type"/>".
-    std::string type = GetAttributeValue(element, "type");
-    if (!type.empty()) {
-      assert(type == "gate" || type == "basic-event" || type == "house-event");
-      element_type = type;  // Event type is defined.
-    }
+    std::string element_type = [&element]() {
+      // This is for the case "<event name="id" type="type"/>".
+      std::string type = GetAttributeValue(element, "type");
+      return type.empty() ? std::string(element->get_name()) : type;
+    }();
 
     try {
       if (element_type == "event") {  // Undefined type yet.
@@ -595,7 +593,26 @@ void Initializer::ProcessFormula(const xmlpp::Element* formula_node,
       throw ValidationError(GetLine(node) + "Undefined " + element_type + " " +
                             name + " with base path " + base_path);
     }
+  };
+
+  if (formula_type == kVote) {
+    formula->vote_number(CastAttributeValue<int>(formula_node, "min"));
   }
+  // Process arguments of this formula.
+  if (formula_type == kNull) {  // Special case of pass-through.
+    add_arg(formula_node);
+  } else {
+    for (const xmlpp::Node* node : formula_node->find("./*"))
+      add_arg(node);
+  }
+
+  try {
+    formula->Validate();
+  } catch (ValidationError& err) {
+    err.msg(GetLine(formula_node) + err.msg());
+    throw;
+  }
+  return formula;
 }
 
 InstructionPtr Initializer::GetInstruction(const xmlpp::Element* xml_element) {
@@ -901,7 +918,7 @@ void Initializer::DefineCcfFactor(const xmlpp::Element* factor_node,
 void Initializer::ValidateInitialization() {
   // Check if *all* gates have no cycles.
   for (const GatePtr& gate : model_->gates()) {
-    std::vector<std::string> cycle;
+    std::vector<Gate*> cycle;
     if (cycle::DetectCycle(gate.get(), &cycle)) {
       throw CycleError("Detected a cycle in " + gate->name() +
                        " gate:\n" + cycle::PrintCycle(cycle));
@@ -932,7 +949,7 @@ void Initializer::ValidateExpressions() {
   // Check for cycles in parameters.
   // This must be done before expressions.
   for (const ParameterPtr& param : model_->parameters()) {
-    std::vector<std::string> cycle;
+    std::vector<Parameter*> cycle;
     if (cycle::DetectCycle(param.get(), &cycle)) {
       throw CycleError("Detected a cycle in " + param->name() +
                        " parameter:\n" + cycle::PrintCycle(cycle));
@@ -943,17 +960,15 @@ void Initializer::ValidateExpressions() {
     param->mark(NodeMark::kClear);
 
   // Validate expressions.
-  const xmlpp::Element* expr_element = nullptr;  // To report the position.
-  try {
-    for (const std::pair<Expression*, const xmlpp::Element*>& expression :
-         expressions_) {
-      expr_element = expression.second;
+  for (const std::pair<Expression*, const xmlpp::Element*>& expression :
+       expressions_) {
+    try {
       expression.first->Validate();
+    } catch (InvalidArgument& err) {
+      const xmlpp::Node* root = expression.second->find("/opsa-mef")[0];
+      throw ValidationError("In file '" + doc_to_file_.at(root) + "', " +
+                            GetLine(expression.second) + err.msg());
     }
-  } catch (InvalidArgument& err) {
-    const xmlpp::Node* root = expr_element->find("/opsa-mef")[0];
-    throw ValidationError("In file '" + doc_to_file_.at(root) + "', " +
-                          GetLine(expr_element) + err.msg());
   }
 
   // Validate CCF groups.
@@ -962,7 +977,7 @@ void Initializer::ValidateExpressions() {
     try {
       group->Validate();
     } catch (ValidationError& err) {
-      msg << group->name() << " : " << err.msg() << "\n";
+      msg << err.msg() << "\n";
     }
   }
   if (!msg.str().empty()) {
@@ -977,7 +992,7 @@ void Initializer::ValidateExpressions() {
     try {
       event->Validate();
     } catch (ValidationError& err) {
-      msg << event->name() << " : " << err.msg() << "\n";
+      msg << err.msg() << "\n";
     }
   }
   if (!msg.str().empty()) {
@@ -987,19 +1002,18 @@ void Initializer::ValidateExpressions() {
 }
 
 void Initializer::SetupForAnalysis() {
-  CLOCK(top_time);
-  LOG(DEBUG2) << "Collecting top events of fault trees...";
-  for (const FaultTreePtr& ft : model_->fault_trees()) {
-    ft->CollectTopEvents();
+  {
+    TIMER(DEBUG2, "Collecting top events of fault trees");
+    for (const FaultTreePtr& ft : model_->fault_trees())
+      ft->CollectTopEvents();
   }
-  LOG(DEBUG2) << "Top event collection is finished in " << DUR(top_time);
 
-  CLOCK(ccf_time);
-  LOG(DEBUG2) << "Applying CCF models...";
-  // CCF groups must apply models to basic event members.
-  for (const CcfGroupPtr& group : model_->ccf_groups())
-    group->ApplyModel();
-  LOG(DEBUG2) << "Application of CCF models finished in " << DUR(ccf_time);
+  {
+    TIMER(DEBUG2, "Applying CCF models");
+    // CCF groups must apply models to basic event members.
+    for (const CcfGroupPtr& group : model_->ccf_groups())
+      group->ApplyModel();
+  }
 }
 
 }  // namespace mef

@@ -39,11 +39,14 @@ void Sequence::instructions(InstructionContainer instructions) {
 }
 
 void EventTree::Add(SequencePtr sequence) {
-  if (sequences_.count(sequence->name())) {
-    throw ValidationError("Duplicate sequence " + sequence->name() +
-                          " in event tree " + Element::name());
-  }
-  sequences_.insert(std::move(sequence));
+  mef::AddElement<ValidationError>(std::move(sequence), &sequences_,
+                                   "Duplicate sequence: ");
+}
+
+void EventTree::Add(FunctionalEventPtr functional_event) {
+  mef::AddElement<ValidationError>(std::move(functional_event),
+                                   &functional_events_,
+                                   "Duplicate functional event: ");
 }
 
 }  // namespace mef
