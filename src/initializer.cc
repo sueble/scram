@@ -29,8 +29,10 @@
 #include "cycle.h"
 #include "env.h"
 #include "error.h"
-#include "expression/arithmetic.h"
+#include "expression/boolean.h"
+#include "expression/conditional.h"
 #include "expression/exponential.h"
+#include "expression/numerical.h"
 #include "expression/random_deviate.h"
 #include "logger.h"
 #include "xml.h"
@@ -761,13 +763,13 @@ std::unique_ptr<Expression> Initializer::Extract<Histogram>(
 
 /// Specialization due to overloaded constructors.
 template <>
-std::unique_ptr<Expression> Initializer::Extract<LogNormalDeviate>(
+std::unique_ptr<Expression> Initializer::Extract<LognormalDeviate>(
     const xmlpp::NodeSet& args,
     const std::string& base_path,
     Initializer* init) {
   if (args.size() == 3)
-    return Extractor<LogNormalDeviate, 3>()(args, base_path, init);
-  return Extractor<LogNormalDeviate, 2>()(args, base_path, init);
+    return Extractor<LognormalDeviate, 3>()(args, base_path, init);
+  return Extractor<LognormalDeviate, 2>()(args, base_path, init);
 }
 
 /// Specialization due to overloaded constructors and un-fixed number of args.
@@ -788,14 +790,35 @@ std::unique_ptr<Expression> Initializer::Extract<PeriodicTest>(
   }
 }
 
+/// Specialization for Switch-Case operation extraction.
+template <>
+std::unique_ptr<Expression> Initializer::Extract<Switch>(
+    const xmlpp::NodeSet& args,
+    const std::string& base_path,
+    Initializer* init) {
+  assert(!args.empty());
+  Expression* default_value =
+      init->GetExpression(XmlElement(args.back()), base_path);
+  std::vector<Switch::Case> cases;
+  auto it_end = std::prev(args.end());
+  for (auto it = args.begin(); it != it_end; ++it) {
+    xmlpp::NodeSet nodes = (*it)->find("./*");
+    assert(nodes.size() == 2);
+    cases.push_back(
+        {*init->GetExpression(XmlElement(nodes.front()), base_path),
+         *init->GetExpression(XmlElement(nodes.back()), base_path)});
+  }
+  return std::make_unique<Switch>(std::move(cases), default_value);
+}
+
 const Initializer::ExtractorMap Initializer::kExpressionExtractors_ = {
-    {"exponential", &Extract<ExponentialExpression>},
-    {"GLM", &Extract<GlmExpression>},
-    {"Weibull", &Extract<WeibullExpression>},
+    {"exponential", &Extract<Exponential>},
+    {"GLM", &Extract<Glm>},
+    {"Weibull", &Extract<Weibull>},
     {"periodic-test", &Extract<PeriodicTest>},
     {"uniform-deviate", &Extract<UniformDeviate>},
     {"normal-deviate", &Extract<NormalDeviate>},
-    {"lognormal-deviate", &Extract<LogNormalDeviate>},
+    {"lognormal-deviate", &Extract<LognormalDeviate>},
     {"gamma-deviate", &Extract<GammaDeviate>},
     {"beta-deviate", &Extract<BetaDeviate>},
     {"histogram", &Extract<Histogram>},
@@ -803,7 +826,39 @@ const Initializer::ExtractorMap Initializer::kExpressionExtractors_ = {
     {"add", &Extract<Add>},
     {"sub", &Extract<Sub>},
     {"mul", &Extract<Mul>},
-    {"div", &Extract<Div>}};
+    {"div", &Extract<Div>},
+    {"abs", &Extract<Abs>},
+    {"acos", &Extract<Acos>},
+    {"asin", &Extract<Asin>},
+    {"atan", &Extract<Atan>},
+    {"cos", &Extract<Cos>},
+    {"sin", &Extract<Sin>},
+    {"tan", &Extract<Tan>},
+    {"cosh", &Extract<Cosh>},
+    {"sinh", &Extract<Sinh>},
+    {"tanh", &Extract<Tanh>},
+    {"exp", &Extract<Exp>},
+    {"log", &Extract<Log>},
+    {"log10", &Extract<Log10>},
+    {"mod", &Extract<Mod>},
+    {"pow", &Extract<Pow>},
+    {"sqrt", &Extract<Sqrt>},
+    {"ceil", &Extract<Ceil>},
+    {"floor", &Extract<Floor>},
+    {"min", &Extract<Min>},
+    {"max", &Extract<Max>},
+    {"mean", &Extract<Mean>},
+    {"not", &Extract<Not>},
+    {"and", &Extract<And>},
+    {"or", &Extract<Or>},
+    {"eq", &Extract<Eq>},
+    {"df", &Extract<Df>},
+    {"lt", &Extract<Lt>},
+    {"gt", &Extract<Gt>},
+    {"leq", &Extract<Leq>},
+    {"geq", &Extract<Geq>},
+    {"ite", &Extract<Ite>},
+    {"switch", &Extract<Switch>}};
 
 Expression* Initializer::GetExpression(const xmlpp::Element* expr_element,
                                        const std::string& base_path) {
