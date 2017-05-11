@@ -84,7 +84,15 @@ TEST(InitializerTest, EmptyAttributeElementText) {
 
 TEST(InitializerTest, CorrectEtaInputs) {
   std::string dir = "./share/scram/input/eta/";
-  const char* correct_inputs[] = {"simplest_correct.xml"};
+  const char* correct_inputs[] = {"simplest_correct.xml",
+                                  "public_sequence.xml",
+                                  "initiating_event.xml",
+                                  "collect_formula.xml",
+                                  "if_then_else_instruction.xml",
+                                  "block_instruction.xml",
+                                  "rule_instruction.xml",
+                                  "link_instruction.xml",
+                                  "link_in_rule.xml"};
   for (const auto& input : correct_inputs) {
     EXPECT_NO_THROW(Initializer({dir + input}, core::Settings()))
         << " Filename: " << input;
@@ -94,14 +102,51 @@ TEST(InitializerTest, CorrectEtaInputs) {
 TEST(InitializerTest, IncorrectEtaInputs) {
   std::string dir = "./share/scram/input/eta/";
   const char* incorrect_inputs[] = {
+      "doubly_defined_initiating_event.xml",
       "doubly_defined_event_tree.xml",
       "doubly_defined_sequence.xml",
-      "doubly_defined_functional_event.xml"
-  };
+      "doubly_defined_functional_event.xml",
+      "doubly_defined_branch.xml",
+      "doubly_defined_path_state.xml",
+      "doubly_defined_rule.xml",
+      "undefined_event_tree.xml",
+      "undefined_sequence.xml",
+      "undefined_branch.xml",
+      "undefined_functional_event.xml",
+      "undefined_rule.xml",
+      "private_branch.xml",
+      "private_functional_event.xml",
+      "cyclic_branches_fork.xml",
+      "cyclic_branches_self.xml",
+      "cyclic_branches_transitive.xml",
+      "cyclic_rule_block.xml",
+      "cyclic_rule_self.xml",
+      "cyclic_rule_transitive.xml",
+      "cyclic_link_self.xml",
+      "cyclic_link_transitive.xml",
+      "invalid_duplicate_event_in_forks.xml",
+      "invalid_event_order_in_branch.xml",
+      "invalid_event_order_in_link.xml",
+      "invalid_event_order_in_initial_state.xml",
+      "invalid_event_order_in_ref_branch.xml",
+      "invalid_collect_formula.xml",
+      "invalid_link_undefined_event_tree.xml",
+      "invalid_link_instruction.xml",
+      "invalid_link_in_branch.xml",
+      "invalid_link_in_rule.xml",
+      "undefined_arg_collect_formula.xml",
+      "mixing_collect_instructions.xml",
+      "mixing_collect_instructions_link.xml",
+      "mixing_collect_instructions_fork.xml"};
   for (const auto& input : incorrect_inputs) {
     EXPECT_THROW(Initializer({dir + input}, core::Settings()), ValidationError)
         << " Filename: " << input;
   }
+}
+
+TEST(InitializerTest, CorrectLabelsAndAttributes) {
+  const char* input = "./share/scram/input/fta/labels_and_attributes.xml";
+  EXPECT_NO_THROW(Initializer({input}, core::Settings()));
 }
 
 // Test correct inputs without probability information.
@@ -119,7 +164,6 @@ TEST(InitializerTest, CorrectFtaInputs) {
       "two_trees.xml",
       "two_top_events.xml",
       "two_top_through_formula.xml",
-      "labels_and_attributes.xml",
       "orphan_primary_event.xml",
       "very_long_mcs.xml",
       "unordered_structure.xml",

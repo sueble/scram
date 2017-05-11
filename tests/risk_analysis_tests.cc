@@ -68,12 +68,10 @@ void RiskAnalysisTest::CheckReport(const std::string& tree_input) {
 }
 
 const std::set<std::set<std::string>>& RiskAnalysisTest::products() {
-  assert(!analysis->fault_tree_analyses().empty());
-  assert(analysis->fault_tree_analyses().size() == 1);
+  assert(analysis->results().size() == 1);
   if (result_.products.empty()) {
-    const FaultTreeAnalysis* fta =
-        analysis->fault_tree_analyses().begin()->second.get();
-    for (const Product& product : fta->products()) {
+    for (const Product& product :
+         analysis->results().front().fault_tree_analysis->products()) {
       result_.products.emplace(Convert(product));
     }
   }
@@ -81,33 +79,38 @@ const std::set<std::set<std::string>>& RiskAnalysisTest::products() {
 }
 
 std::vector<int> RiskAnalysisTest::ProductDistribution() {
-  assert(!analysis->fault_tree_analyses().empty());
-  assert(analysis->fault_tree_analyses().size() == 1);
-  const FaultTreeAnalysis* fta =
-      analysis->fault_tree_analyses().begin()->second.get();
-  return fta->products().Distribution();
+  assert(analysis->results().size() == 1);
+  return analysis->results()
+      .front()
+      .fault_tree_analysis->products()
+      .Distribution();
 }
 
 void RiskAnalysisTest::PrintProducts() {
-  assert(!analysis->fault_tree_analyses().empty());
-  assert(analysis->fault_tree_analyses().size() == 1);
-  const FaultTreeAnalysis* fta =
-      analysis->fault_tree_analyses().begin()->second.get();
-  Print(fta->products());
+  assert(analysis->results().size() == 1);
+  Print(analysis->results().front().fault_tree_analysis->products());
 }
 
 const std::map<std::set<std::string>, double>&
 RiskAnalysisTest::product_probability() {
-  assert(!analysis->fault_tree_analyses().empty());
-  assert(analysis->fault_tree_analyses().size() == 1);
+  assert(analysis->results().size() == 1);
   if (result_.product_probability.empty()) {
-    const FaultTreeAnalysis* fta =
-        analysis->fault_tree_analyses().begin()->second.get();
-    for (const Product& product : fta->products()) {
+    for (const Product& product :
+         analysis->results().front().fault_tree_analysis->products()) {
       result_.product_probability.emplace(Convert(product), product.p());
     }
   }
   return result_.product_probability;
+}
+
+std::map<std::string, double> RiskAnalysisTest::sequences() {
+  assert(analysis->event_tree_results().size() == 1);
+  std::map<std::string, double> results;
+  for (const core::EventTreeAnalysis::Result& result :
+       analysis->event_tree_results().front()->sequences()) {
+    results.emplace(result.sequence.name(), result.p_sequence);
+  }
+  return results;
 }
 
 std::set<std::string> RiskAnalysisTest::Convert(const Product& product) {
@@ -358,11 +361,12 @@ TEST_P(RiskAnalysisTest, AnalyzeProbabilityOverTime) {
                                7.197e-4, 9.595e-4, 1.199e-3};
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(analysis->Analyze());
-  ASSERT_FALSE(analysis->probability_analyses().empty());
+  ASSERT_FALSE(analysis->results().empty());
+  ASSERT_TRUE(analysis->results().front().probability_analysis);
   auto it = curve.begin();
   double time = 0;
   for (const std::pair<double, double>& p_vs_time :
-       analysis->probability_analyses().begin()->second->p_time()) {
+       analysis->results().front().probability_analysis->p_time()) {
     ASSERT_NE(curve.end(), it);
     if (time >= settings.mission_time()) {
       EXPECT_EQ(settings.mission_time(), p_vs_time.second);
@@ -384,8 +388,9 @@ TEST_P(RiskAnalysisTest, AnalyzeSil) {
   double pfh_fractions[] = {2.74e-7, 2.466e-6, 2.466e-5, 2.466e-4, 0.999726, 0};
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(analysis->Analyze());
-  ASSERT_FALSE(analysis->probability_analyses().empty());
-  const auto& prob_an = *analysis->probability_analyses().begin()->second;
+  ASSERT_FALSE(analysis->results().empty());
+  ASSERT_TRUE(analysis->results().front().probability_analysis);
+  const auto& prob_an = *analysis->results().front().probability_analysis;
   EXPECT_NEAR(0.04255, prob_an.sil().pfd_avg, 0.00001);
   EXPECT_NEAR(9.77e-6, prob_an.sil().pfh_avg, 1e-8);
   auto compare_fractions = [](const auto& sil_fractions, const auto& result,
@@ -403,6 +408,22 @@ TEST_P(RiskAnalysisTest, AnalyzeSil) {
   compare_fractions(pfh_fractions, prob_an.sil().pfh_fractions, "PFH");
 }
 
+TEST_P(RiskAnalysisTest, AnalyzeEventTree) {
+  const char* tree_input = "./share/scram/input/EventTrees/bcd.xml";
+  settings.probability_analysis(true);
+  ASSERT_NO_THROW(ProcessInputFile(tree_input));
+  ASSERT_NO_THROW(analysis->Analyze());
+  EXPECT_EQ(1, analysis->event_tree_results().size());
+  const auto& results = sequences();
+  ASSERT_EQ(2, results.size());
+  std::map<std::string, double> expected = {{"Success", 0.594},
+                                            {"Failure", 0.406}};
+  for (const auto& result : expected) {
+    ASSERT_TRUE(results.count(result.first)) << result.first;
+    EXPECT_DOUBLE_EQ(result.second, results.at(result.first)) << result.first;
+  }
+}
+
 // Test Reporting capabilities
 // Tests the output against the schema. However the contents of the
 // output are not verified or validated.
@@ -413,6 +434,11 @@ TEST_F(RiskAnalysisTest, ReportIOError) {
   ASSERT_NO_THROW(ProcessInputFile(tree_input));
   ASSERT_NO_THROW(analysis->Analyze());
   EXPECT_THROW(Reporter().Report(*analysis, output), IOError);
+}
+
+TEST_F(RiskAnalysisTest, ReportEmpty) {
+  std::string tree_input = "./share/scram/input/empty_model.xml";
+  CheckReport(tree_input);
 }
 
 // Reporting of the default analysis for MCS only without probabilities.
@@ -456,6 +482,13 @@ TEST_F(RiskAnalysisTest, ReportUncertaintyResults) {
   CheckReport(tree_input);
 }
 
+// Reporting event tree analysis with an initiating event.
+TEST_F(RiskAnalysisTest, ReportInitiatingEventAnalysis) {
+  const char* tree_input = "./share/scram/input/EventTrees/bcd.xml";
+  settings.probability_analysis(true);
+  CheckReport(tree_input);
+}
+
 // Reporting of CCF analysis.
 TEST_F(RiskAnalysisTest, ReportCCF) {
   std::string tree_input = "./share/scram/input/core/mgl_ccf.xml";
@@ -494,6 +527,11 @@ TEST_F(RiskAnalysisTest, ReportOrphanPrimaryEvents) {
 // Reporting of unused parameters.
 TEST_F(RiskAnalysisTest, ReportUnusedParameters) {
   std::string tree_input = "./share/scram/input/fta/unused_parameter.xml";
+  CheckReport(tree_input);
+}
+
+TEST_F(RiskAnalysisTest, ReportUnusedEventTreeElements) {
+  std::string tree_input = "./share/scram/input/eta/unused_elements.xml";
   CheckReport(tree_input);
 }
 

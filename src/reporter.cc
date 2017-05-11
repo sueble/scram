@@ -27,9 +27,11 @@
 
 #include <boost/algorithm/string/join.hpp>
 #include <boost/date_time.hpp>
+#include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 
 #include "ccf_group.h"
+#include "element.h"
 #include "error.h"
 #include "logger.h"
 #include "parameter.h"
@@ -37,32 +39,55 @@
 
 namespace scram {
 
+namespace {
+
+/// Puts analysis id into report XML element.
+void PutId(const core::RiskAnalysis::Result::Id& id, XmlStreamElement* report) {
+  struct {
+    void operator()(const mef::Gate* gate) {
+      report_->SetAttribute("name", gate->id());
+    }
+    void operator()(const std::pair<const mef::InitiatingEvent&,
+                                    const mef::Sequence&>& sequence) {
+      report_->SetAttribute("initiating-event", sequence.first.name());
+      report_->SetAttribute("name", sequence.second.name());
+    }
+    XmlStreamElement* report_;
+  } extractor{report};
+  boost::apply_visitor(extractor, id);
+}
+
+}  // namespace
+
 void Reporter::Report(const core::RiskAnalysis& risk_an, std::ostream& out) {
   out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
   XmlStreamElement report("report", out);
   ReportInformation(risk_an, &report);
 
+  if (risk_an.results().empty() && risk_an.event_tree_results().empty())
+    return;
   TIMER(DEBUG1, "Reporting analysis results");
   XmlStreamElement results = report.AddChild("results");
-  for (const auto& fta : risk_an.fault_tree_analyses()) {
-    const std::string& id = fta.first;
-    core::ProbabilityAnalysis* prob_analysis = nullptr;  // Null if no analysis.
-    if (risk_an.settings().probability_analysis()) {
-      prob_analysis = risk_an.probability_analyses().at(id).get();
+  if (risk_an.settings().probability_analysis()) {
+    for (const std::unique_ptr<core::EventTreeAnalysis>& result :
+         risk_an.event_tree_results()) {
+      ReportResults(*result, &results);
     }
-    ReportResults(id, *fta.second, prob_analysis, &results);
+  }
 
-    if (prob_analysis) {
-      ReportResults(id, *prob_analysis, &results);
-    }
+  for (const core::RiskAnalysis::Result& result : risk_an.results()) {
+    if (result.fault_tree_analysis)
+      ReportResults(result.id, *result.fault_tree_analysis,
+                    result.probability_analysis.get(), &results);
 
-    if (risk_an.settings().importance_analysis()) {
-      ReportResults(id, *risk_an.importance_analyses().at(id), &results);
-    }
+    if (result.probability_analysis)
+      ReportResults(result.id, *result.probability_analysis, &results);
 
-    if (risk_an.settings().uncertainty_analysis()) {
-      ReportResults(id, *risk_an.uncertainty_analyses().at(id), &results);
-    }
+    if (result.importance_analysis)
+      ReportResults(result.id, *result.importance_analysis, &results);
+
+    if (result.uncertainty_analysis)
+      ReportResults(result.id, *result.uncertainty_analysis, &results);
   }
 }
 
@@ -202,8 +227,27 @@ void Reporter::ReportInformation(const core::RiskAnalysis& risk_an,
   ReportPerformance(risk_an, &information);
   ReportCalculatedQuantity(risk_an.settings(), &information);
   ReportModelFeatures(risk_an.model(), &information);
-  ReportOrphanPrimaryEvents(risk_an.model(), &information);
-  ReportUnusedParameters(risk_an.model(), &information);
+  ReportUnusedElements(risk_an.model().basic_events(), "Unused basic events: ",
+                       &information);
+  ReportUnusedElements(risk_an.model().house_events(), "Unused house events: ",
+                       &information);
+  ReportUnusedElements(risk_an.model().parameters(), "Unused parameters: ",
+                       &information);
+  ReportUnusedElements(risk_an.model().initiating_events(),
+                       "Unused initiating events: ", &information);
+  ReportUnusedElements(risk_an.model().event_trees(),
+                       "Unused event trees: ", &information);
+  ReportUnusedElements(risk_an.model().sequences(), "Unused sequences: ",
+                       &information);
+  ReportUnusedElements(risk_an.model().rules(), "Unused rules: ",
+                       &information);
+  for (const mef::EventTreePtr& event_tree : risk_an.model().event_trees()) {
+    std::string header = "In event tree " + event_tree->name() + ", ";
+    ReportUnusedElements(event_tree->branches(), header + "unused branches: ",
+                         &information);
+    ReportUnusedElements(event_tree->functional_events(),
+                         header + "unused functional events: ", &information);
+  }
 }
 
 void Reporter::ReportSoftwareInformation(XmlStreamElement* information) {
@@ -211,7 +255,8 @@ void Reporter::ReportSoftwareInformation(XmlStreamElement* information) {
       .SetAttribute("name", "SCRAM")
       .SetAttribute("version", *version::describe() != '\0'
                                    ? version::describe()
-                                   : version::core());
+                                   : version::core())
+      .SetAttribute("contacts", "https://scram-pra.org");
   namespace pt = boost::posix_time;
   information->AddChild("time").AddText(
       pt::to_iso_extended_string(pt::second_clock::universal_time()));
@@ -232,78 +277,93 @@ void Reporter::ReportModelFeatures(const mef::Model& model,
   feature("ccf-groups", model.ccf_groups());
   feature("fault-trees", model.fault_trees());
   feature("event-trees", model.event_trees());
-  feature("functional-events", model.functional_events());
+
+  int num_functional_events = 0;
+  for (const mef::EventTreePtr& event_tree : model.event_trees())
+    num_functional_events += event_tree->functional_events().size();
+  if (num_functional_events)
+    model_features.AddChild("functional-events").AddText(num_functional_events);
+
+  feature("sequences", model.sequences());
+  feature("rules", model.rules());
+  feature("initiating-events", model.initiating_events());
 }
 
 void Reporter::ReportPerformance(const core::RiskAnalysis& risk_an,
                                  XmlStreamElement* information) {
+  if (risk_an.results().empty())
+    return;
   // Setup for performance information.
   XmlStreamElement performance = information->AddChild("performance");
-  for (const auto& fta : risk_an.fault_tree_analyses()) {
+  for (const core::RiskAnalysis::Result& result : risk_an.results()) {
     XmlStreamElement calc_time = performance.AddChild("calculation-time");
-    const std::string& id = fta.first;
-    calc_time.SetAttribute("name", id);
-    calc_time.AddChild("products").AddText(fta.second->analysis_time());
+    scram::PutId(result.id, &calc_time);
+    if (result.fault_tree_analysis)
+      calc_time.AddChild("products")
+          .AddText(result.fault_tree_analysis->analysis_time());
 
-    if (risk_an.settings().probability_analysis()) {
+    if (result.probability_analysis)
       calc_time.AddChild("probability")
-          .AddText(risk_an.probability_analyses().at(id)->analysis_time());
-    }
+          .AddText(result.probability_analysis->analysis_time());
 
-    if (risk_an.settings().importance_analysis()) {
+    if (result.importance_analysis)
       calc_time.AddChild("importance")
-          .AddText(risk_an.importance_analyses().at(id)->analysis_time());
-    }
+          .AddText(result.importance_analysis->analysis_time());
 
-    if (risk_an.settings().uncertainty_analysis()) {
+    if (result.uncertainty_analysis)
       calc_time.AddChild("uncertainty")
-          .AddText(risk_an.uncertainty_analyses().at(id)->analysis_time());
-    }
+          .AddText(result.uncertainty_analysis->analysis_time());
   }
 }
 
-void Reporter::ReportOrphanPrimaryEvents(const mef::Model& model,
-                                         XmlStreamElement* information) {
-  std::string out;
-  for (const mef::BasicEventPtr& param : model.basic_events()) {
-    if (param->orphan())
-      out += param->id() + " ";
-  }
-  for (const mef::HouseEventPtr& param : model.house_events()) {
-    if (param->orphan())
-      out += param->id() + " ";
-  }
+template <class T>
+void Reporter::ReportUnusedElements(const T& container,
+                                    const std::string& header,
+                                    XmlStreamElement* information) {
+  std::string out = boost::join(
+      container | boost::adaptors::filtered([](auto& ptr) {
+        return !ptr->usage();
+      }) | boost::adaptors::transformed([](auto& ptr) -> decltype(auto) {
+        return mef::Id::unique_name(*ptr);
+      }),
+      " ");
   if (!out.empty())
-    information->AddChild("warning").AddText("Orphan Primary Events: " + out);
+    information->AddChild("warning").AddText(header + out);
 }
 
-void Reporter::ReportUnusedParameters(const mef::Model& model,
-                                      XmlStreamElement* information) {
-  std::string out;
-  for (const mef::ParameterPtr& param : model.parameters()) {
-    if (param->unused())
-      out += param->id() + " ";
+void Reporter::ReportResults(const core::EventTreeAnalysis& eta,
+                             XmlStreamElement* results) {
+  XmlStreamElement initiating_event = results->AddChild("initiating-event");
+  initiating_event.SetAttribute("name", eta.initiating_event().name())
+      .SetAttribute("sequences", eta.sequences().size());
+  for (const core::EventTreeAnalysis::Result& result_sequence :
+       eta.sequences()) {
+    initiating_event.AddChild("sequence")
+        .SetAttribute("name", result_sequence.sequence.name())
+        .SetAttribute("value", result_sequence.p_sequence);
   }
-  if (!out.empty())
-    information->AddChild("warning").AddText("Unused Parameters: " + out);
 }
 
-void Reporter::ReportResults(const std::string& ft_name,
+void Reporter::ReportResults(const core::RiskAnalysis::Result::Id& id,
                              const core::FaultTreeAnalysis& fta,
                              const core::ProbabilityAnalysis* prob_analysis,
                              XmlStreamElement* results) {
-  CLOCK(cs_time);
-  LOG(DEBUG2) << "Reporting products for " << ft_name << "...";
+  TIMER(DEBUG2, "Reporting products");
   XmlStreamElement sum_of_products = results->AddChild("sum-of-products");
-  sum_of_products.SetAttribute("name", ft_name)
+  scram::PutId(id, &sum_of_products);
+
+  std::string warning = fta.warnings();
+  if (prob_analysis && prob_analysis->warnings().empty() == false)
+    warning += (warning.empty() ? "" : "; ") + prob_analysis->warnings();
+  if (!warning.empty())
+    sum_of_products.SetAttribute("warning", warning);
+
+  sum_of_products
       .SetAttribute("basic-events", fta.products().product_events().size())
       .SetAttribute("products", fta.products().size());
 
-  std::string warning = fta.warnings();
-  if (prob_analysis) {
+  if (prob_analysis)
     sum_of_products.SetAttribute("probability", prob_analysis->p_total());
-    warning += prob_analysis->warnings();
-  }
 
   if (fta.products().empty() == false) {
     sum_of_products.SetAttribute(
@@ -312,10 +372,6 @@ void Reporter::ReportResults(const std::string& ft_name,
                         boost::adaptors::transformed(
                             [](int number) { return std::to_string(number); }),
                     " "));
-  }
-
-  if (!warning.empty()) {
-    sum_of_products.AddChild("warning").AddText(warning);
   }
 
   double sum = 0;  // Sum of probabilities for contribution calculations.
@@ -336,16 +392,15 @@ void Reporter::ReportResults(const std::string& ft_name,
       ReportLiteral(literal, &product);
     }
   }
-  LOG(DEBUG2) << "Finished reporting products in " << DUR(cs_time);
 }
 
-void Reporter::ReportResults(const std::string& ft_name,
+void Reporter::ReportResults(const core::RiskAnalysis::Result::Id& id,
                              const core::ProbabilityAnalysis& prob_analysis,
                              XmlStreamElement* results) {
   if (!prob_analysis.p_time().empty()) {
     XmlStreamElement curve = results->AddChild("curve");
-    curve.SetAttribute("name", ft_name)
-        .SetAttribute("description", "Probability values over time")
+    scram::PutId(id, &curve);
+    curve.SetAttribute("description", "Probability values over time")
         .SetAttribute("X-title", "Mission time")
         .SetAttribute("Y-title", "Probability")
         .SetAttribute("X-unit", "hours");
@@ -358,8 +413,8 @@ void Reporter::ReportResults(const std::string& ft_name,
 
   if (prob_analysis.settings().safety_integrity_levels()) {
     XmlStreamElement sil = results->AddChild("safety-integrity-levels");
-    sil.SetAttribute("name", ft_name)
-        .SetAttribute("PFD-avg", prob_analysis.sil().pfd_avg)
+    scram::PutId(id, &sil);
+    sil.SetAttribute("PFD-avg", prob_analysis.sil().pfd_avg)
         .SetAttribute("PFH-avg", prob_analysis.sil().pfh_avg);
     auto report_sil_fractions = [&sil](const auto& sil_fractions) {
       XmlStreamElement hist = sil.AddChild("histogram");
@@ -382,16 +437,16 @@ void Reporter::ReportResults(const std::string& ft_name,
 }
 
 void Reporter::ReportResults(
-    const std::string& ft_name,
+    const core::RiskAnalysis::Result::Id& id,
     const core::ImportanceAnalysis& importance_analysis,
     XmlStreamElement* results) {
   XmlStreamElement importance = results->AddChild("importance");
-  importance.SetAttribute("name", ft_name);
+  scram::PutId(id, &importance);
+  if (!importance_analysis.warnings().empty()) {
+    importance.SetAttribute("warning", importance_analysis.warnings());
+  }
   importance.SetAttribute("basic-events",
                           importance_analysis.importance().size());
-  if (!importance_analysis.warnings().empty()) {
-    importance.AddChild("warning").AddText(importance_analysis.warnings());
-  }
 
   for (const core::ImportanceRecord& entry : importance_analysis.importance()) {
     const core::ImportanceFactors& factors = entry.factors;
@@ -409,13 +464,13 @@ void Reporter::ReportResults(
   }
 }
 
-void Reporter::ReportResults(const std::string& ft_name,
+void Reporter::ReportResults(const core::RiskAnalysis::Result::Id& id,
                              const core::UncertaintyAnalysis& uncert_analysis,
                              XmlStreamElement* results) {
   XmlStreamElement measure = results->AddChild("measure");
-  measure.SetAttribute("name", ft_name);
+  scram::PutId(id, &measure);
   if (!uncert_analysis.warnings().empty()) {
-    measure.AddChild("warning").AddText(uncert_analysis.warnings());
+    measure.SetAttribute("warning", uncert_analysis.warnings());
   }
   measure.AddChild("mean").SetAttribute("value", uncert_analysis.mean());
   measure.AddChild("standard-deviation")

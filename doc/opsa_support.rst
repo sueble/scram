@@ -43,8 +43,8 @@ More information about the initiative and format can be found on http://open-psa
 
 .. _opsa_support:
 
-Currently Supported Open-PSA MEF Features
-=========================================
+Supported Open-PSA MEF Features
+===============================
 
 The difference between `the Open-PSA MEF schema <https://github.com/open-psa/schemas/>`_
 and SCRAM's :ref:`schema` can be used
@@ -53,6 +53,14 @@ to identify the supported and unsupported features.
 - Label
 - Attributes
 - Public and Private Roles
+- Event Tree Layer
+
+    * Initiating events
+    * Sequences
+    * Functional events
+    * Branches
+    * Instructions (collect-expression, collect-formula, if-then-else, block, rule, link)
+
 - Fault Tree Layer
 
     * Components
@@ -80,6 +88,10 @@ Deviations from the Open-PSA MEF
 
 - Redefinition of constructs (e.g., containers, events, parameters) is an error.
 - Attributes are not inherited.
+- Recursive parameters are not allowed.
+- Recursive event-tree rules (instructions) are not allowed.
+- Recursive event-tree links (instructions) are not allowed.
+- Mixing collect-expression and collect-formula is not allowed.
 - An empty text in XML attributes or elements is considered an error.
 
 

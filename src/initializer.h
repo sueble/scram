@@ -254,14 +254,28 @@ class Initializer : private boost::noncopyable {
   FormulaPtr GetFormula(const xmlpp::Element* formula_node,
                         const std::string& base_path);
 
+  /// Processes event tree branch instructions and target from XML data.
+  ///
+  /// @param[in] xml_nodes  The XML element data of the branch.
+  /// @param[in,out] event_tree  The host event tree as a context container.
+  /// @param[out] branch  The branch to be defined with instructions and target.
+  ///
+  /// @pre All the XML elements except for the last one are instructions.
+  ///
+  /// @post All forks in the event tree get registered.
+  ///
+  /// @throws ValidationError  Errors in instruction or target definitions.
+  void DefineBranch(const xmlpp::NodeSet& xml_nodes,
+                    EventTree* event_tree, Branch* branch);
+
   /// Processes Instruction definitions.
   ///
   /// @param[in] xml_element  The XML element with instruction definitions.
   ///
-  /// @returns The newly defined instruction.
+  /// @returns The newly defined or registered instruction.
   ///
   /// @throws ValidationError  Errors in instruction definitions.
-  InstructionPtr GetInstruction(const xmlpp::Element* xml_element);
+  Instruction* GetInstruction(const xmlpp::Element* xml_element);
 
   /// Processes Expression definitions in input file.
   ///
@@ -317,6 +331,34 @@ class Initializer : private boost::noncopyable {
   ///       if this error condition may lead resource leaks.
   void ValidateInitialization();
 
+  /// Checks the proper order of functional events in event tree forks.
+  ///
+  /// @param[in] branch  The event tree branch to start the check.
+  ///
+  /// @throws ValidationError  The order of forks is invalid.
+  ///
+  /// @pre All named branches are fed separately from initial states.
+  void CheckFunctionalEventOrder(const Branch& branch);
+
+  /// Checks that link instructions are used only in event-tree sequences.
+  ///
+  /// @param[in] branch  The event tree branch to start the check.
+  ///
+  /// @throws ValidationError  The Link instruction is misused.
+  ///
+  /// @pre All named branches are fed separately from initial states.
+  void EnsureLinksOnlyInSequences(const Branch& branch);
+
+  /// Ensures that event-tree does not mix
+  /// collect-expression and collect-formula.
+  ///
+  /// @param[in] branch  The event tree branch to start the check.
+  ///
+  /// @throws ValidationError  The Link instruction is misused.
+  ///
+  /// @pre All named branches are fed separately from initial states.
+  void EnsureHomogeneousEventTree(const Branch& branch);
+
   /// Validates expressions and anything
   /// that is dependent on them,
   /// such as parameters and basic events.
@@ -350,12 +392,18 @@ class Initializer : private boost::noncopyable {
   /// Basic events rely on parameter registrations.
   /// Gates rely on gate, basic event, and house event registrations.
   /// CCF groups rely on both parameter and basic event registrations.
+  /// Event tree branches and instructions have complex interdependencies.
+  /// Initiating events may reference their associated event trees.
   ///
   /// Elements are assumed to be unique.
-  TbdContainer<Parameter, BasicEvent, Gate, CcfGroup, Sequence> tbd_;
+  TbdContainer<Parameter, BasicEvent, Gate, CcfGroup, Sequence, EventTree,
+               InitiatingEvent, Rule>
+      tbd_;
 
   /// Container of defined expressions for later validation due to cycles.
   std::vector<std::pair<Expression*, const xmlpp::Element*>> expressions_;
+  /// Container for event tree links to check for cycles.
+  std::vector<Link*> links_;
 };
 
 }  // namespace mef
