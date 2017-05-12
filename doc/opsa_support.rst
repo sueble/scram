@@ -60,6 +60,8 @@ to identify the supported and unsupported features.
     * Functional events
     * Branches
     * Instructions (collect-expression, collect-formula, if-then-else, block, rule, link)
+    * Set-instructions (set-house-event)
+    * Set-instruction directions (forward)
 
 - Fault Tree Layer
 
@@ -81,6 +83,7 @@ to identify the supported and unsupported features.
     * Conditional operations
     * Random deviate (normal, log-normal, histogram, uniform, gamma, beta)
     * Built-in expressions (exponential, GLM, Weibull, periodic-test)
+    * Test event (test-initiating-event, test-functional-event)
 
 
 Deviations from the Open-PSA MEF

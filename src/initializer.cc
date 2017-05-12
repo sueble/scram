@@ -34,6 +34,7 @@
 #include "expression/exponential.h"
 #include "expression/numerical.h"
 #include "expression/random_deviate.h"
+#include "expression/test_event.h"
 #include "ext/find_iterator.h"
 #include "logger.h"
 #include "xml.h"
@@ -799,6 +800,20 @@ Instruction* Initializer::GetInstruction(const xmlpp::Element* xml_element) {
         std::make_unique<Block>(std::move(instructions)));
   }
 
+  if (node_name == "set-house-event") {
+    std::string name = GetAttributeValue(xml_element, "name");
+    if (!model_->house_events().count(name)) {
+      throw ValidationError(GetLine(xml_element) + "House event " + name +
+                            " is not defined in the model.");
+    }
+    assert(args.size() == 1);
+    std::string val = GetAttributeValue(XmlElement(args.front()), "value");
+    assert(val == "true" || val == "false");
+    bool state = val == "true";
+    return register_instruction(
+        std::make_unique<SetHouseEvent>(std::move(name), state));
+  }
+
   assert(false && "Unknown instruction type.");
 }
 
@@ -1061,6 +1076,16 @@ Expression* Initializer::GetExpression(const xmlpp::Element* expr_element,
   }
   if (expr_type == "pi")
     return &ConstantExpression::kPi;
+
+  if (expr_type == "test-initiating-event") {
+    return register_expression(std::make_unique<TestInitiatingEvent>(
+        GetAttributeValue(expr_element, "name"), model_->context()));
+  }
+  if (expr_type == "test-functional-event") {
+    return register_expression(std::make_unique<TestFunctionalEvent>(
+        GetAttributeValue(expr_element, "name"),
+        GetAttributeValue(expr_element, "state"), model_->context()));
+  }
 
   if (auto* expression = GetParameter(expr_type, expr_element, base_path))
     return expression;
