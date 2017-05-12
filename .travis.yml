@@ -38,6 +38,7 @@ install:
     - .travis/install.sh  # Dependencies are built with gcc or clang.
 
 before_script:
+    - find src/ tests/ -type f | grep -v 'error' | xargs -n 1 sed -i 's/noexcept//'
     - mkdir build
     - cd build
 
