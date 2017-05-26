@@ -18,10 +18,16 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include <QMainWindow>
+#include <QTreeWidgetItem>
+
+#include <libxml++/libxml++.h>
+
+#include "src/settings.h"
 
 namespace Ui {
 class MainWindow;
@@ -38,15 +44,77 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    void setConfig(const std::string &config)
-    {
-        m_config = QString::fromStdString(config);
-    }
-    void addInputFiles(const std::vector<std::string>& /*input_files*/) {}
+    void setConfig(const std::string &configPath,
+                   std::vector<std::string> inputFiles = {});
+    void addInputFiles(const std::vector<std::string> &inputFiles);
+
+signals:
+    void configChanged();
+
+private slots:
+    /**
+     * @brief Opens a new project configuration.
+     *
+     * The current project and input files are reset.
+     *
+     * @todo Check if the current documents need saving.
+     */
+    void createNewProject();
+
+    /**
+     * @brief Opens an existing project configuration.
+     *
+     * The current project and input files are reset.
+     */
+    void openProject();
+
+    /**
+     * @brief Saves the project to a file.
+     *
+     * If the project is new,
+     * it does not have a default destination file.
+     * The user is required to specify the file upon save.
+     */
+    void saveProject();
+
+    /**
+     * @brief Saves the project to a potentially different file.
+     */
+    void saveProjectAs();
+
+    /**
+     * Processes the element activation in the tree view.
+     */
+    void showElement(QTreeWidgetItem *item);
 
 private:
-    Ui::MainWindow *ui;
-    QString m_config;  ///< The main project configuration file.
+    /// Keeps the file location and XML data together.
+    struct XmlFile {
+        XmlFile();
+        explicit XmlFile(std::string filename);
+        void reset(std::string filename);
+        std::string file; ///< The original location of the document.
+        xmlpp::Node *xml; ///< The root element of the document.
+        std::unique_ptr<xmlpp::DomParser> parser; ///< The document holder.
+    };
+
+    void setupActions(); ///< Setup all the actions with connections.
+
+    /// @returns The current set input file paths.
+    std::vector<std::string> extractInputFiles();
+
+    /// @returns The current set of XML model files.
+    std::vector<xmlpp::Node *> extractModelXml();
+
+    /**
+     * Resets the tree widget with the new model.
+     */
+    void resetTreeWidget();
+
+    std::unique_ptr<Ui::MainWindow> ui;
+    XmlFile m_config; ///< The main project configuration file.
+    std::vector<XmlFile> m_inputFiles;  ///< The project model files.
+    core::Settings m_settings; ///< The analysis settings.
 };
 
 } // namespace gui
