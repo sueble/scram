@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Olzhas Rakhimov
+ * Copyright (C) 2016-2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,15 +19,16 @@
 #define EVENT_H
 
 #include <memory>
+#include <unordered_map>
 
 #include <QGraphicsItem>
-#include <QGraphicsView>
 #include <QSize>
 
-#include "gate.h"
+#include "src/event.h"
 
 namespace scram {
 namespace gui {
+namespace diagram {
 
 /**
  * @brief The base class for probabilistic events in a fault tree.
@@ -41,75 +42,36 @@ namespace gui {
  * This class provides the reference units for derived classes to use.
  * All derived class shapes should stay within the allowed box limits
  * to make the fault tree structure layered.
- *
- * The derived classes must confine themselves in (10 width x 10 width) box.
  */
 class Event : public QGraphicsItem
 {
 public:
-    /**
-     * @brief Assigns the short name or ID for the event.
-     *
-     * @param name  Identifying string name for the event.
-     */
-    void setName(QString name) { m_name = std::move(name); }
-
-    /**
-     * @return Identifying name string.
-     *         If the name has not been set,
-     *         the string is empty.
-     */
-    const QString &getName() const { return m_name; }
-
-    /**
-     * @brief Adds description to the event.
-     *
-     * @param desc  Information about the event.
-     *              Empty string for events without descriptions.
-     */
-    void setDescription(QString desc) { m_description = std::move(desc); }
-
-    /**
-     * @return Description of the event.
-     *         Empty string if no description is provided.
-     */
-    const QString &getDescription() { return m_description; }
-
     QRectF boundingRect() const final;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                QWidget *widget) final;
 
+    /// @returns The width of the whole subgraph.
+    virtual double width() const;
+
 protected:
+    /// The confining size of the Event graphics in characters.
+    /// The derived event types should stay within this confinement.
+    static const QSize m_size;
+    /// The height of the confining space used only by the Event base class.
+    static const double m_baseHeight;
+    /// The length of the ID box in characters.
+    /// The height of the ID box is 1 character.
+    static const double m_idBoxLength;
+    /// The height of the Label box in characters.
+    static const double m_labelBoxHeight;
+
     /**
      * @brief Assigns an event to a presentation view.
      *
-     * The graphical representation of the derived type
-     * is deduced by calling getTypeGraphics.
-     *
-     * @tparam T  The derived class type.
-     *
-     * @param view  The host view.
+     * @param event  The data event.
+     * @param parent  The parent Graphics event.
      */
-    template <class T> Event(const T &, QGraphicsView *view);
-
-    /**
-     * @brief Provides the graphical representation of the derived type.
-     *
-     * @tparam T  The derived class type.
-     *
-     * @param units  The unit height and width for drawings.
-     *
-     * @return Graphics item to be attached to the event graphics.
-     *         nullptr if the item is undefined upon construction (default).
-     *
-     * @post The item is unowned and allocated on the heap
-     *       in order to be owned by the base event graphics item.
-     */
-    template <class T>
-    static QGraphicsItem *getTypeGraphics(const QSize & /*units*/)
-    {
-        return nullptr;
-    }
+    explicit Event(const mef::Event &event, QGraphicsItem *parent = nullptr);
 
     /**
      * @return The graphics of the derived class.
@@ -129,10 +91,9 @@ protected:
      */
     QSize units() const;
 
+    const mef::Event &m_event; ///< The data.
+
 private:
-    QGraphicsView *m_view;         ///< The host view.
-    QString m_name;                ///< Identifying name of the event.
-    QString m_description;         ///< Description of the event.
     QGraphicsItem *m_typeGraphics; ///< The graphics of the derived type.
 };
 
@@ -142,39 +103,86 @@ private:
 class BasicEvent : public Event
 {
 public:
-    /**
-     * @param view  The host view.
-     */
-    explicit BasicEvent(QGraphicsView *view);
+    explicit BasicEvent(const mef::BasicEvent &event,
+                        QGraphicsItem *parent = nullptr);
 };
 
 /**
- * @brief Intermediate fault events with gates.
+ * @brief Representation of a fault tree house events.
  */
-class IntermediateEvent : public Event
+class HouseEvent : public Event
+{
+public:
+    explicit HouseEvent(const mef::HouseEvent &event,
+                        QGraphicsItem *parent = nullptr);
+};
+
+/**
+ * @brief Placeholder for events with a potential to become a gate.
+ */
+class UndevelopedEvent : public Event
+{
+public:
+    explicit UndevelopedEvent(const mef::BasicEvent &event,
+                              QGraphicsItem *parent = nullptr);
+};
+
+/**
+ * @brief The event used in Inhibit gates.
+ */
+class ConditionalEvent : public Event
+{
+public:
+    explicit ConditionalEvent(const mef::BasicEvent &event,
+                              QGraphicsItem *parent = nullptr);
+};
+
+/**
+ * An alias pointer to a gate.
+ */
+class TransferIn : public Event
+{
+public:
+    explicit TransferIn(const mef::Gate &event,
+                        QGraphicsItem *parent = nullptr);
+};
+
+/**
+ * @brief Fault tree intermediate events or gates.
+ */
+class Gate : public Event
 {
 public:
     /**
-     * @param view  The host view.
-     */
-    explicit IntermediateEvent(QGraphicsView *view);
-
-    /**
-     * @brief Sets the Boolean logic for the intermediate event inputs.
+     * @brief Constructs the graph with the transfer symbols for gates.
      *
-     * @param gate  The logic gate of the intermediate event.
+     * @param event  The event to be converted into a graphics item.
+     * @param transfer  The set of already processed gates
+     *                  to be shown as transfer event.
+     * @param parent  The optional parent graphics item.
      */
-    void setGate(std::unique_ptr<Gate> gate)
-    {
-        setTypeGraphics(gate.release());
-    }
+    Gate(const mef::Gate &event,
+         std::unordered_map<const mef::Gate *, Gate *> *transfer,
+         QGraphicsItem *parent = nullptr);
+
+    std::unique_ptr<QGraphicsItem> getGateGraphicsType(mef::Operator type);
+
+    double width() const override;
 
     /**
-     * @return The logic gate of the intermediate event.
+     * @brief Adds the transfer-out symbol besides the gate shape.
      */
-    Gate *getGate() const { return static_cast<Gate *>(getTypeGraphics()); }
+    void addTransferOut();
+
+private:
+    static const QSize m_maxSize; ///< The constraints on type graphics.
+    static const double m_space;  ///< The space between children in chars.
+
+    double m_width = 0; ///< Assume the graph does not change its width.
+    bool m_transferOut = false;  ///< The indication of the transfer-out.
 };
 
+} // namespace diagram
 } // namespace gui
 } // namespace scram
 

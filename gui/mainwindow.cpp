@@ -18,16 +18,23 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include <unordered_map>
+
 #include <QAction>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QFileDialog>
 #include <QGraphicsScene>
 #include <QMessageBox>
+#include <QPrinter>
+#include <QPrintDialog>
+#include <QSvgGenerator>
 #include <QTableWidget>
+#include <QtOpenGL>
 
 #include "event.h"
 #include "guiassert.h"
+#include "zoomableview.h"
 
 #include "src/config.h"
 #include "src/error.h"
@@ -48,7 +55,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->treeWidget, &QTreeWidget::itemActivated, this,
             &MainWindow::showElement);
     connect(ui->tabWidget, &QTabWidget::tabCloseRequested, this,
-            [this](int index) { ui->tabWidget->removeTab(index); });
+            [this](int index) {
+                auto *widget = ui->tabWidget->widget(index);
+                ui->tabWidget->removeTab(index);
+                delete widget;
+            });
 }
 
 MainWindow::~MainWindow() = default;
@@ -85,7 +96,7 @@ void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
         std::vector<std::string> all_input = extractInputFiles();
         all_input.insert(all_input.end(), inputFiles.begin(),
                          inputFiles.end());
-        mef::Initializer(all_input, m_settings);
+        m_model = mef::Initializer(all_input, m_settings).model();
     } catch (scram::Error &err) {
         QMessageBox::critical(this, tr("Initialization Error"),
                               QString::fromUtf8(err.what()));
@@ -142,6 +153,12 @@ void MainWindow::setupActions()
     ui->actionSaveProjectAs->setShortcut(QKeySequence::SaveAs);
     connect(ui->actionSaveProjectAs, &QAction::triggered, this,
             &MainWindow::saveProjectAs);
+
+    ui->actionPrint->setShortcut(QKeySequence::Print);
+    connect(ui->actionPrint, &QAction::triggered, this, &MainWindow::print);
+
+    connect(ui->actionExportAs, &QAction::triggered, this,
+            &MainWindow::exportAs);
 }
 
 void MainWindow::createNewProject()
@@ -151,6 +168,7 @@ void MainWindow::createNewProject()
     m_config.file.clear();
     m_config.xml = m_config.parser->get_document()->get_root_node();
     m_inputFiles.clear();
+    m_model = std::make_shared<mef::Model>();
 
     resetTreeWidget();
 
@@ -207,32 +225,60 @@ void MainWindow::saveProjectAs()
     saveProject();
 }
 
+void MainWindow::exportAs()
+{
+    QString filename = QFileDialog::getSaveFileName(
+        this, tr("Export As"), QDir::currentPath(),
+        tr("SVG files (*.svg);;All files (*.*)"));
+    QWidget *widget = ui->tabWidget->currentWidget();
+    GUI_ASSERT(widget,);
+    QGraphicsView *view = qobject_cast<QGraphicsView *>(widget);
+    GUI_ASSERT(view,);
+    QGraphicsScene *scene = view->scene();
+    QSize sceneSize = scene->sceneRect().size().toSize();
+
+    QSvgGenerator generator;
+    generator.setFileName(filename);
+    generator.setSize(sceneSize);
+    generator.setViewBox(QRect(0, 0, sceneSize.width(), sceneSize.height()));
+    generator.setTitle(filename);
+    QPainter painter;
+    painter.begin(&generator);
+    scene->render(&painter);
+    painter.end();
+}
+
+void MainWindow::print()
+{
+    QPrinter printer;
+    QPrintDialog dialog(&printer, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        QPainter painter(&printer);
+        painter.setRenderHint(QPainter::Antialiasing);
+        ui->tabWidget->currentWidget()->render(&painter);
+    }
+}
+
 void MainWindow::showElement(QTreeWidgetItem *item)
 {
     QString name = item->data(0, Qt::DisplayRole).toString();
     if (name == tr("Basic Events")) {
         auto *table = new QTableWidget(nullptr);
-        table->setColumnCount(2);
-        table->setHorizontalHeaderLabels({tr("Name"), tr("Label")});
+        table->setColumnCount(3);
+        table->setHorizontalHeaderLabels(
+            {tr("Id"), tr("Probability"), tr("Label")});
+        table->setRowCount(m_model->basic_events().size());
         int row = 0;
-        for (const XmlFile &file : m_inputFiles) {
-            xmlpp::NodeSet xml_nodes = file.xml->find("//define-basic-event");
-            table->setRowCount(row + xml_nodes.size());
-            for (const xmlpp::Node *xml_node : xml_nodes) {
-                table->setItem(
-                    row, 0, new QTableWidgetItem(
-                              QString::fromStdString(scram::GetAttributeValue(
-                                  XmlElement(xml_node), "name"))));
-                xmlpp::NodeSet label = xml_node->find("./label");
-                if (!label.empty()) {
-                    table->setItem(
-                        row, 1,
-                        new QTableWidgetItem(
-                            QString::fromStdString(scram::GetContent(
-                                XmlElement(label.front())->get_child_text()))));
-                }
-                ++row;
-            }
+        for (const mef::BasicEventPtr &basicEvent : m_model->basic_events()) {
+            table->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(
+                                       basicEvent->id())));
+            table->setItem(row, 1, new QTableWidgetItem(
+                                       basicEvent->HasExpression()
+                                           ? QString::number(basicEvent->p())
+                                           : tr("N/A")));
+            table->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(
+                                       basicEvent->label())));
+            ++row;
         }
         table->setWordWrap(false);
         table->resizeColumnsToContents();
@@ -275,22 +321,28 @@ std::vector<xmlpp::Node *> MainWindow::extractModelXml()
 void MainWindow::resetTreeWidget()
 {
     ui->treeWidget->clear();
-    if (m_inputFiles.empty()) {
-        ui->treeWidget->setHeaderLabel(tr("Model"));
-    } else {
-        std::string name = scram::GetAttributeValue(
-            XmlElement(m_inputFiles.front().xml), "name");
-        ui->treeWidget->setHeaderLabel(
-            tr("Model: %1").arg(QString::fromStdString(name)));
-    }
+    ui->treeWidget->setHeaderLabel(
+        tr("Model: %1").arg(QString::fromStdString(m_model->name())));
 
     auto *faultTrees = new QTreeWidgetItem({tr("Fault Trees")});
-    for (const XmlFile &file : m_inputFiles) {
-        for (const xmlpp::Node *ft_node :
-             file.xml->find("./define-fault-tree")) {
-            faultTrees->addChild(new QTreeWidgetItem({QString::fromStdString(
-                scram::GetAttributeValue(XmlElement(ft_node), "name"))}));
-        }
+    for (const mef::FaultTreePtr &faultTree : m_model->fault_trees()) {
+        faultTrees->addChild(
+            new QTreeWidgetItem({QString::fromStdString(faultTree->name())}));
+
+        auto *scene = new QGraphicsScene(this);
+        std::unordered_map<const mef::Gate *, diagram::Gate *> transfer;
+        auto *root
+            = new diagram::Gate(*faultTree->top_events().front(), &transfer);
+        scene->addItem(root);
+        auto *view = new ZoomableView(scene, this);
+        view->setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers)));
+        view->setRenderHints(QPainter::Antialiasing
+                             | QPainter::SmoothPixmapTransform);
+        view->setAlignment(Qt::AlignTop);
+        view->ensureVisible(root);
+        ui->tabWidget->addTab(
+            view, tr("Fault Tree: %1")
+                      .arg(QString::fromStdString(faultTree->name())));
     }
 
     auto *modelData = new QTreeWidgetItem({tr("Model Data")});

@@ -28,6 +28,7 @@
 #include <libxml++/libxml++.h>
 
 #include "src/settings.h"
+#include "src/model.h"
 
 namespace Ui {
 class MainWindow;
@@ -83,6 +84,16 @@ private slots:
     void saveProjectAs();
 
     /**
+     * @brief Exports the current active document/diagram.
+     */
+    void exportAs();
+
+    /**
+     * @brief Prints the current document view.
+     */
+    void print();
+
+    /**
      * Processes the element activation in the tree view.
      */
     void showElement(QTreeWidgetItem *item);
@@ -115,6 +126,7 @@ private:
     XmlFile m_config; ///< The main project configuration file.
     std::vector<XmlFile> m_inputFiles;  ///< The project model files.
     core::Settings m_settings; ///< The analysis settings.
+    std::shared_ptr<mef::Model> m_model; ///< The analysis model.
 };
 
 } // namespace gui
