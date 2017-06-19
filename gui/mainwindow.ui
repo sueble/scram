@@ -24,7 +24,7 @@
   </property>
   <property name="windowIcon">
    <iconset resource="res.qrc">
-    <normaloff>:/images/scram_logo.png</normaloff>:/images/scram_logo.png</iconset>
+    <normaloff>:/images/scram_solid128x128.png</normaloff>:/images/scram_solid128x128.png</iconset>
   </property>
   <property name="autoFillBackground">
    <bool>false</bool>
@@ -46,7 +46,7 @@
     <property name="spacing">
      <number>0</number>
     </property>
-    <item row="0" column="1">
+    <item row="0" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
        <number>-1</number>
@@ -57,21 +57,6 @@
       <property name="movable">
        <bool>true</bool>
       </property>
-     </widget>
-    </item>
-    <item row="0" column="0">
-     <widget class="QTreeWidget" name="treeWidget">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <column>
-       <property name="text">
-        <string/>
-       </property>
-      </column>
      </widget>
     </item>
    </layout>
@@ -96,14 +81,15 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
-    <addaction name="actionNewProject"/>
-    <addaction name="actionOpenProject"/>
+    <addaction name="actionNewModel"/>
+    <addaction name="actionOpenFiles"/>
     <addaction name="separator"/>
-    <addaction name="actionSaveProject"/>
-    <addaction name="actionSaveProjectAs"/>
+    <addaction name="actionSave"/>
+    <addaction name="actionSaveAs"/>
     <addaction name="separator"/>
     <addaction name="actionExportAs"/>
     <addaction name="separator"/>
+    <addaction name="actionPrintPreview"/>
     <addaction name="actionPrint"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
@@ -112,16 +98,63 @@
     <property name="title">
      <string>&amp;View</string>
     </property>
-    <addaction name="actionToolbar"/>
+    <widget class="QMenu" name="menuZoom">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="title">
+      <string>&amp;Zoom</string>
+     </property>
+     <addaction name="action400"/>
+     <addaction name="action200"/>
+     <addaction name="action150"/>
+     <addaction name="action125"/>
+     <addaction name="action100"/>
+     <addaction name="action85"/>
+     <addaction name="action70"/>
+     <addaction name="action50"/>
+    </widget>
+    <widget class="QMenu" name="menuToolbars">
+     <property name="title">
+      <string>&amp;Toolbars</string>
+     </property>
+     <addaction name="actionModelToolBar"/>
+     <addaction name="actionZoomToolBar"/>
+     <addaction name="actionAnalysisToolBar"/>
+    </widget>
+    <addaction name="actionZoomIn"/>
+    <addaction name="actionZoomOut"/>
+    <addaction name="menuZoom"/>
+    <addaction name="actionBestFit"/>
+    <addaction name="separator"/>
+    <addaction name="menuToolbars"/>
+    <addaction name="separator"/>
+    <addaction name="actionData"/>
+    <addaction name="actionReports"/>
+   </widget>
+   <widget class="QMenu" name="menuAnalysis">
+    <property name="title">
+     <string>&amp;Analysis</string>
+    </property>
+    <addaction name="actionSettings"/>
+    <addaction name="separator"/>
+    <addaction name="actionRun"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>&amp;Edit</string>
+    </property>
    </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
    <addaction name="menuView"/>
+   <addaction name="menuAnalysis"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
-  <widget class="QToolBar" name="toolBar">
+  <widget class="QToolBar" name="modelToolBar">
    <property name="windowTitle">
-    <string>toolBar</string>
+    <string>Model Tool Bar</string>
    </property>
    <attribute name="toolBarArea">
     <enum>TopToolBarArea</enum>
@@ -129,10 +162,141 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="actionNewProject"/>
-   <addaction name="actionOpenProject"/>
-   <addaction name="actionSaveProject"/>
-   <addaction name="actionSaveProjectAs"/>
+   <addaction name="actionNewModel"/>
+   <addaction name="actionOpenFiles"/>
+   <addaction name="actionSave"/>
+   <addaction name="actionSaveAs"/>
+  </widget>
+  <widget class="QToolBar" name="editToolBar">
+   <property name="windowTitle">
+    <string>Edit Tool Bar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <widget class="QToolBar" name="zoomToolBar">
+   <property name="windowTitle">
+    <string>Zoom Tool Bar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionZoomIn"/>
+   <addaction name="actionBestFit"/>
+   <addaction name="actionZoomOut"/>
+  </widget>
+  <widget class="QToolBar" name="analysisToolBar">
+   <property name="windowTitle">
+    <string>Analysis Tool Bar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionSettings"/>
+   <addaction name="actionRun"/>
+  </widget>
+  <widget class="QDockWidget" name="modelDockWidget">
+   <property name="features">
+    <set>QDockWidget::AllDockWidgetFeatures</set>
+   </property>
+   <property name="windowTitle">
+    <string>Data</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents">
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QTreeWidget" name="treeWidget">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="animated">
+        <bool>true</bool>
+       </property>
+       <column>
+        <property name="text">
+         <string/>
+        </property>
+       </column>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QDockWidget" name="reportDockWidget">
+   <property name="features">
+    <set>QDockWidget::AllDockWidgetFeatures</set>
+   </property>
+   <property name="windowTitle">
+    <string>Reports</string>
+   </property>
+   <attribute name="dockWidgetArea">
+    <number>1</number>
+   </attribute>
+   <widget class="QWidget" name="dockWidgetContents_2">
+    <layout class="QVBoxLayout" name="verticalLayout">
+     <property name="spacing">
+      <number>0</number>
+     </property>
+     <property name="leftMargin">
+      <number>0</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>0</number>
+     </property>
+     <property name="bottomMargin">
+      <number>0</number>
+     </property>
+     <item>
+      <widget class="QTreeWidget" name="reportTreeWidget">
+       <property name="animated">
+        <bool>true</bool>
+       </property>
+       <attribute name="headerVisible">
+        <bool>false</bool>
+       </attribute>
+       <column>
+        <property name="text">
+         <string notr="true">1</string>
+        </property>
+       </column>
+      </widget>
+     </item>
+    </layout>
+   </widget>
   </widget>
   <action name="actionAboutQt">
    <property name="icon">
@@ -164,34 +328,34 @@
     <string>E&amp;xit</string>
    </property>
    <property name="toolTip">
-    <string>Exit the application</string>
+    <string>Exit the Application</string>
    </property>
   </action>
-  <action name="actionNewProject">
+  <action name="actionNewModel">
    <property name="icon">
     <iconset theme="document-new">
      <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
-    <string>&amp;New Project</string>
+    <string>&amp;New Model</string>
    </property>
    <property name="toolTip">
-    <string>Create a new project</string>
+    <string>Create a New Model</string>
    </property>
   </action>
-  <action name="actionOpenProject">
+  <action name="actionOpenFiles">
    <property name="icon">
     <iconset theme="document-open">
      <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
-    <string>&amp;Open Project</string>
+    <string>&amp;Open Model Files...</string>
    </property>
    <property name="toolTip">
-    <string>Open an existing project</string>
+    <string>Open Model Files</string>
    </property>
   </action>
-  <action name="actionSaveProject">
+  <action name="actionSave">
    <property name="enabled">
     <bool>false</bool>
    </property>
@@ -200,10 +364,10 @@
      <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
-    <string>&amp;Save Project</string>
+    <string>&amp;Save Model</string>
    </property>
   </action>
-  <action name="actionSaveProjectAs">
+  <action name="actionSaveAs">
    <property name="enabled">
     <bool>false</bool>
    </property>
@@ -212,21 +376,13 @@
      <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
-    <string>Save Project &amp;As...</string>
-   </property>
-  </action>
-  <action name="actionToolbar">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>&amp;Toolbar</string>
+    <string>Save Model &amp;As...</string>
    </property>
   </action>
   <action name="actionPrint">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="icon">
     <iconset theme="document-print">
      <normaloff>.</normaloff>.</iconset>
@@ -239,11 +395,194 @@
    </property>
   </action>
   <action name="actionExportAs">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="icon">
-    <iconset theme="document-export"/>
+    <iconset theme="document-export">
+     <normaloff>.</normaloff>.</iconset>
    </property>
    <property name="text">
     <string>&amp;Export As...</string>
+   </property>
+  </action>
+  <action name="actionZoomIn">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="zoom-in">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom &amp;In</string>
+   </property>
+  </action>
+  <action name="actionZoomOut">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="zoom-out">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom &amp;Out</string>
+   </property>
+  </action>
+  <action name="action400">
+   <property name="text">
+    <string>400%</string>
+   </property>
+  </action>
+  <action name="action200">
+   <property name="text">
+    <string>200%</string>
+   </property>
+  </action>
+  <action name="action150">
+   <property name="text">
+    <string>150%</string>
+   </property>
+  </action>
+  <action name="action125">
+   <property name="text">
+    <string>125%</string>
+   </property>
+  </action>
+  <action name="action100">
+   <property name="text">
+    <string>100%</string>
+   </property>
+  </action>
+  <action name="action85">
+   <property name="text">
+    <string>85%</string>
+   </property>
+  </action>
+  <action name="action50">
+   <property name="text">
+    <string>50%</string>
+   </property>
+  </action>
+  <action name="action70">
+   <property name="text">
+    <string>70%</string>
+   </property>
+  </action>
+  <action name="actionBestFit">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="zoom-fit-best">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>Best &amp;Fit</string>
+   </property>
+  </action>
+  <action name="actionRun">
+   <property name="icon">
+    <iconset theme="utilities-terminal">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Run</string>
+   </property>
+   <property name="iconText">
+    <string>Run Analysis</string>
+   </property>
+   <property name="toolTip">
+    <string>Run Analysis</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+R</string>
+   </property>
+  </action>
+  <action name="actionSettings">
+   <property name="icon">
+    <iconset theme="applications-system">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Settings...</string>
+   </property>
+   <property name="iconText">
+    <string>Analysis Settings</string>
+   </property>
+   <property name="toolTip">
+    <string>Analysis Settings</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+S</string>
+   </property>
+  </action>
+  <action name="actionModelToolBar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Model</string>
+   </property>
+  </action>
+  <action name="actionZoomToolBar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Zoom</string>
+   </property>
+  </action>
+  <action name="actionAnalysisToolBar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Analysis</string>
+   </property>
+  </action>
+  <action name="actionData">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Data</string>
+   </property>
+  </action>
+  <action name="actionReports">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Reports</string>
+   </property>
+  </action>
+  <action name="actionPrintPreview">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="document-print-preview">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>Print Previe&amp;w...</string>
    </property>
   </action>
  </widget>
@@ -253,9 +592,9 @@
  </resources>
  <connections>
   <connection>
-   <sender>actionToolbar</sender>
+   <sender>actionModelToolBar</sender>
    <signal>toggled(bool)</signal>
-   <receiver>toolBar</receiver>
+   <receiver>modelToolBar</receiver>
    <slot>setVisible(bool)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -269,9 +608,9 @@
    </hints>
   </connection>
   <connection>
-   <sender>toolBar</sender>
+   <sender>modelToolBar</sender>
    <signal>visibilityChanged(bool)</signal>
-   <receiver>actionToolbar</receiver>
+   <receiver>actionModelToolBar</receiver>
    <slot>setChecked(bool)</slot>
    <hints>
     <hint type="sourcelabel">
@@ -297,6 +636,134 @@
     <hint type="destinationlabel">
      <x>319</x>
      <y>239</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>zoomToolBar</sender>
+   <signal>visibilityChanged(bool)</signal>
+   <receiver>actionZoomToolBar</receiver>
+   <slot>setChecked(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>217</x>
+     <y>44</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionZoomToolBar</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>zoomToolBar</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>217</x>
+     <y>44</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>analysisToolBar</sender>
+   <signal>visibilityChanged(bool)</signal>
+   <receiver>actionAnalysisToolBar</receiver>
+   <slot>setChecked(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>458</x>
+     <y>44</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionAnalysisToolBar</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>analysisToolBar</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>458</x>
+     <y>44</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionData</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>modelDockWidget</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>127</x>
+     <y>162</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>modelDockWidget</sender>
+   <signal>visibilityChanged(bool)</signal>
+   <receiver>actionData</receiver>
+   <slot>setChecked(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>127</x>
+     <y>162</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionReports</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>reportDockWidget</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>127</x>
+     <y>359</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>reportDockWidget</sender>
+   <signal>visibilityChanged(bool)</signal>
+   <receiver>actionReports</receiver>
+   <slot>setChecked(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>127</x>
+     <y>359</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
     </hint>
    </hints>
   </connection>

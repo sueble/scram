@@ -7,6 +7,7 @@ find_package(Qt5Widgets REQUIRED)
 find_package(Qt5Svg REQUIRED)
 find_package(Qt5OpenGL REQUIRED)
 find_package(Qt5PrintSupport REQUIRED)
+find_package(Qt5Concurrent REQUIRED)
 if(Qt5Widgets_FOUND)
   message(STATUS "Found Qt5")
   message(STATUS "Qt5 Version: ${Qt5Widgets_VERSION_STRING}")
@@ -19,6 +20,9 @@ if(Qt5OpenGL_FOUND)
 endif()
 if(Qt5PrintSupport_FOUND)
   message(STATUS "Found Qt5 PrintSupport")
+endif()
+if(Qt5Concurrent_FOUND)
+  message(STATUS "Found Qt5 Concurrent")
 endif()
 
 # Prevent implicit QString(const char*), string concat with "+", and other anti-patterns.
@@ -62,6 +66,8 @@ if(NOT HAS_TANGO AND (WIN32 OR APPLE))
 endif()
 
 set(SCRAM_GUI_SRC
+  "${CMAKE_CURRENT_SOURCE_DIR}/settingsdialog.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/printable.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/zoomableview.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/event.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/mainwindow.cpp"
@@ -74,7 +80,7 @@ add_subdirectory("${SCRAM_GUI_TS_DIR}")
 add_library(scramgui ${SCRAM_GUI_SRC} ${SCRAM_GUI_RES})
 target_link_libraries(scramgui PRIVATE
   ${LIBS} scramcore
-  Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Svg Qt5::OpenGL Qt5::PrintSupport)
+  Qt5::Core Qt5::Gui Qt5::Widgets Qt5::Svg Qt5::OpenGL Qt5::PrintSupport Qt5::Concurrent)
 
 if(INSTALL_LIBS)
   if(WIN32)
@@ -93,13 +99,40 @@ if(INSTALL_LIBS)
   endif()
 endif()
 
-add_executable(scram-gui WIN32 "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
+if(WIN32)
+  add_executable(scram-gui WIN32
+    "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/scram.rc")
+else()
+  add_executable(scram-gui "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
+endif()
 target_link_libraries(scram-gui scramgui)
 
 install(TARGETS scram-gui
   RUNTIME DESTINATION bin
   COMPONENT gui
   )
+
+if(UNIX AND NOT APPLE)
+  foreach (size IN ITEMS 32 128)
+    install(
+      FILES       "${CMAKE_CURRENT_SOURCE_DIR}/images/scram_solid${size}x${size}.png"
+      DESTINATION "share/icons/hicolor/${size}x${size}/apps"
+      COMPONENT gui
+      RENAME      "scram.png")
+  endforeach ()
+  install(
+    FILES       "${CMAKE_CURRENT_SOURCE_DIR}/images/scram_solid.svg"
+    DESTINATION "share/icons/hicolor/scalable/apps"
+    COMPONENT gui
+    RENAME      "scram.svg")
+
+  # install a desktop file so CMake appears in the application start menu
+  # with an icon
+  install(FILES scram-gui.desktop
+    DESTINATION "share/applications"
+    COMPONENT gui)
+endif()
 
 set(SCRAM_GUI_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 

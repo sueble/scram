@@ -18,17 +18,27 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include <QAction>
+#include <QComboBox>
+#include <QDir>
 #include <QMainWindow>
+#include <QRegularExpressionValidator>
 #include <QTreeWidgetItem>
+#include <QUndoStack>
 
 #include <libxml++/libxml++.h>
 
-#include "src/settings.h"
 #include "src/model.h"
+#include "src/risk_analysis.h"
+#include "src/settings.h"
+
+#include "zoomableview.h"
 
 namespace Ui {
 class MainWindow;
@@ -60,14 +70,12 @@ private slots:
      *
      * @todo Check if the current documents need saving.
      */
-    void createNewProject();
+    void createNewModel();
 
     /**
-     * @brief Opens an existing project configuration.
-     *
-     * The current project and input files are reset.
+     * @brief Opens model files.
      */
-    void openProject();
+    void openFiles(QString directory = QDir::homePath());
 
     /**
      * @brief Saves the project to a file.
@@ -76,12 +84,12 @@ private slots:
      * it does not have a default destination file.
      * The user is required to specify the file upon save.
      */
-    void saveProject();
+    void saveModel();
 
     /**
      * @brief Saves the project to a potentially different file.
      */
-    void saveProjectAs();
+    void saveModelAs();
 
     /**
      * @brief Exports the current active document/diagram.
@@ -89,44 +97,48 @@ private slots:
     void exportAs();
 
     /**
-     * @brief Prints the current document view.
+     * Activates the Zoom actions
+     * and updates the displayed zoom level.
      */
-    void print();
+    void activateZoom(int level);
 
     /**
-     * Processes the element activation in the tree view.
+     * Disables the Zoom actions.
      */
-    void showElement(QTreeWidgetItem *item);
+    void deactivateZoom();
 
 private:
-    /// Keeps the file location and XML data together.
-    struct XmlFile {
-        XmlFile();
-        explicit XmlFile(std::string filename);
-        void reset(std::string filename);
-        std::string file; ///< The original location of the document.
-        xmlpp::Node *xml; ///< The root element of the document.
-        std::unique_ptr<xmlpp::DomParser> parser; ///< The document holder.
-    };
-
     void setupActions(); ///< Setup all the actions with connections.
 
-    /// @returns The current set input file paths.
-    std::vector<std::string> extractInputFiles();
-
-    /// @returns The current set of XML model files.
-    std::vector<xmlpp::Node *> extractModelXml();
+    void setupZoomableView(ZoomableView *view); ///< Connect to actions.
 
     /**
      * Resets the tree widget with the new model.
      */
     void resetTreeWidget();
 
+    /**
+     * @brief Resets the report view.
+     *
+     * @param analysis  The analysis with results.
+     */
+    void resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis);
+
     std::unique_ptr<Ui::MainWindow> ui;
-    XmlFile m_config; ///< The main project configuration file.
-    std::vector<XmlFile> m_inputFiles;  ///< The project model files.
+    QAction *m_undoAction;
+    QAction *m_redoAction;
+    QUndoStack *m_undoStack;
+
+    std::vector<std::string> m_inputFiles;  ///< The project model files.
     core::Settings m_settings; ///< The analysis settings.
     std::shared_ptr<mef::Model> m_model; ///< The analysis model.
+    QRegularExpressionValidator m_percentValidator;  ///< Zoom percent input.
+    QComboBox *m_zoomBox; ///< The main zoom chooser/displayer widget.
+    std::unordered_map<QTreeWidgetItem *, std::function<void()>>
+        m_treeActions; ///< Actions on elements of the main tree widget.
+    std::unique_ptr<core::RiskAnalysis> m_analysis; ///< Report container.
+    std::unordered_map<QTreeWidgetItem *, std::function<void()>>
+        m_reportActions; ///< Actions on elements of the report tree widget.
 };
 
 } // namespace gui
