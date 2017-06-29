@@ -32,12 +32,11 @@
 #include <QTreeWidgetItem>
 #include <QUndoStack>
 
-#include <libxml++/libxml++.h>
-
 #include "src/model.h"
 #include "src/risk_analysis.h"
 #include "src/settings.h"
 
+#include "model.h"
 #include "zoomableview.h"
 
 namespace Ui {
@@ -67,8 +66,6 @@ private slots:
      * @brief Opens a new project configuration.
      *
      * The current project and input files are reset.
-     *
-     * @todo Check if the current documents need saving.
      */
     void createNewModel();
 
@@ -124,6 +121,16 @@ private:
      */
     void resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis);
 
+    /**
+     * Saves the model and sets the model file.
+     *
+     * @param destination  The destination file to become the main model file.
+     */
+    void saveToFile(std::string destination);
+
+    /// Override to save the model before closing the application.
+    void closeEvent(QCloseEvent *event) override;
+
     std::unique_ptr<Ui::MainWindow> ui;
     QAction *m_undoAction;
     QAction *m_redoAction;
@@ -132,7 +139,9 @@ private:
     std::vector<std::string> m_inputFiles;  ///< The project model files.
     core::Settings m_settings; ///< The analysis settings.
     std::shared_ptr<mef::Model> m_model; ///< The analysis model.
+    std::unique_ptr<model::Model> m_guiModel;  ///< The GUI Model wrapper.
     QRegularExpressionValidator m_percentValidator;  ///< Zoom percent input.
+    QRegularExpressionValidator m_nameValidator; ///< The proper name schema.
     QComboBox *m_zoomBox; ///< The main zoom chooser/displayer widget.
     std::unordered_map<QTreeWidgetItem *, std::function<void()>>
         m_treeActions; ///< Actions on elements of the main tree widget.

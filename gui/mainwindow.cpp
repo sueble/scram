@@ -30,18 +30,24 @@
 #include <QProgressDialog>
 #include <QRegularExpression>
 #include <QSvgGenerator>
+#include <QTableView>
 #include <QTableWidget>
 #include <QtConcurrent>
 #include <QtOpenGL>
+
+#include <libxml++/libxml++.h>
 
 #include "src/config.h"
 #include "src/env.h"
 #include "src/error.h"
 #include "src/ext/find_iterator.h"
 #include "src/initializer.h"
+#include "src/serialization.h"
 #include "src/xml.h"
 
+#include "elementcontainermodel.h"
 #include "event.h"
+#include "eventdialog.h"
 #include "guiassert.h"
 #include "printable.h"
 #include "settingsdialog.h"
@@ -109,10 +115,11 @@ QTableWidgetItem *constructTableItem(QVariant data)
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent),
-      ui(new Ui::MainWindow),
+    : QMainWindow(parent), ui(new Ui::MainWindow),
       m_undoStack(new QUndoStack(this)),
       m_percentValidator(QRegularExpression(QStringLiteral(R"([1-9]\d+%?)"))),
+      m_nameValidator(
+          QRegularExpression(QStringLiteral(R"([[:alpha:]]\w*(-\w+)*)"))),
       m_zoomBox(new QComboBox)
 {
     ui->setupUi(this);
@@ -184,6 +191,7 @@ MainWindow::MainWindow(QWidget *parent)
             m_settings = dialog.settings();
     });
     connect(ui->actionRun, &QAction::triggered, this, [this] {
+        GUI_ASSERT(m_model, );
         WaitDialog progress(this);
         progress.setLabelText(tr("Running analysis..."));
         auto analysis
@@ -195,6 +203,15 @@ MainWindow::MainWindow(QWidget *parent)
         progress.exec();
         futureWatcher.waitForFinished();
         resetReportWidget(std::move(analysis));
+    });
+
+    connect(this, &MainWindow::configChanged, [this] {
+        m_undoStack->clear();
+        setWindowTitle(QString::fromLatin1("%1[*]").arg(
+            QString::fromStdString(m_model->name())));
+        ui->actionSaveAs->setEnabled(true);
+        ui->actionAddElement->setEnabled(true);
+        ui->actionRun->setEnabled(true);
     });
 }
 
@@ -216,22 +233,40 @@ void MainWindow::setConfig(const std::string &configPath,
         return;
     }
 
-    ui->actionSave->setEnabled(true);
-    ui->actionSaveAs->setEnabled(true);
-
     emit configChanged();
 }
 
 void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
 {
+    static xmlpp::RelaxNGValidator validator(Env::install_dir()
+                                             + "/share/scram/gui.rng");
+
     if (inputFiles.empty())
         return;
+
+    auto validateWithGuiSchema = [](const std::string &xmlFile) {
+        std::unique_ptr<xmlpp::DomParser> parser
+            = ConstructDomParser(xmlFile);
+        try {
+            validator.validate(parser->get_document());
+        } catch (const xmlpp::validity_error &) {
+            throw ValidationError(
+                "Document failed validation against the GUI schema:\n"
+                + xmlpp::format_xml_error());
+        }
+    };
 
     try {
         std::vector<std::string> all_input = m_inputFiles;
         all_input.insert(all_input.end(), inputFiles.begin(),
                          inputFiles.end());
-        m_model = mef::Initializer(all_input, m_settings).model();
+        std::shared_ptr<mef::Model> new_model
+            = mef::Initializer(all_input, m_settings).model();
+
+        for (const std::string &inputFile : inputFiles)
+            validateWithGuiSchema(inputFile);
+
+        m_model = std::move(new_model);
         m_inputFiles = std::move(all_input);
     } catch (scram::Error &err) {
         QMessageBox::critical(this, tr("Initialization Error"),
@@ -309,29 +344,102 @@ void MainWindow::setupActions()
     ui->actionZoomOut->setShortcut(QKeySequence::ZoomOut);
 
     // Edit menu actions.
-    m_undoAction = m_undoStack->createUndoAction(this);
+    connect(ui->actionAddElement, &QAction::triggered, this, [this] {
+                EventDialog dialog;
+                dialog.nameLine->setValidator(&m_nameValidator);
+                connect(dialog.buttonBox, &QDialogButtonBox::accepted, &dialog,
+                        [&dialog, this] {
+                    QString name = dialog.nameLine->text();
+                    if (name.isEmpty()) {
+                        QMessageBox::critical(&dialog, tr("Missing Data"),
+                                              tr("The name string is empty."));
+                        return;
+                    }
+                    try {
+                        m_model->GetEvent(name.toStdString(), "");
+                        QMessageBox::critical(
+                            &dialog, tr("Duplicate Name"),
+                            tr("The event with name '%1' already exists.")
+                                .arg(name));
+                        return;
+                    } catch (std::out_of_range &) {
+                    }
+                    dialog.accept();
+                });
+                if (dialog.exec() == QDialog::Accepted) {
+                    QString type = dialog.typeBox->currentText();
+                    std::string name = dialog.nameLine->text().toStdString();
+                    std::string label = dialog.labelText->toPlainText()
+                                            .simplified()
+                                            .toStdString();
+                    if (type == tr("House event")) {
+                        auto houseEvent = std::make_shared<mef::HouseEvent>(
+                            std::move(name));
+                        houseEvent->label(std::move(label));
+                        m_undoStack->push(new model::AddHouseEventCommand(
+                            std::move(houseEvent), m_guiModel.get()));
+                    } else {
+                        auto basicEvent = std::make_shared<mef::BasicEvent>(
+                            std::move(name));
+                        basicEvent->label(std::move(label));
+                        if (type == tr("Conditional")) {
+                            basicEvent->AddAttribute(
+                                {"flavor", "conditional", ""});
+                        } else if (type == tr("Undeveloped")) {
+                            basicEvent->AddAttribute(
+                                {"flavor", "undeveloped", ""});
+                        } else {
+                            GUI_ASSERT(type == tr("Basic event"), );
+                        }
+                        m_undoStack->push(new model::AddBasicEventCommand(
+                            std::move(basicEvent), m_guiModel.get()));
+                    }
+                }
+            });
+
+    // Undo/Redo actions
+    m_undoAction = m_undoStack->createUndoAction(this, tr("Undo:"));
     m_undoAction->setShortcuts(QKeySequence::Undo);
     m_undoAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-undo")));
 
-    m_redoAction = m_undoStack->createRedoAction(this);
+    m_redoAction = m_undoStack->createRedoAction(this, tr("Redo:"));
     m_redoAction->setShortcuts(QKeySequence::Redo);
     m_redoAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-redo")));
 
-    ui->menuEdit->addAction(m_undoAction);
-    ui->menuEdit->addAction(m_redoAction);
-    ui->editToolBar->addAction(m_undoAction);
-    ui->editToolBar->addAction(m_redoAction);
+    ui->menuEdit->insertAction(ui->menuEdit->actions().front(), m_redoAction);
+    ui->menuEdit->insertAction(m_redoAction, m_undoAction);
+    ui->editToolBar->insertAction(ui->editToolBar->actions().front(),
+                                  m_redoAction);
+    ui->editToolBar->insertAction(m_redoAction, m_undoAction);
+    connect(m_undoStack, &QUndoStack::cleanChanged, ui->actionSave,
+            &QAction::setDisabled);
+    connect(m_undoStack, &QUndoStack::cleanChanged,
+            [this](bool clean) { setWindowModified(!clean); });
 }
 
 void MainWindow::createNewModel()
 {
+    if (isWindowModified()) {
+        QMessageBox::StandardButton answer = QMessageBox::question(
+            this, tr("Save Model?"),
+            tr("Save changes to model '%1' before closing?")
+            .arg(QString::fromStdString(m_model->name())),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+            QMessageBox::Save);
+
+        if (answer == QMessageBox::Cancel)
+            return;
+        if (answer == QMessageBox::Save) {
+            saveModel();
+            if (isWindowModified())
+                return;
+        }
+    }
+
     m_inputFiles.clear();
     m_model = std::make_shared<mef::Model>();
 
     resetTreeWidget();
-
-    ui->actionSave->setEnabled(true);
-    ui->actionSaveAs->setEnabled(true);
 
     emit configChanged();
 }
@@ -352,14 +460,9 @@ void MainWindow::openFiles(QString directory)
 
 void MainWindow::saveModel()
 {
-    if (m_inputFiles.empty())
+    if (m_inputFiles.empty() || m_inputFiles.size() > 1)
         return saveModelAs();
-
-    /// @todo Save the input files.
-    GUI_ASSERT(m_inputFiles.size() == 1,);
-
-    /// @todo Implement the save of the model to one file.
-    GUI_ASSERT(false && "Not implemented",);
+    saveToFile(m_inputFiles.front());
 }
 
 void MainWindow::saveModelAs()
@@ -370,9 +473,44 @@ void MainWindow::saveModelAs()
             .arg(tr("Model Exchange Format"), tr("All files")));
     if (filename.isNull())
         return;
-    /// @todo Save the input files into custom places.
-    GUI_ASSERT(false && "Not implemented",);
+    saveToFile(filename.toStdString());
+}
+
+void MainWindow::saveToFile(std::string destination)
+{
+    GUI_ASSERT(!destination.empty(), );
+    GUI_ASSERT(m_model, );
+    try {
+        mef::Serialize(*m_model, destination);
+    } catch (Error &err) {
+        QMessageBox::critical(this, tr("Save Error"),
+                              QString::fromUtf8(err.what()));
+        return;
+    }
+    m_undoStack->setClean();
+    m_inputFiles.clear();
+    m_inputFiles.push_back(std::move(destination));
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!isWindowModified())
+        return event->accept();
+
+    QMessageBox::StandardButton answer = QMessageBox::question(
+        this, tr("Save Model?"),
+        tr("Save changes to model '%1' before closing?")
+            .arg(QString::fromStdString(m_model->name())),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+
+    if (answer == QMessageBox::Cancel)
+        return event->ignore();
+    if (answer == QMessageBox::Discard)
+        return event->accept();
+
     saveModel();
+    return isWindowModified() ? event->ignore() : event->accept();
 }
 
 void MainWindow::exportAs()
@@ -447,6 +585,22 @@ void MainWindow::setupZoomableView(ZoomableView *view)
     });
 }
 
+template <typename ContainerModel>
+QTableView *constructElementTable(model::Model *guiModel, QWidget *parent)
+{
+    auto *table = new QTableView(parent);
+    auto *tableModel = new ContainerModel(guiModel, table);
+    auto *proxyModel = new model::SortFilterProxyModel(table);
+    proxyModel->setSourceModel(tableModel);
+    table->setModel(proxyModel);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setWordWrap(false);
+    table->resizeColumnsToContents();
+    table->setSortingEnabled(true);
+    return table;
+}
+
 void MainWindow::resetTreeWidget()
 {
     while (ui->tabWidget->count()) {
@@ -463,6 +617,8 @@ void MainWindow::resetTreeWidget()
     ui->treeWidget->clear();
     ui->treeWidget->setHeaderLabel(
         tr("Model: %1").arg(QString::fromStdString(m_model->name())));
+
+    m_guiModel = std::make_unique<model::Model>(m_model.get());
 
     auto *faultTrees = new QTreeWidgetItem({tr("Fault Trees")});
     for (const mef::FaultTreePtr &faultTree : m_model->fault_trees()) {
@@ -494,33 +650,19 @@ void MainWindow::resetTreeWidget()
     auto *basicEvents = new QTreeWidgetItem({tr("Basic Events")});
     modelData->addChild(basicEvents);
     m_treeActions.emplace(basicEvents, [this] {
-        auto *table = new QTableWidget(nullptr);
-        table->setColumnCount(3);
-        table->setHorizontalHeaderLabels(
-            {tr("Id"), tr("Probability"), tr("Label")});
-        table->setRowCount(m_model->basic_events().size());
-        int row = 0;
-        for (const mef::BasicEventPtr &basicEvent : m_model->basic_events()) {
-            table->setItem(row, 0, constructTableItem(QString::fromStdString(
-                                       basicEvent->id())));
-            table->setItem(row, 1,
-                           constructTableItem(basicEvent->HasExpression()
-                                                  ? QVariant(basicEvent->p())
-                                                  : QVariant(tr("NULL"))));
-            table->setItem(row, 2, constructTableItem(QString::fromStdString(
-                                       basicEvent->label())));
-            ++row;
-        }
-        table->setWordWrap(false);
-        table->resizeColumnsToContents();
-        table->setSortingEnabled(true);
+        auto *table = constructElementTable<model::BasicEventContainerModel>(
+            m_guiModel.get(), this);
         ui->tabWidget->addTab(table, tr("Basic Events"));
         ui->tabWidget->setCurrentWidget(table);
     });
-
-    modelData->addChildren({new QTreeWidgetItem({tr("House Events")}),
-                            new QTreeWidgetItem({tr("Parameters")})});
-
+    auto *houseEvents = new QTreeWidgetItem({tr("House Events")});
+    modelData->addChild(houseEvents);
+    m_treeActions.emplace(houseEvents, [this] {
+        auto *table = constructElementTable<model::HouseEventContainerModel>(
+            m_guiModel.get(), this);
+        ui->tabWidget->addTab(table, tr("House Events"));
+        ui->tabWidget->setCurrentWidget(table);
+    });
     ui->treeWidget->addTopLevelItems({faultTrees, modelData});
 }
 

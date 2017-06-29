@@ -119,6 +119,7 @@
       <string>&amp;Toolbars</string>
      </property>
      <addaction name="actionModelToolBar"/>
+     <addaction name="actionEditToolBar"/>
      <addaction name="actionZoomToolBar"/>
      <addaction name="actionAnalysisToolBar"/>
     </widget>
@@ -144,6 +145,9 @@
     <property name="title">
      <string>&amp;Edit</string>
     </property>
+    <addaction name="separator"/>
+    <addaction name="actionAddElement"/>
+    <addaction name="actionRemoveElement"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -177,6 +181,9 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
+   <addaction name="separator"/>
+   <addaction name="actionAddElement"/>
+   <addaction name="actionRemoveElement"/>
   </widget>
   <widget class="QToolBar" name="zoomToolBar">
    <property name="windowTitle">
@@ -483,6 +490,9 @@
    </property>
   </action>
   <action name="actionRun">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
    <property name="icon">
     <iconset theme="utilities-terminal">
      <normaloff>.</normaloff>.</iconset>
@@ -526,7 +536,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Model</string>
+    <string>&amp;Model</string>
    </property>
   </action>
   <action name="actionZoomToolBar">
@@ -537,7 +547,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Zoom</string>
+    <string>&amp;Zoom</string>
    </property>
   </action>
   <action name="actionAnalysisToolBar">
@@ -548,7 +558,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Analysis</string>
+    <string>&amp;Analysis</string>
    </property>
   </action>
   <action name="actionData">
@@ -583,6 +593,41 @@
    </property>
    <property name="text">
     <string>Print Previe&amp;w...</string>
+   </property>
+  </action>
+  <action name="actionAddElement">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="list-add">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>&amp;Add Element</string>
+   </property>
+  </action>
+  <action name="actionRemoveElement">
+   <property name="enabled">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset theme="list-remove">
+     <normaloff>.</normaloff>.</iconset>
+   </property>
+   <property name="text">
+    <string>Re&amp;move Element</string>
+   </property>
+  </action>
+  <action name="actionEditToolBar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Edit</string>
    </property>
   </action>
  </widget>
@@ -760,6 +805,38 @@
     <hint type="sourcelabel">
      <x>127</x>
      <y>359</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>actionEditToolBar</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>editToolBar</receiver>
+   <slot>setVisible(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>-1</x>
+     <y>-1</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>204</x>
+     <y>44</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>editToolBar</sender>
+   <signal>visibilityChanged(bool)</signal>
+   <receiver>actionEditToolBar</receiver>
+   <slot>setChecked(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>204</x>
+     <y>44</y>
     </hint>
     <hint type="destinationlabel">
      <x>-1</x>
