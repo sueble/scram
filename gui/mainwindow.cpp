@@ -20,6 +20,7 @@
 #include "ui_startpage.h"
 
 #include <algorithm>
+#include <type_traits>
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -30,7 +31,6 @@
 #include <QProgressDialog>
 #include <QRegularExpression>
 #include <QSvgGenerator>
-#include <QTableView>
 #include <QTableWidget>
 #include <QtConcurrent>
 #include <QtOpenGL>
@@ -42,12 +42,12 @@
 #include "src/error.h"
 #include "src/ext/find_iterator.h"
 #include "src/initializer.h"
+#include "src/reporter.h"
 #include "src/serialization.h"
 #include "src/xml.h"
 
 #include "elementcontainermodel.h"
-#include "event.h"
-#include "eventdialog.h"
+#include "diagram.h"
 #include "guiassert.h"
 #include "printable.h"
 #include "settingsdialog.h"
@@ -92,6 +92,25 @@ class DiagramView : public ZoomableView, public Printable
 public:
     using ZoomableView::ZoomableView;
 
+    void exportAs()
+    {
+        QString filename = QFileDialog::getSaveFileName(
+            this, tr("Export As"), QDir::homePath(),
+            tr("SVG files (*.svg);;All files (*.*)"));
+        QSize sceneSize = scene()->sceneRect().size().toSize();
+
+        QSvgGenerator generator;
+        generator.setFileName(filename);
+        generator.setSize(sceneSize);
+        generator.setViewBox(
+            QRect(0, 0, sceneSize.width(), sceneSize.height()));
+        generator.setTitle(filename);
+        QPainter painter;
+        painter.begin(&generator);
+        scene()->render(&painter);
+        painter.end();
+    }
+
 private:
     void doPrint(QPrinter *printer) override
     {
@@ -118,8 +137,6 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
       m_undoStack(new QUndoStack(this)),
       m_percentValidator(QRegularExpression(QStringLiteral(R"([1-9]\d+%?)"))),
-      m_nameValidator(
-          QRegularExpression(QStringLiteral(R"([[:alpha:]]\w*(-\w+)*)"))),
       m_zoomBox(new QComboBox)
 {
     ui->setupUi(this);
@@ -137,6 +154,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_zoomBox->setCurrentText(QStringLiteral("100%"));
     ui->zoomToolBar->addWidget(m_zoomBox); // Transfer the ownership.
 
+    setupStatusBar();
     setupActions();
 
     auto *startPage = new StartPage;
@@ -164,25 +182,17 @@ MainWindow::MainWindow(QWidget *parent)
             });
     connect(ui->tabWidget, &QTabWidget::tabCloseRequested, this,
             [this](int index) {
-                auto *widget = ui->tabWidget->widget(index);
-                if (dynamic_cast<Printable *>(widget)) {
-                    ui->actionPrint->setEnabled(false);
-                    ui->actionPrintPreview->setEnabled(false);
+                // Ensure show/hide order.
+                if (index == ui->tabWidget->currentIndex()) {
+                    int num_tabs = ui->tabWidget->count();
+                    if (num_tabs > 1) {
+                        ui->tabWidget->setCurrentIndex(
+                            index == (num_tabs - 1) ? index - 1 : index + 1);
+                    }
                 }
-                if (dynamic_cast<DiagramView *>(widget))
-                    ui->actionExportAs->setEnabled(false);
+                auto *widget = ui->tabWidget->widget(index);
                 ui->tabWidget->removeTab(index);
                 delete widget;
-            });
-    connect(ui->tabWidget, &QTabWidget::currentChanged, this,
-            [this](int index) {
-                auto *widget = ui->tabWidget->widget(index);
-                if (dynamic_cast<Printable *>(widget)) {
-                    ui->actionPrint->setEnabled(true);
-                    ui->actionPrintPreview->setEnabled(true);
-                }
-                if (dynamic_cast<DiagramView *>(widget))
-                    ui->actionExportAs->setEnabled(true);
             });
 
     connect(ui->actionSettings, &QAction::triggered, this, [this] {
@@ -212,7 +222,14 @@ MainWindow::MainWindow(QWidget *parent)
         ui->actionSaveAs->setEnabled(true);
         ui->actionAddElement->setEnabled(true);
         ui->actionRun->setEnabled(true);
+        resetTreeWidget();
+        resetReportWidget(nullptr);
     });
+    connect(m_undoStack, &QUndoStack::indexChanged, ui->reportTreeWidget,
+            [this] {
+                if (m_analysis)
+                    resetReportWidget(nullptr);
+            });
 }
 
 MainWindow::~MainWindow() = default;
@@ -230,10 +247,7 @@ void MainWindow::setConfig(const std::string &configPath,
     } catch (scram::Error &err) {
         QMessageBox::critical(this, tr("Configuration Error"),
                               QString::fromUtf8(err.what()));
-        return;
     }
-
-    emit configChanged();
 }
 
 void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
@@ -274,9 +288,19 @@ void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
         return;
     }
 
-    resetTreeWidget();
-
     emit configChanged();
+}
+
+void MainWindow::setupStatusBar()
+{
+    m_searchBar = new QLineEdit;
+    m_searchBar->setHidden(true);
+    m_searchBar->setFrame(false);
+    m_searchBar->setMaximumHeight(m_searchBar->fontMetrics().height());
+    m_searchBar->setSizePolicy(QSizePolicy::MinimumExpanding,
+                               QSizePolicy::Fixed);
+    m_searchBar->setPlaceholderText(tr("Find/Filter (Perl Regex)"));
+    ui->statusBar->addPermanentWidget(m_searchBar);
 }
 
 void MainWindow::setupActions()
@@ -323,21 +347,9 @@ void MainWindow::setupActions()
             &MainWindow::saveModelAs);
 
     ui->actionPrint->setShortcut(QKeySequence::Print);
-    connect(ui->actionPrint, &QAction::triggered, this, [this] {
-        auto *printable
-            = dynamic_cast<Printable *>(ui->tabWidget->currentWidget());
-        GUI_ASSERT(printable, );
-        printable->print();
-    });
-    connect(ui->actionPrintPreview, &QAction::triggered, this, [this] {
-        auto *printable
-            = dynamic_cast<Printable *>(ui->tabWidget->currentWidget());
-        GUI_ASSERT(printable, );
-        printable->printPreview();
-    });
 
-    connect(ui->actionExportAs, &QAction::triggered, this,
-            &MainWindow::exportAs);
+    connect(ui->actionExportReportAs, &QAction::triggered, this,
+            &MainWindow::exportReportAs);
 
     // View menu actions.
     ui->actionZoomIn->setShortcut(QKeySequence::ZoomIn);
@@ -345,65 +357,53 @@ void MainWindow::setupActions()
 
     // Edit menu actions.
     connect(ui->actionAddElement, &QAction::triggered, this, [this] {
-                EventDialog dialog;
-                dialog.nameLine->setValidator(&m_nameValidator);
-                connect(dialog.buttonBox, &QDialogButtonBox::accepted, &dialog,
-                        [&dialog, this] {
-                    QString name = dialog.nameLine->text();
-                    if (name.isEmpty()) {
-                        QMessageBox::critical(&dialog, tr("Missing Data"),
-                                              tr("The name string is empty."));
-                        return;
+                EventDialog dialog(m_model.get(), this);
+                if (dialog.exec() == QDialog::Rejected)
+                    return;
+                auto addBasicEvent = [&]() -> decltype(auto) {
+                    auto basicEvent
+                        = std::make_shared<mef::BasicEvent>(dialog.name());
+                    basicEvent->label(dialog.label().toStdString());
+                    if (auto p_expression = dialog.expression()) {
+                        basicEvent->expression(p_expression.get());
+                        m_model->Add(std::move(p_expression));
                     }
-                    try {
-                        m_model->GetEvent(name.toStdString(), "");
-                        QMessageBox::critical(
-                            &dialog, tr("Duplicate Name"),
-                            tr("The event with name '%1' already exists.")
-                                .arg(name));
-                        return;
-                    } catch (std::out_of_range &) {
-                    }
-                    dialog.accept();
-                });
-                if (dialog.exec() == QDialog::Accepted) {
-                    QString type = dialog.typeBox->currentText();
-                    std::string name = dialog.nameLine->text().toStdString();
-                    std::string label = dialog.labelText->toPlainText()
-                                            .simplified()
-                                            .toStdString();
-                    if (type == tr("House event")) {
-                        auto houseEvent = std::make_shared<mef::HouseEvent>(
-                            std::move(name));
-                        houseEvent->label(std::move(label));
-                        m_undoStack->push(new model::AddHouseEventCommand(
-                            std::move(houseEvent), m_guiModel.get()));
-                    } else {
-                        auto basicEvent = std::make_shared<mef::BasicEvent>(
-                            std::move(name));
-                        basicEvent->label(std::move(label));
-                        if (type == tr("Conditional")) {
-                            basicEvent->AddAttribute(
-                                {"flavor", "conditional", ""});
-                        } else if (type == tr("Undeveloped")) {
-                            basicEvent->AddAttribute(
-                                {"flavor", "undeveloped", ""});
-                        } else {
-                            GUI_ASSERT(type == tr("Basic event"), );
-                        }
-                        m_undoStack->push(new model::AddBasicEventCommand(
-                            std::move(basicEvent), m_guiModel.get()));
-                    }
+                    auto &result = *basicEvent;
+                    m_undoStack->push(new model::Model::AddBasicEvent(
+                        std::move(basicEvent), m_guiModel.get()));
+                    return result;
+                };
+                switch (dialog.currentType()) {
+                case EventDialog::HouseEvent: {
+                    auto houseEvent
+                        = std::make_shared<mef::HouseEvent>(dialog.name());
+                    houseEvent->label(dialog.label().toStdString());
+                    houseEvent->state(dialog.booleanConstant());
+                    m_undoStack->push(new model::Model::AddHouseEvent(
+                        std::move(houseEvent), m_guiModel.get()));
+                    break;
+                }
+                case EventDialog::BasicEvent:
+                    addBasicEvent();
+                    break;
+                case EventDialog::Undeveloped:
+                    addBasicEvent().AddAttribute({"flavor", "undeveloped", ""});
+                    break;
+                case EventDialog::Conditional:
+                    addBasicEvent().AddAttribute({"flavor", "conditional", ""});
+                    break;
+                default:
+                    GUI_ASSERT(false && "unexpected event type", );
                 }
             });
 
     // Undo/Redo actions
     m_undoAction = m_undoStack->createUndoAction(this, tr("Undo:"));
-    m_undoAction->setShortcuts(QKeySequence::Undo);
+    m_undoAction->setShortcut(QKeySequence::Undo);
     m_undoAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-undo")));
 
     m_redoAction = m_undoStack->createRedoAction(this, tr("Redo:"));
-    m_redoAction->setShortcuts(QKeySequence::Redo);
+    m_redoAction->setShortcut(QKeySequence::Redo);
     m_redoAction->setIcon(QIcon::fromTheme(QStringLiteral("edit-redo")));
 
     ui->menuEdit->insertAction(ui->menuEdit->actions().front(), m_redoAction);
@@ -415,6 +415,18 @@ void MainWindow::setupActions()
             &QAction::setDisabled);
     connect(m_undoStack, &QUndoStack::cleanChanged,
             [this](bool clean) { setWindowModified(!clean); });
+
+    // Search/filter bar shortcuts.
+    auto *searchAction = new QAction(this);
+    searchAction->setShortcuts({QKeySequence::Find, Qt::Key_Slash});
+    m_searchBar->addAction(searchAction);
+    connect(searchAction, &QAction::triggered,
+            [this] {
+        if (m_searchBar->isHidden())
+            return;
+        m_searchBar->setFocus();
+        m_searchBar->selectAll();
+    });
 }
 
 void MainWindow::createNewModel()
@@ -438,8 +450,6 @@ void MainWindow::createNewModel()
 
     m_inputFiles.clear();
     m_model = std::make_shared<mef::Model>();
-
-    resetTreeWidget();
 
     emit configChanged();
 }
@@ -513,80 +523,199 @@ void MainWindow::closeEvent(QCloseEvent *event)
     return isWindowModified() ? event->ignore() : event->accept();
 }
 
-void MainWindow::exportAs()
+void MainWindow::exportReportAs()
 {
+    GUI_ASSERT(m_analysis, );
     QString filename = QFileDialog::getSaveFileName(
-        this, tr("Export As"), QDir::homePath(),
-        tr("SVG files (*.svg);;All files (*.*)"));
-    QWidget *widget = ui->tabWidget->currentWidget();
-    GUI_ASSERT(widget, );
-    QGraphicsView *view = qobject_cast<QGraphicsView *>(widget);
-    GUI_ASSERT(view, );
-    QGraphicsScene *scene = view->scene();
-    QSize sceneSize = scene->sceneRect().size().toSize();
-
-    QSvgGenerator generator;
-    generator.setFileName(filename);
-    generator.setSize(sceneSize);
-    generator.setViewBox(QRect(0, 0, sceneSize.width(), sceneSize.height()));
-    generator.setTitle(filename);
-    QPainter painter;
-    painter.begin(&generator);
-    scene->render(&painter);
-    painter.end();
-}
-
-void MainWindow::activateZoom(int level)
-{
-    GUI_ASSERT(level > 0,);
-    m_zoomBox->setEnabled(true);
-    m_zoomBox->setCurrentText(QString::fromLatin1("%1%").arg(level));
-    ui->actionZoomIn->setEnabled(true);
-    ui->actionZoomIn->setEnabled(true);
-    ui->actionZoomOut->setEnabled(true);
-    ui->actionBestFit->setEnabled(true);
-    ui->menuZoom->setEnabled(true);
-}
-
-void MainWindow::deactivateZoom()
-{
-    m_zoomBox->setEnabled(false);
-    ui->actionZoomIn->setEnabled(false);
-    ui->actionZoomOut->setEnabled(false);
-    ui->actionBestFit->setEnabled(false);
-    ui->menuZoom->setEnabled(false);
+        this, tr("Export Report As"), QDir::homePath(),
+        QString::fromLatin1("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
+            .arg(tr("Model Exchange Format"), tr("All files")));
+    if (filename.isNull())
+        return;
+    try {
+        Reporter().Report(*m_analysis, filename.toStdString());
+    } catch (Error &err) {
+        QMessageBox::critical(this, tr("Reporting Error"),
+                              QString::fromUtf8(err.what()));
+    }
 }
 
 void MainWindow::setupZoomableView(ZoomableView *view)
 {
-    connect(view, &ZoomableView::zoomEnabled, this, &MainWindow::activateZoom);
-    connect(view, &ZoomableView::zoomDisabled, this,
-            &MainWindow::deactivateZoom);
-    connect(view, &ZoomableView::zoomChanged, this, [this](int level) {
-        m_zoomBox->setCurrentText(QString::fromLatin1("%1%").arg(level));
-    });
-    connect(ui->actionZoomIn, &QAction::triggered, view,
-            [view] { view->zoomIn(5); });
-    connect(ui->actionZoomOut, &QAction::triggered, view,
-            [view] { view->zoomOut(5); });
-    connect(m_zoomBox, &QComboBox::currentTextChanged, view,
-            [view](QString text) {
-                text.remove(QLatin1Char('%'));
-                view->setZoom(text.toInt());
-            });
-    connect(ui->actionBestFit, &QAction::triggered, view, [view] {
-        QSize viewSize = view->size();
-        QSize sceneSize = view->scene()->sceneRect().size().toSize();
-        double ratioHeight
-            = static_cast<double>(viewSize.height()) / sceneSize.height();
-        double ratioWidth
-            = static_cast<double>(viewSize.width()) / sceneSize.width();
-        view->setZoom(std::min(ratioHeight, ratioWidth) * 100);
-    });
+    struct ZoomFilter : public QObject {
+        ZoomFilter(ZoomableView *zoomable, MainWindow *window)
+            : QObject(zoomable), m_window(window), m_zoomable(zoomable)
+        {
+        }
+        bool eventFilter(QObject *object, QEvent *event) override
+        {
+            auto setEnabled = [this] (bool state) {
+                m_window->m_zoomBox->setEnabled(state);
+                m_window->ui->actionZoomIn->setEnabled(state);
+                m_window->ui->actionZoomIn->setEnabled(state);
+                m_window->ui->actionZoomOut->setEnabled(state);
+                m_window->ui->actionBestFit->setEnabled(state);
+                m_window->ui->menuZoom->setEnabled(state);
+            };
+
+            if (event->type() == QEvent::Show) {
+                setEnabled(true);
+                m_window->m_zoomBox->setCurrentText(
+                    QString::fromLatin1("%1%").arg(m_zoomable->getZoom()));
+
+                connect(m_zoomable, &ZoomableView::zoomChanged,
+                        m_window->m_zoomBox, [this](int level) {
+                            m_window->m_zoomBox->setCurrentText(
+                                QString::fromLatin1("%1%").arg(level));
+                        });
+                connect(m_window->m_zoomBox, &QComboBox::currentTextChanged,
+                        m_zoomable, [this](QString text) {
+                            text.remove(QLatin1Char('%'));
+                            m_zoomable->setZoom(text.toInt());
+                        });
+                connect(m_window->ui->actionZoomIn, &QAction::triggered,
+                        m_zoomable, [this] { m_zoomable->zoomIn(5); });
+                connect(m_window->ui->actionZoomOut, &QAction::triggered,
+                        m_zoomable, [this] { m_zoomable->zoomOut(5); });
+                connect(m_window->ui->actionBestFit, &QAction::triggered,
+                        m_zoomable, &ZoomableView::zoomBestFit);
+            } else if (event->type() == QEvent::Hide) {
+                setEnabled(false);
+                disconnect(m_zoomable, 0, m_window->m_zoomBox, 0);
+                disconnect(m_window->m_zoomBox, 0, m_zoomable, 0);
+                disconnect(m_window->ui->actionZoomIn, 0, m_zoomable, 0);
+                disconnect(m_window->ui->actionZoomOut, 0, m_zoomable, 0);
+                disconnect(m_window->ui->actionBestFit, 0, m_zoomable, 0);
+            }
+            return QObject::eventFilter(object, event);
+        }
+        MainWindow *m_window;
+        ZoomableView *m_zoomable;
+    };
+    view->installEventFilter(new ZoomFilter(view, this));
 }
 
-template <typename ContainerModel>
-QTableView *constructElementTable(model::Model *guiModel, QWidget *parent)
+template <class T>
+void MainWindow::setupPrintableView(T *view)
+{
+    static_assert(std::is_base_of<QObject, T>::value, "Missing QObject");
+    struct PrintFilter : public QObject {
+        PrintFilter(T *printable, MainWindow *window)
+            : QObject(printable), m_window(window), m_printable(printable)
+        {
+        }
+        bool eventFilter(QObject *object, QEvent *event) override
+        {
+            auto setEnabled = [this] (bool state) {
+                m_window->ui->actionPrint->setEnabled(state);
+                m_window->ui->actionPrintPreview->setEnabled(state);
+            };
+            if (event->type() == QEvent::Show) {
+                setEnabled(true);
+                connect(m_window->ui->actionPrint, &QAction::triggered,
+                        m_printable, [this] { m_printable->print(); });
+                connect(m_window->ui->actionPrintPreview, &QAction::triggered,
+                        m_printable, [this] { m_printable->printPreview(); });
+            } else if (event->type() == QEvent::Hide) {
+                setEnabled(false);
+                disconnect(m_window->ui->actionPrint, 0, m_printable, 0);
+                disconnect(m_window->ui->actionPrintPreview, 0, m_printable, 0);
+            }
+            return QObject::eventFilter(object, event);
+        }
+        MainWindow *m_window;
+        T *m_printable;
+    };
+
+    view->installEventFilter(new PrintFilter(view, this));
+}
+
+template <class T>
+void MainWindow::setupExportableView(T *view)
+{
+    struct ExportFilter : public QObject {
+        ExportFilter(T *exportable, MainWindow *window)
+            : QObject(exportable), m_window(window), m_exportable(exportable)
+        {
+        }
+
+        bool eventFilter(QObject *object, QEvent *event) override
+        {
+            if (event->type() == QEvent::Show) {
+                m_window->ui->actionExportAs->setEnabled(true);
+                connect(m_window->ui->actionExportAs, &QAction::triggered,
+                        m_exportable, [this] { m_exportable->exportAs(); });
+            } else if (event->type() == QEvent::Hide) {
+                m_window->ui->actionExportAs->setEnabled(false);
+                disconnect(m_window->ui->actionExportAs, 0, m_exportable, 0);
+            }
+
+            return QObject::eventFilter(object, event);
+        }
+
+        MainWindow *m_window;
+        T *m_exportable;
+    };
+    view->installEventFilter(new ExportFilter(view, this));
+}
+
+template <class T>
+void MainWindow::setupSearchable(QObject *view, T *model)
+{
+    struct SearchFilter : public QObject {
+        SearchFilter(T *searchable, MainWindow *window)
+            : QObject(searchable), m_window(window), m_searchable(searchable)
+        {
+        }
+
+        bool eventFilter(QObject *object, QEvent *event) override
+        {
+            if (event->type() == QEvent::Show) {
+                m_window->m_searchBar->setHidden(false);
+                m_window->m_searchBar->setText(
+                    m_searchable->filterRegExp().pattern());
+                connect(m_window->m_searchBar, &QLineEdit::editingFinished,
+                        object, [this] {
+                            m_searchable->setFilterRegExp(
+                                m_window->m_searchBar->text());
+                        });
+            } else if (event->type() == QEvent::Hide) {
+                m_window->m_searchBar->setHidden(true);
+                disconnect(m_window->m_searchBar, 0, object, 0);
+            }
+
+            return QObject::eventFilter(object, event);
+        }
+
+        MainWindow *m_window;
+        T *m_searchable;
+    };
+    view->installEventFilter(new SearchFilter(model, this));
+}
+
+void MainWindow::editElement(EventDialog *dialog, model::Element *element)
+{
+    if (dialog->label() != element->label())
+        m_undoStack->push(
+            new model::Element::SetLabel(element, dialog->label()));
+}
+
+void MainWindow::editElement(EventDialog *dialog, model::BasicEvent *element)
+{
+    editElement(dialog, static_cast<model::Element *>(element));
+}
+
+void MainWindow::editElement(EventDialog *dialog, model::HouseEvent *element)
+{
+    editElement(dialog, static_cast<model::Element *>(element));
+    if (dialog->booleanConstant() != element->state())
+        m_undoStack->push(new model::HouseEvent::SetState(
+            element, dialog->booleanConstant()));
+}
+
+template <class ContainerModel>
+QTableView *MainWindow::constructElementTable(model::Model *guiModel,
+                                              QWidget *parent)
 {
     auto *table = new QTableView(parent);
     auto *tableModel = new ContainerModel(guiModel, table);
@@ -598,6 +727,21 @@ QTableView *constructElementTable(model::Model *guiModel, QWidget *parent)
     table->setWordWrap(false);
     table->resizeColumnsToContents();
     table->setSortingEnabled(true);
+    setupSearchable(table, proxyModel);
+    connect(table, &QAbstractItemView::activated,
+            [this, proxyModel](const QModelIndex &index) {
+                GUI_ASSERT(index.isValid(), );
+                EventDialog dialog(m_model.get(), this);
+                auto *item = static_cast<typename ContainerModel::ItemModel *>(
+                    proxyModel->mapToSource(index).internalPointer());
+                dialog.setupData(*item);
+                if (dialog.exec() == QDialog::Accepted) {
+                    /// @todo Type change
+                    /// @todo Name change
+                    /// @todo Expression change
+                    editElement(&dialog, item);
+                }
+            });
     return table;
 }
 
@@ -608,10 +752,6 @@ void MainWindow::resetTreeWidget()
         ui->tabWidget->removeTab(0);
         delete widget;
     }
-
-    ui->reportTreeWidget->clear();
-    m_reportActions.clear();
-    m_analysis.reset();
 
     m_treeActions.clear();
     ui->treeWidget->clear();
@@ -639,6 +779,8 @@ void MainWindow::resetTreeWidget()
             view->setAlignment(Qt::AlignTop);
             view->ensureVisible(root);
             setupZoomableView(view);
+            setupPrintableView(view);
+            setupExportableView(view);
             ui->tabWidget->addTab(
                 view, tr("Fault Tree: %1")
                           .arg(QString::fromStdString(faultTree->name())));
@@ -671,6 +813,10 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
     ui->reportTreeWidget->clear();
     m_reportActions.clear();
     m_analysis = std::move(analysis);
+    ui->actionExportReportAs->setEnabled(static_cast<bool>(m_analysis));
+    if (!m_analysis)
+        return;
+
     struct {
         QString operator()(const mef::Gate *gate)
         {

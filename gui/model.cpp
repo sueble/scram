@@ -25,73 +25,106 @@ namespace scram {
 namespace gui {
 namespace model {
 
-Model::Model(mef::Model *model, QObject *parent)
-    : QObject(parent), m_model(model)
+Element::SetLabel::SetLabel(Element *element, QString label)
+    : QUndoCommand(QObject::tr("Set element %1 label to '%2'")
+                       .arg(element->id(), label)),
+      m_label(std::move(label)), m_element(element)
 {
 }
 
-void Model::addHouseEvent(const mef::HouseEventPtr &houseEvent)
+void Element::SetLabel::redo()
 {
-    m_model->Add(houseEvent);
-    emit addedHouseEvent(houseEvent.get());
+    QString cur_label = m_element->label();
+    if (m_label == cur_label)
+        return;
+    m_element->data()->label(m_label.toStdString());
+    emit m_element->labelChanged(m_label);
+    m_label = std::move(cur_label);
 }
 
-void Model::addBasicEvent(const mef::BasicEventPtr &basicEvent)
+BasicEvent::BasicEvent(mef::BasicEvent *basicEvent)
+    : Element(basicEvent), m_flavor(Flavor::Basic)
 {
-    m_model->Add(basicEvent);
-    emit addedBasicEvent(basicEvent.get());
+    if (basicEvent->HasAttribute("flavor")) {
+        const mef::Attribute &flavor = basicEvent->GetAttribute("flavor");
+        if (flavor.value == "undeveloped") {
+            m_flavor = Flavor::Undeveloped;
+        } else if (flavor.value == "conditional") {
+            m_flavor = Flavor::Conditional;
+        }
+    }
 }
 
-void Model::removeHouseEvent(mef::HouseEvent *houseEvent)
+HouseEvent::SetState::SetState(HouseEvent *houseEvent, bool state)
+    : QUndoCommand(QObject::tr("Set house event %1 state to %2")
+                       .arg(houseEvent->id(), boolToString(state))),
+      m_state(state), m_houseEvent(houseEvent)
 {
-    m_model->Remove(houseEvent);
-    emit removedHouseEvent(houseEvent);
 }
 
-void Model::removeBasicEvent(mef::BasicEvent *basicEvent)
+void HouseEvent::SetState::redo()
 {
-    m_model->Remove(basicEvent);
-    emit removedBasicEvent(basicEvent);
+    if (m_state == m_houseEvent->state())
+        return;
+    bool prev_state = m_houseEvent->state();
+    m_houseEvent->data<mef::HouseEvent>()->state(m_state);
+    emit m_houseEvent->stateChanged(m_state);
+    m_state = prev_state;
 }
 
-AddHouseEventCommand::AddHouseEventCommand(mef::HouseEventPtr houseEvent,
-                                           Model *model)
+Model::Model(mef::Model *model) : Element(model), m_model(model)
+{
+    m_houseEvents.reserve(m_model->house_events().size());
+    for (const mef::HouseEventPtr &houseEvent : m_model->house_events())
+        m_houseEvents.emplace(std::make_unique<HouseEvent>(houseEvent.get()));
+
+    m_basicEvents.reserve(m_model->basic_events().size());
+    for (const mef::BasicEventPtr &basicEvent : m_model->basic_events())
+        m_basicEvents.emplace(std::make_unique<BasicEvent>(basicEvent.get()));
+}
+
+Model::AddHouseEvent::AddHouseEvent(mef::HouseEventPtr houseEvent, Model *model)
     : QUndoCommand(QObject::tr("Add house-event %1")
                        .arg(QString::fromStdString(houseEvent->id()))),
-      m_model(model), m_houseEvent(std::move(houseEvent))
+      m_model(model), m_proxy(std::make_unique<HouseEvent>(houseEvent.get())),
+      m_houseEvent(std::move(houseEvent))
 {
 }
 
-void AddHouseEventCommand::redo()
+void Model::AddHouseEvent::redo()
 {
-    m_model->addHouseEvent(m_houseEvent);
+    m_model->m_model->Add(m_houseEvent);
+    m_model->m_houseEvents.emplace(std::move(m_proxy));
+    emit m_model->addedHouseEvent(m_proxy.get());
 }
 
-void AddHouseEventCommand::undo()
+void Model::AddHouseEvent::undo()
 {
-    m_model->removeHouseEvent(m_houseEvent.get());
+    m_model->m_model->Remove(m_houseEvent.get());
+    m_proxy = extract(m_houseEvent.get(), &m_model->m_houseEvents);
+    emit m_model->removedHouseEvent(m_proxy.get());
 }
 
-AddBasicEventCommand::AddBasicEventCommand(mef::BasicEventPtr basicEvent,
-                                           Model *model)
+Model::AddBasicEvent::AddBasicEvent(mef::BasicEventPtr basicEvent, Model *model)
     : QUndoCommand(QObject::tr("Add basic-event %1")
                        .arg(QString::fromStdString(basicEvent->id()))),
-      m_model(model), m_basicEvent(std::move(basicEvent))
+      m_model(model), m_proxy(std::make_unique<BasicEvent>(basicEvent.get())),
+      m_basicEvent(std::move(basicEvent))
 {
 }
 
-void AddBasicEventCommand::redo()
+void Model::AddBasicEvent::redo()
 {
-    m_model->addBasicEvent(m_basicEvent);
+    m_model->m_model->Add(m_basicEvent);
+    m_model->m_basicEvents.emplace(std::move(m_proxy));
+    emit m_model->addedBasicEvent(m_proxy.get());
 }
 
-void AddBasicEventCommand::undo()
+void Model::AddBasicEvent::undo()
 {
-    m_model->removeBasicEvent(m_basicEvent.get());
-}
-
-HouseEvent::HouseEvent(mef::HouseEvent *houseEvent) : m_houseEvent(houseEvent)
-{
+    m_model->m_model->Remove(m_basicEvent.get());
+    m_proxy = extract(m_basicEvent.get(), &m_model->m_basicEvents);
+    emit m_model->removedBasicEvent(m_proxy.get());
 }
 
 } // namespace model

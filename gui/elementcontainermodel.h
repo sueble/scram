@@ -28,6 +28,7 @@
 #include <QSortFilterProxyModel>
 
 #include "src/element.h"
+#include "src/event.h"
 
 #include "model.h"
 
@@ -49,20 +50,35 @@ protected:
     explicit ElementContainerModel(const T &container,
                                    QObject *parent = nullptr);
 
-    /// @tparam T  The derived element type.
-    ///
-    /// @returns The element with the given index.
+    /// Puts the element pointer into the index's internal pointer.
+    QModelIndex index(int row, int column,
+                      const QModelIndex &parent) const override;
+
+    /// @returns The element with the given index (row).
     ///
     /// @pre The index is valid.
-    /// @pre The element type matches type stored in the container.
-    template <typename T> T *getElement(int index) const;
+    Element *getElement(int index) const;
 
-    void addElement(mef::Element *element);
-    void removeElement(mef::Element *element);
+    /// @returns The current index (row) of the element.
+    ///
+    /// @pre The element is in the table.
+    int getElementIndex(Element *element) const;
+
+    void addElement(Element *element);
+    void removeElement(Element *element);
+
+    const std::vector<Element *> elements() const { return m_elements; }
+
+protected:
+    /// Connects of the element change signals to the table modification.
+    /// The base implementation only handles signals coming from base element.
+    /// The derived classes need to override this function
+    /// and append more connections.
+    virtual void connectElement(Element *element);
 
 private:
-    std::vector<mef::Element *> m_elements;
-    std::unordered_map<mef::Element *, int> m_elementToIndex;
+    std::vector<Element *> m_elements;
+    std::unordered_map<Element *, int> m_elementToIndex;
 };
 
 /// The proxy model allows sorting and filtering.
@@ -86,6 +102,9 @@ class BasicEventContainerModel : public ElementContainerModel
     Q_OBJECT
 
 public:
+    using ItemModel = BasicEvent;
+    using DataType = mef::BasicEvent;
+
     explicit BasicEventContainerModel(Model *model, QObject *parent = nullptr);
 
     int columnCount(const QModelIndex &parent) const override;
@@ -101,6 +120,9 @@ class HouseEventContainerModel : public ElementContainerModel
     Q_OBJECT
 
 public:
+    using ItemModel = HouseEvent;
+    using DataType = mef::HouseEvent;
+
     explicit HouseEventContainerModel(Model *model, QObject *parent = nullptr);
 
     int columnCount(const QModelIndex &parent) const override;
@@ -109,6 +131,9 @@ public:
                         int role) const override;
 
     QVariant data(const QModelIndex &index, int role) const override;
+
+private:
+    void connectElement(Element *element) final;
 };
 
 } // namespace model

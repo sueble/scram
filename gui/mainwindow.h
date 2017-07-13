@@ -27,8 +27,10 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDir>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QRegularExpressionValidator>
+#include <QTableView>
 #include <QTreeWidgetItem>
 #include <QUndoStack>
 
@@ -36,6 +38,7 @@
 #include "src/risk_analysis.h"
 #include "src/settings.h"
 
+#include "eventdialog.h"
 #include "model.h"
 #include "zoomableview.h"
 
@@ -89,25 +92,40 @@ private slots:
     void saveModelAs();
 
     /**
-     * @brief Exports the current active document/diagram.
+     * Exports the current analysis report.
      */
-    void exportAs();
-
-    /**
-     * Activates the Zoom actions
-     * and updates the displayed zoom level.
-     */
-    void activateZoom(int level);
-
-    /**
-     * Disables the Zoom actions.
-     */
-    void deactivateZoom();
+    void exportReportAs();
 
 private:
+    void setupStatusBar(); ///< Setup widgets in the status bar.
     void setupActions(); ///< Setup all the actions with connections.
 
     void setupZoomableView(ZoomableView *view); ///< Connect to actions.
+
+    /// Connects print actions.
+    ///
+    /// @tparam T  Any type with print() and printPreview() functions.
+    template <class T>
+    void setupPrintableView(T *view);
+
+    /// Connects the export actions to a widget.
+    ///
+    /// @tparam  Any type with exportAs() function.
+    template <class T>
+    void setupExportableView(T *view);
+
+    /// Connects the search bar to the model of the view.
+    ///
+    /// @tparam T  Any model type with setFilterRegExp(QString).
+    template <class T>
+    void setupSearchable(QObject *view, T *model);
+
+    template <class ContainerModel>
+    QTableView *constructElementTable(model::Model *guiModel, QWidget *parent);
+
+    void editElement(EventDialog *dialog, model::Element *element);
+    void editElement(EventDialog *dialog, model::HouseEvent *element);
+    void editElement(EventDialog *dialog, model::BasicEvent *element);
 
     /**
      * Resets the tree widget with the new model.
@@ -118,6 +136,7 @@ private:
      * @brief Resets the report view.
      *
      * @param analysis  The analysis with results.
+     *                  nullptr to clear the report widget.
      */
     void resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis);
 
@@ -135,13 +154,13 @@ private:
     QAction *m_undoAction;
     QAction *m_redoAction;
     QUndoStack *m_undoStack;
+    QLineEdit *m_searchBar;
 
     std::vector<std::string> m_inputFiles;  ///< The project model files.
     core::Settings m_settings; ///< The analysis settings.
     std::shared_ptr<mef::Model> m_model; ///< The analysis model.
     std::unique_ptr<model::Model> m_guiModel;  ///< The GUI Model wrapper.
     QRegularExpressionValidator m_percentValidator;  ///< Zoom percent input.
-    QRegularExpressionValidator m_nameValidator; ///< The proper name schema.
     QComboBox *m_zoomBox; ///< The main zoom chooser/displayer widget.
     std::unordered_map<QTreeWidgetItem *, std::function<void()>>
         m_treeActions; ///< Actions on elements of the main tree widget.
