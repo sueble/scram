@@ -72,6 +72,8 @@ RoleSpecifier GetRole(const std::string& s, RoleSpecifier parent_role) {
 ///
 /// @param[in] xml_element  XML element.
 /// @param[out] element  The object that needs attributes and label.
+///
+/// @throws ValidationError  Invalid attribute setting.
 void AttachLabelAndAttributes(const xmlpp::Element* xml_element,
                               Element* element) {
   xmlpp::NodeSet labels = xml_element->find("./label");
@@ -80,6 +82,7 @@ void AttachLabelAndAttributes(const xmlpp::Element* xml_element,
     const xmlpp::Element* label = XmlElement(labels.front());
     const xmlpp::TextNode* text = label->get_child_text();
     assert(text);
+    assert(element->label().empty() && "Resetting element label.");
     element->label(GetContent(text));
   }
 
@@ -87,20 +90,18 @@ void AttachLabelAndAttributes(const xmlpp::Element* xml_element,
   if (attributes.empty())
     return;
   assert(attributes.size() == 1);  // Only one big element 'attributes'.
-  const xmlpp::Element* attribute = nullptr;  // To report position.
-  const xmlpp::Element* attributes_element = XmlElement(attributes.front());
-
-  try {
-    for (const xmlpp::Node* node : attributes_element->find("./attribute")) {
-      attribute = XmlElement(node);
-      Attribute attribute_struct = {GetAttributeValue(attribute, "name"),
-                                    GetAttributeValue(attribute, "value"),
-                                    GetAttributeValue(attribute, "type")};
+  for (const xmlpp::Node* node :
+       XmlElement(attributes.front())->find("./attribute")) {
+    const xmlpp::Element* attribute = XmlElement(node);
+    Attribute attribute_struct = {GetAttributeValue(attribute, "name"),
+                                  GetAttributeValue(attribute, "value"),
+                                  GetAttributeValue(attribute, "type")};
+    try {
       element->AddAttribute(std::move(attribute_struct));
+    } catch (ValidationError& err) {
+      err.msg(GetLine(attribute) + err.msg());
+      throw;
     }
-  } catch(ValidationError& err) {
-    err.msg(GetLine(attribute) + err.msg());
-    throw;
   }
 }
 
@@ -406,6 +407,7 @@ void Initializer::Define(const xmlpp::Element* event_node,
 
   if (!expressions.empty()) {
     const xmlpp::Element* expr_node = XmlElement(expressions.back());
+    assert(basic_event->HasExpression() == false && "Resetting expressions.");
     basic_event->expression(GetExpression(expr_node, basic_event->base_path()));
   }
 }

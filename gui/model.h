@@ -95,15 +95,76 @@ public:
         Conditional
     };
 
+    static QString flavorToString(Flavor flavor)
+    {
+        switch (flavor) {
+        case Basic:
+            return tr("Basic");
+        case Undeveloped:
+            return tr("Undeveloped");
+        case Conditional:
+            return tr("Conditional");
+        }
+        assert(false);
+    }
+
     explicit BasicEvent(mef::BasicEvent *basicEvent);
 
     Flavor flavor() const { return m_flavor; }
+
+    /// @returns The current expression of this basic event.
+    ///          nullptr if no expression has been set.
+    mef::Expression *expression() const
+    {
+        return data<mef::BasicEvent>()->HasExpression()
+                   ? &data<mef::BasicEvent>()->expression()
+                   : nullptr;
+    }
 
     /// @returns The probability value of the event.
     ///
     /// @pre The basic event has expression.
     template <typename T = double>
     T probability() const { return data<mef::BasicEvent>()->p(); }
+
+    /// Sets the basic event expression.
+    ///
+    /// @note Currently, the expression change
+    ///       is detected with address comparison,
+    ///       which may fail if the current expression has been changed.
+    class SetExpression : public QUndoCommand
+    {
+    public:
+        /// @param[in] basicEvent  The basic event to receive an expression.
+        /// @param[in] expression  The valid expression for the basic event.
+        ///                        nullptr to unset the expression.
+        SetExpression(BasicEvent *basicEvent, mef::Expression *expression);
+
+        void redo() override;
+        void undo() override { redo(); }
+
+    private:
+        mef::Expression *m_expression;
+        BasicEvent *m_basicEvent;
+    };
+
+    /// Sets the flavor of the basic event.
+    class SetFlavor : public QUndoCommand
+    {
+    public:
+        SetFlavor(BasicEvent *basicEvent, Flavor flavor);
+
+        void redo() override;
+        void undo() override { redo(); }
+
+    private:
+        Flavor m_flavor;
+        BasicEvent *m_basicEvent;
+    };
+
+signals:
+    void expressionChanged(mef::Expression *expression);
+    void flavorChanged(Flavor flavor);
 
 private:
     Flavor m_flavor;
@@ -158,6 +219,55 @@ inline QString HouseEvent::state<QString>() const
     return boolToString(state());
 }
 
+class Gate : public Element
+{
+    Q_OBJECT
+
+public:
+    explicit Gate(mef::Gate *gate) : Element(gate) {}
+
+    template <typename T = mef::Operator>
+    T type() const
+    {
+        return data<mef::Gate>()->formula().type();
+    }
+
+    int numArgs() const { return data<mef::Gate>()->formula().num_args(); }
+    int voteNumber() const
+    {
+        return data<mef::Gate>()->formula().vote_number();
+    }
+
+    const std::vector<mef::Formula::EventArg> &args() const
+    {
+        return data<mef::Gate>()->formula().event_args();
+    }
+};
+
+template <>
+inline QString Gate::type() const
+{
+    switch (type()) {
+    case mef::kAnd:
+        return tr("and");
+    case mef::kOr:
+        return tr("or");
+    case mef::kVote:
+        return tr("at-least %1").arg(voteNumber());
+    case mef::kXor:
+        return tr("xor");
+    case mef::kNot:
+        return tr("not");
+    case mef::kNull:
+        return tr("null");
+    case mef::kNand:
+        return tr("nand");
+    case mef::kNor:
+        return tr("nor");
+    }
+    assert(false);
+}
+
 /// Table of proxy elements uniquely wrapping the core model element.
 ///
 /// @tparam T  The proxy type.
@@ -199,9 +309,27 @@ public:
 
     const ProxyTable<HouseEvent> &houseEvents() const { return m_houseEvents; }
     const ProxyTable<BasicEvent> &basicEvents() const { return m_basicEvents; }
+    const ProxyTable<Gate> &gates() const { return m_gates; }
+    const mef::ElementTable<mef::FaultTreePtr> &faultTrees() const
+    {
+        return m_model->fault_trees();
+    }
 
     /// Model manipulation commands.
     /// @{
+    class SetName : public QUndoCommand
+    {
+    public:
+        SetName(QString name, Model *model);
+
+        void redo() override;
+        void undo() override { redo(); }
+
+    private:
+        Model *m_model;
+        QString m_name;
+    };
+
     class AddHouseEvent : public QUndoCommand
     {
     public:
@@ -229,18 +357,47 @@ public:
         ext::owner_ptr<BasicEvent> m_proxy;
         mef::BasicEventPtr m_basicEvent;
     };
+
+    class AddGate : public QUndoCommand
+    {
+    public:
+        /// The gate is assumed to be a fault-tree root.
+        /// In other words, this is an implicit way to create a fault-tree.
+        ///
+        /// @param[in] gate  Fully initialized and valid gate.
+        /// @param[in] faultTree  The new fault tree name.
+        /// @param[in,out] model  The destination model.
+        ///
+        /// @todo Make fault-tree creation explicit.
+        AddGate(mef::GatePtr gate, std::string faultTree, Model *model);
+
+        void redo() override;
+        void undo() override;
+
+    private:
+        Model *m_model;
+        ext::owner_ptr<Gate> m_proxy;
+        mef::GatePtr m_gate;
+        const std::string m_faultTreeName;
+    };
     /// @}
 
 signals:
+    void modelNameChanged(QString name);
     void addedHouseEvent(HouseEvent *houseEvent);
     void addedBasicEvent(BasicEvent *basicEvent);
+    void addedGate(Gate *gate);
     void removedHouseEvent(HouseEvent *houseEvent);
     void removedBasicEvent(BasicEvent *basicEvent);
+    void removedGate(Gate *gate);
+    void addedFaultTree(mef::FaultTree *faultTree);
+    void aboutToRemoveFaultTree(mef::FaultTree *faultTree);
 
 private:
     mef::Model *m_model;
     ProxyTable<HouseEvent> m_houseEvents;
     ProxyTable<BasicEvent> m_basicEvents;
+    ProxyTable<Gate> m_gates;
 };
 
 } // namespace model

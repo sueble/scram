@@ -58,7 +58,7 @@ class Element {
   explicit Element(std::string name);
 
   /// @returns The original name.
-  const std::string& name() const { return kName_; }
+  const std::string& name() const { return name_; }
 
   /// @returns The empty or preset label.
   /// @returns Empty string if the label has not been set.
@@ -66,8 +66,8 @@ class Element {
 
   /// Sets the label.
   ///
-  /// @param[in] new_label  The label to be set.
-  void label(std::string new_label) { label_ = std::move(new_label); }
+  /// @param[in] label  The label text to be set.
+  void label(std::string label) { label_ = std::move(label); }
 
   /// @returns The current set of element attributes.
   const std::vector<Attribute>& attributes() const { return attributes_; }
@@ -83,6 +83,16 @@ class Element {
   ///       to existing attributes may get invalidated.
   void AddAttribute(Attribute attr);
 
+  /// Sets an attribute to the attribute map.
+  /// If an attribute with the same name exits,
+  /// it gets overwritten.
+  ///
+  /// @param[in] attr  An attribute of this element.
+  ///
+  /// @post Pointers or references
+  ///       to existing attributes may get invalidated.
+  void SetAttribute(Attribute attr);
+
   /// Checks if the element has a given attribute.
   ///
   /// @param[in] name  The identifying name of the attribute.
@@ -97,11 +107,26 @@ class Element {
   /// @throws LogicError  There is no such attribute.
   const Attribute& GetAttribute(const std::string& name) const;
 
+  /// Removes the attribute of the element.
+  ///
+  /// @param[in] name  The identifying name of the attribute.
+  ///
+  /// @returns false No such attribute to remove.
+  bool RemoveAttribute(const std::string& name);
+
  protected:
   ~Element() = default;
 
+  /// Resets the element name.
+  ///
+  /// @param[in] name  The local identifier name.
+  ///
+  /// @throws LogicError  The name is required and empty.
+  /// @throws InvalidArgument  The name is malformed.
+  void name(std::string name);
+
  private:
-  const std::string kName_;  ///< The original name of the element.
+  std::string name_;  ///< The original name of the element.
   std::string label_;  ///< The label text for the element.
 
   /// Container of attributes ordered by insertion time.

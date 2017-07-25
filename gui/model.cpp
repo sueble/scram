@@ -19,6 +19,8 @@
 
 #include "model.h"
 
+#include "src/fault_tree.h"
+
 #include "guiassert.h"
 
 namespace scram {
@@ -26,7 +28,7 @@ namespace gui {
 namespace model {
 
 Element::SetLabel::SetLabel(Element *element, QString label)
-    : QUndoCommand(QObject::tr("Set element %1 label to '%2'")
+    : QUndoCommand(QObject::tr("Set element '%1' label to '%2'")
                        .arg(element->id(), label)),
       m_label(std::move(label)), m_element(element)
 {
@@ -55,8 +57,58 @@ BasicEvent::BasicEvent(mef::BasicEvent *basicEvent)
     }
 }
 
+BasicEvent::SetExpression::SetExpression(BasicEvent *basicEvent,
+                                         mef::Expression *expression)
+    : QUndoCommand(QObject::tr("Modify basic event '%1' expression")
+                       .arg(basicEvent->id())),
+      m_expression(expression), m_basicEvent(basicEvent)
+{
+}
+
+void BasicEvent::SetExpression::redo()
+{
+    auto *mefEvent = m_basicEvent->data<mef::BasicEvent>();
+    mef::Expression *cur_expression
+        = mefEvent->HasExpression() ? &mefEvent->expression() : nullptr;
+    if (m_expression == cur_expression)
+        return;
+    mefEvent->expression(m_expression);
+    emit m_basicEvent->expressionChanged(m_expression);
+    m_expression = cur_expression;
+}
+
+BasicEvent::SetFlavor::SetFlavor(BasicEvent *basicEvent, Flavor flavor)
+    : QUndoCommand(tr("Set basic event '%1' flavor to '%2'")
+                       .arg(basicEvent->id(), flavorToString(flavor))),
+      m_flavor(flavor), m_basicEvent(basicEvent)
+{
+}
+
+void BasicEvent::SetFlavor::redo()
+{
+    Flavor cur_flavor = m_basicEvent->flavor();
+    if (m_flavor == cur_flavor)
+        return;
+
+    mef::Element *mefEvent = m_basicEvent->data();
+    switch (m_flavor) {
+    case Basic:
+        mefEvent->RemoveAttribute("flavor");
+        break;
+    case Undeveloped:
+        mefEvent->SetAttribute({"flavor", "undeveloped", ""});
+        break;
+    case Conditional:
+        mefEvent->SetAttribute({"flavor", "conditional", ""});
+        break;
+    }
+    m_basicEvent->m_flavor = m_flavor;
+    emit m_basicEvent->flavorChanged(m_flavor);
+    m_flavor = cur_flavor;
+}
+
 HouseEvent::SetState::SetState(HouseEvent *houseEvent, bool state)
-    : QUndoCommand(QObject::tr("Set house event %1 state to %2")
+    : QUndoCommand(QObject::tr("Set house event '%1' state to '%2'")
                        .arg(houseEvent->id(), boolToString(state))),
       m_state(state), m_houseEvent(houseEvent)
 {
@@ -72,19 +124,45 @@ void HouseEvent::SetState::redo()
     m_state = prev_state;
 }
 
+namespace {
+
+template <class T, class S>
+void populate(const mef::IdTable<S> &source, ProxyTable<T> *proxyTable)
+{
+    proxyTable->reserve(source.size());
+    for (const S &element : source)
+        proxyTable->emplace(std::make_unique<T>(element.get()));
+}
+
+} // namespace
+
 Model::Model(mef::Model *model) : Element(model), m_model(model)
 {
-    m_houseEvents.reserve(m_model->house_events().size());
-    for (const mef::HouseEventPtr &houseEvent : m_model->house_events())
-        m_houseEvents.emplace(std::make_unique<HouseEvent>(houseEvent.get()));
+    populate<HouseEvent>(m_model->house_events(), &m_houseEvents);
+    populate<BasicEvent>(m_model->basic_events(), &m_basicEvents);
+    populate<Gate>(m_model->gates(), &m_gates);
+}
 
-    m_basicEvents.reserve(m_model->basic_events().size());
-    for (const mef::BasicEventPtr &basicEvent : m_model->basic_events())
-        m_basicEvents.emplace(std::make_unique<BasicEvent>(basicEvent.get()));
+Model::SetName::SetName(QString name, Model *model)
+    : QUndoCommand(QObject::tr("Rename model to '%1'").arg(name)),
+      m_model(model), m_name(std::move(name))
+{
+}
+
+void Model::SetName::redo()
+{
+    QString currentName = m_model->m_model->HasDefaultName()
+                              ? QStringLiteral("")
+                              : m_model->id();
+    if (currentName == m_name)
+        return;
+    m_model->m_model->SetOptionalName(m_name.toStdString());
+    emit m_model->modelNameChanged(m_name);
+    m_name = std::move(currentName);
 }
 
 Model::AddHouseEvent::AddHouseEvent(mef::HouseEventPtr houseEvent, Model *model)
-    : QUndoCommand(QObject::tr("Add house-event %1")
+    : QUndoCommand(QObject::tr("Add house-event '%1'")
                        .arg(QString::fromStdString(houseEvent->id()))),
       m_model(model), m_proxy(std::make_unique<HouseEvent>(houseEvent.get())),
       m_houseEvent(std::move(houseEvent))
@@ -106,7 +184,7 @@ void Model::AddHouseEvent::undo()
 }
 
 Model::AddBasicEvent::AddBasicEvent(mef::BasicEventPtr basicEvent, Model *model)
-    : QUndoCommand(QObject::tr("Add basic-event %1")
+    : QUndoCommand(QObject::tr("Add basic-event '%1'")
                        .arg(QString::fromStdString(basicEvent->id()))),
       m_model(model), m_proxy(std::make_unique<BasicEvent>(basicEvent.get())),
       m_basicEvent(std::move(basicEvent))
@@ -125,6 +203,40 @@ void Model::AddBasicEvent::undo()
     m_model->m_model->Remove(m_basicEvent.get());
     m_proxy = extract(m_basicEvent.get(), &m_model->m_basicEvents);
     emit m_model->removedBasicEvent(m_proxy.get());
+}
+
+Model::AddGate::AddGate(mef::GatePtr gate, std::string faultTree, Model *model)
+    : QUndoCommand(
+          QObject::tr("Add gate '%1'").arg(QString::fromStdString(gate->id()))),
+      m_model(model), m_proxy(std::make_unique<Gate>(gate.get())),
+      m_gate(std::move(gate)), m_faultTreeName(std::move(faultTree))
+{
+}
+
+void Model::AddGate::redo()
+{
+    auto faultTree = std::make_unique<mef::FaultTree>(m_faultTreeName);
+    faultTree->Add(m_gate);
+    faultTree->CollectTopEvents();
+    auto *signalPtr = faultTree.get();
+    m_model->m_model->Add(std::move(faultTree));
+    emit m_model->addedFaultTree(signalPtr);
+
+    m_model->m_model->Add(m_gate);
+    m_model->m_gates.emplace(std::move(m_proxy));
+    emit m_model->addedGate(m_proxy.get());
+}
+
+void Model::AddGate::undo()
+{
+    auto *faultTree
+        = m_model->m_model->fault_trees().find(m_faultTreeName)->get();
+    emit m_model->aboutToRemoveFaultTree(faultTree);
+    m_model->m_model->Remove(faultTree);
+
+    m_model->m_model->Remove(m_gate.get());
+    m_proxy = extract(m_gate.get(), &m_model->m_gates);
+    emit m_model->removedGate(m_proxy.get());
 }
 
 } // namespace model
