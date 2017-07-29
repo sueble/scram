@@ -231,7 +231,7 @@ MainWindow::MainWindow(QWidget *parent)
         WaitDialog progress(this);
         progress.setLabelText(tr("Running analysis..."));
         auto analysis
-            = std::make_unique<core::RiskAnalysis>(m_model, m_settings);
+            = std::make_unique<core::RiskAnalysis>(m_model.get(), m_settings);
         QFutureWatcher<void> futureWatcher;
         connect(&futureWatcher, SIGNAL(finished()), &progress, SLOT(reset()));
         futureWatcher.setFuture(
@@ -709,7 +709,7 @@ void MainWindow::addElement()
     if (dialog.exec() == QDialog::Rejected)
         return;
     auto addBasicEvent = [&](mef::Attribute attr) {
-        auto basicEvent = std::make_shared<mef::BasicEvent>(dialog.name());
+        auto basicEvent = std::make_unique<mef::BasicEvent>(dialog.name());
         basicEvent->label(dialog.label().toStdString());
         if (attr.name.empty() == false)
             basicEvent->AddAttribute(std::move(attr));
@@ -722,7 +722,7 @@ void MainWindow::addElement()
     };
     switch (dialog.currentType()) {
     case EventDialog::HouseEvent: {
-        auto houseEvent = std::make_shared<mef::HouseEvent>(dialog.name());
+        auto houseEvent = std::make_unique<mef::HouseEvent>(dialog.name());
         houseEvent->label(dialog.label().toStdString());
         houseEvent->state(dialog.booleanConstant());
         m_undoStack->push(new model::Model::AddHouseEvent(std::move(houseEvent),
@@ -739,7 +739,7 @@ void MainWindow::addElement()
         addBasicEvent({"flavor", "conditional", ""});
         break;
     case EventDialog::Gate: {
-        auto gate = std::make_shared<mef::Gate>(dialog.name());
+        auto gate = std::make_unique<mef::Gate>(dialog.name());
         gate->label(dialog.label().toStdString());
         gate->formula(extractFormula(&dialog));
         m_undoStack->push(new model::Model::AddGate(
@@ -759,9 +759,9 @@ mef::FormulaPtr MainWindow::extractFormula(EventDialog *dialog)
 
     for (const std::string &arg : dialog->arguments()) {
         try {
-            formula->AddArgument(m_model->GetEvent(arg, ""));
-        } catch (std::out_of_range &) {
-            auto argEvent = std::make_shared<mef::BasicEvent>(arg);
+            formula->AddArgument(m_model->GetEvent(arg));
+        } catch (UndefinedElement &) {
+            auto argEvent = std::make_unique<mef::BasicEvent>(arg);
             argEvent->AddAttribute({"flavor", "undeveloped", ""});
             formula->AddArgument(argEvent.get());
             m_undoStack->push(new model::Model::AddBasicEvent(
@@ -1129,7 +1129,7 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
                 auto *table = new QTableWidget(nullptr);
                 table->setColumnCount(8);
                 table->setHorizontalHeaderLabels(
-                    {tr("Id"), tr("Occurrence"), tr("Probability"), tr("MIF"),
+                    {tr("ID"), tr("Occurrence"), tr("Probability"), tr("MIF"),
                      tr("CIF"), tr("DIF"), tr("RAW"), tr("RRW")});
                 auto &records = result.importance_analysis->importance();
                 table->setRowCount(records.size());

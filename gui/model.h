@@ -35,7 +35,6 @@
 
 #include "src/event.h"
 #include "src/model.h"
-#include "src/ext/owner_ptr.h"
 
 namespace scram {
 namespace gui {
@@ -290,30 +289,9 @@ inline QString Gate::type() const
 /// @tparam T  The proxy type.
 template <typename T>
 using ProxyTable = boost::multi_index_container<
-    ext::owner_ptr<T>, boost::multi_index::indexed_by<
+    std::unique_ptr<T>, boost::multi_index::indexed_by<
            boost::multi_index::hashed_unique<boost::multi_index::const_mem_fun<
                Element, const mef::Element *, &Element::data>>>>;
-
-/// Extracts a value from multi_index container with ownership.
-///
-/// @param[in] key  The key to lookup the value in the container.
-/// @param[in,out] container  The container with the associated value.
-///
-/// @returns The unique pointer with the extracted value.
-///
-/// @pre The value for the given key exists.
-/// @pre The container currently owns the value object.
-template <typename T, typename K>
-std::unique_ptr<T> extract(K &&key, ProxyTable<T> *container) noexcept
-{
-    std::unique_ptr<T> result;
-    auto it = container->find(std::forward<K>(key));
-    // Note that moving owner_ptr does not invalidate it.
-    container->modify(
-        it, [&result](ext::owner_ptr<T> &owner) { result = std::move(owner); });
-    container->erase(it);
-    return result;
-}
 
 /// The wrapper around the MEF Model.
 class Model : public Element
@@ -357,7 +335,8 @@ public:
 
     private:
         Model *m_model;
-        ext::owner_ptr<HouseEvent> m_proxy;
+        std::unique_ptr<HouseEvent> m_proxy;
+        mef::HouseEvent *const m_address;
         mef::HouseEventPtr m_houseEvent;
     };
 
@@ -371,7 +350,8 @@ public:
 
     private:
         Model *m_model;
-        ext::owner_ptr<BasicEvent> m_proxy;
+        std::unique_ptr<BasicEvent> m_proxy;
+        mef::BasicEvent *const m_address;
         mef::BasicEventPtr m_basicEvent;
     };
 
@@ -393,7 +373,8 @@ public:
 
     private:
         Model *m_model;
-        ext::owner_ptr<Gate> m_proxy;
+        std::unique_ptr<Gate> m_proxy;
+        mef::Gate *const m_address;
         mef::GatePtr m_gate;
         const std::string m_faultTreeName;
     };

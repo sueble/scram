@@ -306,8 +306,8 @@ std::unique_ptr<mef::Expression> EventDialog::expression() const
             new mef::ConstantExpression(exponentialRate->text().toDouble()));
         auto *rate_arg = rate.get();
         m_model->Add(std::move(rate));
-        return std::make_unique<mef::Exponential>(
-            rate_arg, m_model->mission_time().get());
+        return std::make_unique<mef::Exponential>(rate_arg,
+                                                  &m_model->mission_time());
     }
     default:
         GUI_ASSERT(false && "unexpected expression", nullptr);
@@ -325,13 +325,13 @@ void EventDialog::validate()
     nameLine->setStyleSheet(yellowBackground);
     try {
         if (name != m_initName) {
-            m_model->GetEvent(name.toStdString(), "");
+            m_model->GetEvent(name.toStdString());
             m_errorBar->showMessage(
                 tr("The event with name '%1' already exists.").arg(name));
             return;
         }
-    } catch (std::out_of_range &) {
-    }
+    } catch (UndefinedElement &) {}
+
     if (!tabFormula->isHidden() && hasFormulaArg(name)) {
         m_errorBar->showMessage(
             tr("Name '%1' would introduce a self-cycle.").arg(name));
