@@ -19,7 +19,8 @@
 
 #include "model.h"
 
-#include "src/ext/multi_index.h"
+#include <boost/range/algorithm.hpp>
+
 #include "src/fault_tree.h"
 
 #include "guiassert.h"
@@ -40,7 +41,7 @@ void Element::SetLabel::redo()
     QString cur_label = m_element->label();
     if (m_label == cur_label)
         return;
-    m_element->data()->label(m_label.toStdString());
+    m_element->m_data->label(m_label.toStdString());
     emit m_element->labelChanged(m_label);
     m_label = std::move(cur_label);
 }
@@ -68,7 +69,7 @@ BasicEvent::SetExpression::SetExpression(BasicEvent *basicEvent,
 
 void BasicEvent::SetExpression::redo()
 {
-    auto *mefEvent = m_basicEvent->data<mef::BasicEvent>();
+    auto *mefEvent = m_basicEvent->data();
     mef::Expression *cur_expression
         = mefEvent->HasExpression() ? &mefEvent->expression() : nullptr;
     if (m_expression == cur_expression)
@@ -120,7 +121,7 @@ void HouseEvent::SetState::redo()
     if (m_state == m_houseEvent->state())
         return;
     bool prev_state = m_houseEvent->state();
-    m_houseEvent->data<mef::HouseEvent>()->state(m_state);
+    m_houseEvent->data()->state(m_state);
     emit m_houseEvent->stateChanged(m_state);
     m_state = prev_state;
 }
@@ -133,7 +134,7 @@ Gate::SetFormula::SetFormula(Gate *gate, mef::FormulaPtr formula)
 
 void Gate::SetFormula::redo()
 {
-    m_formula = m_gate->data<mef::Gate>()->formula(std::move(m_formula));
+    m_formula = m_gate->data()->formula(std::move(m_formula));
     emit m_gate->formulaChanged();
 }
 
@@ -151,9 +152,32 @@ void populate(const mef::IdTable<S> &source, ProxyTable<T> *proxyTable)
 
 Model::Model(mef::Model *model) : Element(model), m_model(model)
 {
+    normalize(model);
     populate<HouseEvent>(m_model->house_events(), &m_houseEvents);
     populate<BasicEvent>(m_model->basic_events(), &m_basicEvents);
     populate<Gate>(m_model->gates(), &m_gates);
+}
+
+void Model::normalize(mef::Model *model)
+{
+    for (const mef::FaultTreePtr &faultTree : model->fault_trees()) {
+        const_cast<mef::ElementTable<mef::BasicEvent *> &>(
+            faultTree->basic_events())
+            .clear();
+        const_cast<mef::ElementTable<mef::HouseEvent *> &>(
+            faultTree->house_events())
+            .clear();
+    }
+}
+
+std::vector<Gate *> Model::parents(mef::Formula::EventArg event) const
+{
+    std::vector<Gate *> result;
+    for (const std::unique_ptr<Gate> &gate : m_gates) {
+        if (boost::find(gate->args(), event) != gate->args().end())
+            result.push_back(gate.get());
+    }
+    return result;
 }
 
 Model::SetName::SetName(QString name, Model *model)
@@ -174,83 +198,31 @@ void Model::SetName::redo()
     m_name = std::move(currentName);
 }
 
-Model::AddHouseEvent::AddHouseEvent(mef::HouseEventPtr houseEvent, Model *model)
-    : QUndoCommand(QObject::tr("Add house-event '%1'")
-                       .arg(QString::fromStdString(houseEvent->id()))),
-      m_model(model), m_proxy(std::make_unique<HouseEvent>(houseEvent.get())),
-      m_address(houseEvent.get()), m_houseEvent(std::move(houseEvent))
+Model::AddFaultTree::AddFaultTree(mef::FaultTreePtr faultTree, Model *model)
+    : QUndoCommand(QObject::tr("Add fault tree '%1'")
+                       .arg(QString::fromStdString(faultTree->name()))),
+      m_model(model), m_address(faultTree.get()),
+      m_faultTree(std::move(faultTree))
 {
 }
 
-void Model::AddHouseEvent::redo()
+void Model::AddFaultTree::redo()
 {
-    m_model->m_model->Add(std::move(m_houseEvent));
-    auto it = m_model->m_houseEvents.emplace(std::move(m_proxy)).first;
-    emit m_model->addedHouseEvent(it->get());
+    m_model->m_model->Add(std::move(m_faultTree));
+    emit m_model->added(m_address);
 }
 
-void Model::AddHouseEvent::undo()
+void Model::AddFaultTree::undo()
 {
-    m_houseEvent = m_model->m_model->Remove(m_address);
-    m_proxy = ext::extract(m_address, &m_model->m_houseEvents);
-    emit m_model->removedHouseEvent(m_proxy.get());
+    m_faultTree = m_model->m_model->Remove(m_address);
+    emit m_model->removed(m_address);
 }
 
-Model::AddBasicEvent::AddBasicEvent(mef::BasicEventPtr basicEvent, Model *model)
-    : QUndoCommand(QObject::tr("Add basic-event '%1'")
-                       .arg(QString::fromStdString(basicEvent->id()))),
-      m_model(model), m_proxy(std::make_unique<BasicEvent>(basicEvent.get())),
-      m_address(basicEvent.get()), m_basicEvent(std::move(basicEvent))
+Model::RemoveFaultTree::RemoveFaultTree(mef::FaultTree *faultTree, Model *model)
+    : AddFaultTree(faultTree, model,
+                   QObject::tr("Remove fault tree '%1'")
+                       .arg(QString::fromStdString(faultTree->name())))
 {
-}
-
-void Model::AddBasicEvent::redo()
-{
-    m_model->m_model->Add(std::move(m_basicEvent));
-    auto it = m_model->m_basicEvents.emplace(std::move(m_proxy)).first;
-    emit m_model->addedBasicEvent(it->get());
-}
-
-void Model::AddBasicEvent::undo()
-{
-    m_basicEvent = m_model->m_model->Remove(m_address);
-    m_proxy = ext::extract(m_address, &m_model->m_basicEvents);
-    emit m_model->removedBasicEvent(m_proxy.get());
-}
-
-Model::AddGate::AddGate(mef::GatePtr gate, std::string faultTree, Model *model)
-    : QUndoCommand(
-          QObject::tr("Add gate '%1'").arg(QString::fromStdString(gate->id()))),
-      m_model(model), m_proxy(std::make_unique<Gate>(gate.get())),
-      m_address(gate.get()), m_gate(std::move(gate)),
-      m_faultTreeName(std::move(faultTree))
-{
-}
-
-void Model::AddGate::redo()
-{
-    auto faultTree = std::make_unique<mef::FaultTree>(m_faultTreeName);
-    faultTree->Add(m_address);
-    faultTree->CollectTopEvents();
-    auto *signalPtr = faultTree.get();
-    m_model->m_model->Add(std::move(faultTree));
-    emit m_model->addedFaultTree(signalPtr);
-
-    m_model->m_model->Add(std::move(m_gate));
-    auto it = m_model->m_gates.emplace(std::move(m_proxy)).first;
-    emit m_model->addedGate(it->get());
-}
-
-void Model::AddGate::undo()
-{
-    auto *faultTree
-        = m_model->m_model->fault_trees().find(m_faultTreeName)->get();
-    emit m_model->aboutToRemoveFaultTree(faultTree);
-    m_model->m_model->Remove(faultTree);
-
-    m_gate = m_model->m_model->Remove(m_address);
-    m_proxy = ext::extract(m_address, &m_model->m_gates);
-    emit m_model->removedGate(m_proxy.get());
 }
 
 } // namespace model

@@ -104,6 +104,7 @@ protected:
 private:
     QGraphicsItem *m_typeGraphics; ///< The graphics of the derived type.
     QMetaObject::Connection m_labelConnection; ///< Tracks the label changes.
+    QMetaObject::Connection m_idConnection; ///< Tracks the ID changes.
 };
 
 /**
@@ -203,6 +204,12 @@ signals:
 
 private:
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *mouseEvent) override;
+
+    /// Track changes more accurately.
+    void redraw();
+
+    model::Gate *m_root;
+    model::Model *m_model;
 };
 
 } // namespace diagram

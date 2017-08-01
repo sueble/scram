@@ -24,13 +24,14 @@
 #include "src/model.h"
 
 #include "guiassert.h"
+#include "overload.h"
 
 namespace scram {
 namespace gui {
 namespace model {
 
-template <typename T>
-ElementContainerModel::ElementContainerModel(const T &container,
+template <class T>
+ElementContainerModel::ElementContainerModel(const T &container, Model *model,
                                              QObject *parent)
     : QAbstractItemModel(parent)
 {
@@ -40,6 +41,11 @@ ElementContainerModel::ElementContainerModel(const T &container,
         m_elementToIndex.emplace(elementPtr.get(), m_elements.size());
         m_elements.push_back(elementPtr.get());
     }
+    using E = typename T::value_type::element_type;
+    connect(model, OVERLOAD(Model, added, E *), this,
+            &ElementContainerModel::addElement);
+    connect(model, OVERLOAD(Model, removed, E *), this,
+            &ElementContainerModel::removeElement);
 }
 
 void ElementContainerModel::connectElement(Element *element)
@@ -47,6 +53,10 @@ void ElementContainerModel::connectElement(Element *element)
     connect(element, &Element::labelChanged, this, [this, element] {
         QModelIndex index
             = createIndex(getElementIndex(element), columnCount() - 1, element);
+        emit dataChanged(index, index);
+    });
+    connect(element, &Element::idChanged, this, [this, element] {
+        QModelIndex index = createIndex(getElementIndex(element), 0, element);
         emit dataChanged(index, index);
     });
 }
@@ -95,8 +105,8 @@ void ElementContainerModel::removeElement(Element *element)
     if (index != lastIndex) {
         m_elements[index] = lastElement;
         m_elementToIndex[lastElement] = index;
-        emit dataChanged(createIndex(index, 0),
-                         createIndex(index, columnCount()));
+        emit dataChanged(createIndex(index, 0, lastElement),
+                         createIndex(index, columnCount() - 1, lastElement));
     }
     disconnect(element, 0, this, 0);
 }
@@ -108,12 +118,8 @@ int ElementContainerModel::rowCount(const QModelIndex &parent) const
 
 BasicEventContainerModel::BasicEventContainerModel(Model *model,
                                                    QObject *parent)
-    : ElementContainerModel(model->basicEvents(), parent)
+    : ElementContainerModel(model->basicEvents(), model, parent)
 {
-    connect(model, &Model::addedBasicEvent, this,
-            &BasicEventContainerModel::addElement);
-    connect(model, &Model::removedBasicEvent, this,
-            &BasicEventContainerModel::removeElement);
     for (Element *element : elements())
         connectElement(element);
 }
@@ -182,12 +188,8 @@ void BasicEventContainerModel::connectElement(Element *element)
 
 HouseEventContainerModel::HouseEventContainerModel(Model *model,
                                                    QObject *parent)
-    : ElementContainerModel(model->houseEvents(), parent)
+    : ElementContainerModel(model->houseEvents(), model, parent)
 {
-    connect(model, &Model::addedHouseEvent, this,
-            &HouseEventContainerModel::addElement);
-    connect(model, &Model::removedHouseEvent, this,
-            &HouseEventContainerModel::removeElement);
     for (Element *element : elements())
         connectElement(element);
 }
@@ -245,11 +247,8 @@ void HouseEventContainerModel::connectElement(Element *element)
 }
 
 GateContainerModel::GateContainerModel(Model *model, QObject *parent)
-    : ElementContainerModel(model->gates(), parent)
+    : ElementContainerModel(model->gates(), model, parent)
 {
-    connect(model, &Model::addedGate, this, &GateContainerModel::addElement);
-    connect(model, &Model::removedGate, this,
-            &GateContainerModel::removeElement);
     for (Element *element : elements())
         connectElement(element);
 }

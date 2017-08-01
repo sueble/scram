@@ -123,13 +123,37 @@ private:
     template <class T>
     void setupSearchable(QObject *view, T *model);
 
+    /// Sets up remove action activation upon selection.
+    /// Only selection of top indices activate the removal.
+    ///
+    /// @tparam T  The type of the objects to remove.
+    ///
+    /// @pre Selections are single row.
+    /// @pre The model is proxy.
+    template <class T>
+    void setupRemovable(QAbstractItemView *view);
+
+    /// @tparam T  The MEF type.
+    ///
+    /// @returns The fault tree container of the element.
+    template <class T>
+    mef::FaultTree *getFaultTree(T *) { return nullptr; }
+
+    /// @tparam T  The model proxy type.
+    template <class T>
+    void removeEvent(T *event, mef::FaultTree *faultTree);
+
     template <class ContainerModel>
     QAbstractItemView *constructElementTable(model::Model *guiModel,
                                              QWidget *parent);
 
-    /// @returns The new formula constructed from the dialog data.
-    mef::FormulaPtr extractFormula(EventDialog *dialog);
+    /// @returns A new element constructed with the dialog data.
+    template <class T>
+    std::unique_ptr<T> extract(const EventDialog &dialog);
 
+    mef::FaultTree *getFaultTree(const EventDialog &dialog);
+
+    template <class T>
     void editElement(EventDialog *dialog, model::Element *element);
     void editElement(EventDialog *dialog, model::HouseEvent *element);
     void editElement(EventDialog *dialog, model::BasicEvent *element);

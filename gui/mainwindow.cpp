@@ -392,6 +392,7 @@ void MainWindow::setupActions()
     ui->actionZoomOut->setShortcut(QKeySequence::ZoomOut);
 
     // Edit menu actions.
+    ui->actionRemoveElement->setShortcut(QKeySequence::Delete);
     connect(ui->actionAddElement, &QAction::triggered, this,
             &MainWindow::addElement);
     connect(ui->actionRenameModel, &QAction::triggered, this, [this] {
@@ -703,76 +704,242 @@ void MainWindow::setupSearchable(QObject *view, T *model)
     view->installEventFilter(new SearchFilter(model, this));
 }
 
-void MainWindow::addElement()
+template <>
+mef::FaultTree *MainWindow::getFaultTree(mef::Gate *gate)
 {
-    EventDialog dialog(m_model.get(), this);
-    if (dialog.exec() == QDialog::Rejected)
-        return;
-    auto addBasicEvent = [&](mef::Attribute attr) {
-        auto basicEvent = std::make_unique<mef::BasicEvent>(dialog.name());
-        basicEvent->label(dialog.label().toStdString());
-        if (attr.name.empty() == false)
-            basicEvent->AddAttribute(std::move(attr));
-        if (auto p_expression = dialog.expression()) {
-            basicEvent->expression(p_expression.get());
-            m_model->Add(std::move(p_expression));
-        }
-        m_undoStack->push(new model::Model::AddBasicEvent(std::move(basicEvent),
-                                                          m_guiModel.get()));
-    };
-    switch (dialog.currentType()) {
-    case EventDialog::HouseEvent: {
-        auto houseEvent = std::make_unique<mef::HouseEvent>(dialog.name());
-        houseEvent->label(dialog.label().toStdString());
-        houseEvent->state(dialog.booleanConstant());
-        m_undoStack->push(new model::Model::AddHouseEvent(std::move(houseEvent),
-                                                          m_guiModel.get()));
-        break;
-    }
-    case EventDialog::BasicEvent:
-        addBasicEvent({});
-        break;
-    case EventDialog::Undeveloped:
-        addBasicEvent({"flavor", "undeveloped", ""});
-        break;
-    case EventDialog::Conditional:
-        addBasicEvent({"flavor", "conditional", ""});
-        break;
-    case EventDialog::Gate: {
-        auto gate = std::make_unique<mef::Gate>(dialog.name());
-        gate->label(dialog.label().toStdString());
-        gate->formula(extractFormula(&dialog));
-        m_undoStack->push(new model::Model::AddGate(
-            std::move(gate), dialog.faultTree(), m_guiModel.get()));
-        break;
-    }
-    default:
-        GUI_ASSERT(false && "unexpected event type", );
-    }
+    /// @todo Duplicate code from EventDialog.
+    auto it = boost::find_if(
+        m_model->fault_trees(), [&gate](const mef::FaultTreePtr &faultTree) {
+            return faultTree->gates().count(gate->name());
+        });
+    GUI_ASSERT(it != m_model->fault_trees().end(), nullptr);
+    return it->get();
 }
 
-mef::FormulaPtr MainWindow::extractFormula(EventDialog *dialog)
+template <class T>
+void MainWindow::removeEvent(T *event, mef::FaultTree *faultTree)
 {
-    auto formula = std::make_unique<mef::Formula>(dialog->connective());
-    if (formula->type() == mef::kVote)
-        formula->vote_number(dialog->voteNumber());
+    m_undoStack->push(
+        new model::Model::RemoveEvent<T>(event, m_guiModel.get(), faultTree));
+}
 
-    for (const std::string &arg : dialog->arguments()) {
+template <>
+void MainWindow::removeEvent(model::Gate *event, mef::FaultTree *faultTree)
+{
+    GUI_ASSERT(faultTree->top_events().empty() == false, );
+    GUI_ASSERT(faultTree->gates().empty() == false, );
+    if (faultTree->top_events().front() != event->data()) {
+        m_undoStack->push(new model::Model::RemoveEvent<model::Gate>(
+                event, m_guiModel.get(), faultTree));
+        return;
+    }
+    QString faultTreeName = QString::fromStdString(faultTree->name());
+    if (faultTree->gates().size() > 1) {
+        QMessageBox::information(
+            this, tr("Dependency Container Removal"),
+            tr("Fault tree '%1' with root '%2' is not removable because"
+               " it has dependent non-root gates."
+               " Remove the gates from the fault tree"
+               " before this operation.")
+                .arg(faultTreeName, event->id()));
+        return;
+    }
+    m_undoStack->beginMacro(tr("Remove fault tree '%1' with root '%2'")
+                                .arg(faultTreeName, event->id()));
+    m_undoStack->push(new model::Model::RemoveEvent<model::Gate>(
+        event, m_guiModel.get(), faultTree));
+    m_undoStack->push(
+        new model::Model::RemoveFaultTree(faultTree, m_guiModel.get()));
+    m_undoStack->endMacro();
+}
+
+template <class T>
+void MainWindow::setupRemovable(QAbstractItemView *view)
+{
+    struct RemoveFilter : public QObject {
+        RemoveFilter(QAbstractItemView *removable, MainWindow *window)
+            : QObject(removable), m_window(window), m_removable(removable) {}
+
+        void react(const QModelIndexList &indexes)
+        {
+            m_window->ui->actionRemoveElement->setEnabled(
+                !(indexes.empty() || indexes.front().parent().isValid()));
+        }
+
+        bool eventFilter(QObject *object, QEvent *event) override
+        {
+            if (event->type() == QEvent::Show) {
+                react(m_removable->selectionModel()->selectedIndexes());
+                connect(m_removable->selectionModel(),
+                        &QItemSelectionModel::selectionChanged,
+                        m_window->ui->actionRemoveElement,
+                        [this](const QItemSelection &selected) {
+                            react(selected.indexes());
+                        });
+                connect(
+                    m_window->ui->actionRemoveElement, &QAction::triggered,
+                    m_removable, [this] {
+                        auto currentIndexes
+                            = m_removable->selectionModel()->selectedIndexes();
+                        GUI_ASSERT(currentIndexes.empty() == false, );
+                        auto index = currentIndexes.front();
+                        GUI_ASSERT(index.parent().isValid() == false, );
+                        auto *proxyModel = static_cast<QSortFilterProxyModel *>(
+                            m_removable->model());
+                        auto *element = static_cast<T *>(
+                            proxyModel->mapToSource(index).internalPointer());
+                        GUI_ASSERT(element, );
+                        auto parents
+                            = m_window->m_guiModel->parents(element->data());
+                        if (!parents.empty()) {
+                            QMessageBox::information(
+                                m_window, tr("Dependency Event Removal"),
+                                tr("Event '%1' is not removable because"
+                                   " it has dependents."
+                                   " Remove the event from the dependents"
+                                   " before this operation.")
+                                    .arg(element->id()));
+                            return;
+                        }
+                        m_window->removeEvent(
+                                element,
+                                m_window->getFaultTree(element->data()));
+                    });
+            } else if (event->type() == QEvent::Hide) {
+                m_window->ui->actionRemoveElement->setEnabled(false);
+                disconnect(m_window->ui->actionRemoveElement, 0, m_removable,
+                           0);
+            }
+
+            return QObject::eventFilter(object, event);
+        }
+
+        MainWindow *m_window;
+        QAbstractItemView *m_removable;
+    };
+    view->installEventFilter(new RemoveFilter(view, this));
+}
+
+template <>
+mef::FormulaPtr MainWindow::extract(const EventDialog &dialog)
+{
+    auto formula = std::make_unique<mef::Formula>(dialog.connective());
+    if (formula->type() == mef::kVote)
+        formula->vote_number(dialog.voteNumber());
+
+    for (const std::string &arg : dialog.arguments()) {
         try {
             formula->AddArgument(m_model->GetEvent(arg));
         } catch (UndefinedElement &) {
             auto argEvent = std::make_unique<mef::BasicEvent>(arg);
             argEvent->AddAttribute({"flavor", "undeveloped", ""});
             formula->AddArgument(argEvent.get());
-            m_undoStack->push(new model::Model::AddBasicEvent(
+            /// @todo Add into the parent undo.
+            m_undoStack->push(new model::Model::AddEvent<model::BasicEvent>(
                 std::move(argEvent), m_guiModel.get()));
         }
     }
     return formula;
 }
 
+template <>
+mef::BasicEventPtr MainWindow::extract(const EventDialog &dialog)
+{
+    auto basicEvent
+        = std::make_unique<mef::BasicEvent>(dialog.name().toStdString());
+    basicEvent->label(dialog.label().toStdString());
+    switch (dialog.currentType()) {
+    case EventDialog::BasicEvent:
+        break;
+    case EventDialog::Undeveloped:
+        basicEvent->AddAttribute({"flavor", "undeveloped", ""});
+        break;
+    case EventDialog::Conditional:
+        basicEvent->AddAttribute({"flavor", "conditional", ""});
+        break;
+    default:
+        GUI_ASSERT(false && "unexpected event type", nullptr);
+    }
+    if (auto p_expression = dialog.expression()) {
+        basicEvent->expression(p_expression.get());
+        m_model->Add(std::move(p_expression));
+    }
+    return basicEvent;
+}
+
+template <>
+mef::HouseEventPtr MainWindow::extract(const EventDialog &dialog)
+{
+    GUI_ASSERT(dialog.currentType() == EventDialog::HouseEvent, nullptr);
+    auto houseEvent
+        = std::make_unique<mef::HouseEvent>(dialog.name().toStdString());
+    houseEvent->label(dialog.label().toStdString());
+    houseEvent->state(dialog.booleanConstant());
+    return houseEvent;
+}
+
+template <>
+mef::GatePtr MainWindow::extract(const EventDialog &dialog)
+{
+    GUI_ASSERT(dialog.currentType() == EventDialog::Gate, nullptr);
+    auto gate = std::make_unique<mef::Gate>(dialog.name().toStdString());
+    gate->label(dialog.label().toStdString());
+    gate->formula(extract<mef::Formula>(dialog));
+    return gate;
+}
+
+void MainWindow::addElement()
+{
+    EventDialog dialog(m_model.get(), this);
+    if (dialog.exec() == QDialog::Rejected)
+        return;
+    switch (dialog.currentType()) {
+    case EventDialog::HouseEvent:
+        m_undoStack->push(new model::Model::AddEvent<model::HouseEvent>(
+            extract<mef::HouseEvent>(dialog), m_guiModel.get()));
+        break;
+    case EventDialog::BasicEvent:
+    case EventDialog::Undeveloped:
+    case EventDialog::Conditional:
+        m_undoStack->push(new model::Model::AddEvent<model::BasicEvent>(
+            extract<mef::BasicEvent>(dialog), m_guiModel.get()));
+        break;
+    case EventDialog::Gate: {
+        m_undoStack->beginMacro(
+            tr("Add fault tree '%1' with gate '%2'")
+                .arg(QString::fromStdString(dialog.faultTree()),
+                     dialog.name()));
+        auto faultTree = std::make_unique<mef::FaultTree>(dialog.faultTree());
+        auto *faultTreeAddress = faultTree.get();
+        m_undoStack->push(new model::Model::AddFaultTree(std::move(faultTree),
+                                                         m_guiModel.get()));
+        m_undoStack->push(new model::Model::AddEvent<model::Gate>(
+            extract<mef::Gate>(dialog), m_guiModel.get(), faultTreeAddress));
+        faultTreeAddress->CollectTopEvents();
+        m_undoStack->endMacro();
+    } break;
+    default:
+        GUI_ASSERT(false && "unexpected event type", );
+    }
+}
+
+mef::FaultTree *MainWindow::getFaultTree(const EventDialog &dialog)
+{
+    if (dialog.faultTree().empty())
+        return nullptr;
+    auto it = m_model->fault_trees().find(dialog.faultTree());
+    GUI_ASSERT(it != m_model->fault_trees().end(), nullptr);
+    return it->get();
+}
+
+template <class T>
 void MainWindow::editElement(EventDialog *dialog, model::Element *element)
 {
+    if (dialog->name() != element->id()) {
+        m_undoStack->push(new model::Element::SetId<T>(
+            static_cast<T *>(element), dialog->name(), m_model.get(),
+            getFaultTree(*dialog)));
+    }
     if (dialog->label() != element->label())
         m_undoStack->push(
             new model::Element::SetLabel(element, dialog->label()));
@@ -780,7 +947,27 @@ void MainWindow::editElement(EventDialog *dialog, model::Element *element)
 
 void MainWindow::editElement(EventDialog *dialog, model::BasicEvent *element)
 {
-    editElement(dialog, static_cast<model::Element *>(element));
+    editElement<model::BasicEvent>(dialog, element);
+    switch (dialog->currentType()) {
+    case EventDialog::HouseEvent:
+        m_undoStack->push(new model::Model::ChangeEventType<model::BasicEvent,
+                                                            model::HouseEvent>(
+            element, extract<mef::HouseEvent>(*dialog), m_guiModel.get(),
+            getFaultTree(*dialog)));
+        return;
+    case EventDialog::BasicEvent:
+    case EventDialog::Undeveloped:
+    case EventDialog::Conditional:
+        break;
+    case EventDialog::Gate:
+        m_undoStack->push(
+            new model::Model::ChangeEventType<model::BasicEvent, model::Gate>(
+                element, extract<mef::Gate>(*dialog), m_guiModel.get(),
+                getFaultTree(*dialog)));
+        return;
+    default:
+        GUI_ASSERT(false && "Unexpected event type", );
+    }
     std::unique_ptr<mef::Expression> expression = dialog->expression();
     auto isEqual = [](mef::Expression *lhs, mef::Expression *rhs) {
         if (lhs == rhs) // Assumes immutable expressions.
@@ -842,7 +1029,27 @@ void MainWindow::editElement(EventDialog *dialog, model::BasicEvent *element)
 
 void MainWindow::editElement(EventDialog *dialog, model::HouseEvent *element)
 {
-    editElement(dialog, static_cast<model::Element *>(element));
+    editElement<model::HouseEvent>(dialog, element);
+    switch (dialog->currentType()) {
+    case EventDialog::HouseEvent:
+        break;
+    case EventDialog::BasicEvent:
+    case EventDialog::Undeveloped:
+    case EventDialog::Conditional:
+        m_undoStack->push(new model::Model::ChangeEventType<model::HouseEvent,
+                                                            model::BasicEvent>(
+            element, extract<mef::BasicEvent>(*dialog), m_guiModel.get(),
+            getFaultTree(*dialog)));
+        return;
+    case EventDialog::Gate:
+        m_undoStack->push(
+            new model::Model::ChangeEventType<model::HouseEvent, model::Gate>(
+                element, extract<mef::Gate>(*dialog), m_guiModel.get(),
+                getFaultTree(*dialog)));
+        return;
+    default:
+        GUI_ASSERT(false && "Unexpected event type", );
+    }
     if (dialog->booleanConstant() != element->state())
         m_undoStack->push(new model::HouseEvent::SetState(
             element, dialog->booleanConstant()));
@@ -850,7 +1057,28 @@ void MainWindow::editElement(EventDialog *dialog, model::HouseEvent *element)
 
 void MainWindow::editElement(EventDialog *dialog, model::Gate *element)
 {
-    editElement(dialog, static_cast<model::Element *>(element));
+    editElement<model::Gate>(dialog, element);
+    switch (dialog->currentType()) {
+    case EventDialog::HouseEvent:
+        m_undoStack->push(
+            new model::Model::ChangeEventType<model::Gate, model::HouseEvent>(
+                element, extract<mef::HouseEvent>(*dialog), m_guiModel.get(),
+                getFaultTree(*dialog)));
+        return;
+    case EventDialog::BasicEvent:
+    case EventDialog::Undeveloped:
+    case EventDialog::Conditional:
+        m_undoStack->push(
+            new model::Model::ChangeEventType<model::Gate, model::BasicEvent>(
+                element, extract<mef::BasicEvent>(*dialog), m_guiModel.get(),
+                getFaultTree(*dialog)));
+        return;
+    case EventDialog::Gate:
+        break;
+    default:
+        GUI_ASSERT(false && "Unexpected event type", );
+    }
+
     bool formulaChanged = [&dialog, &element] {
         if (dialog->connective() != element->type())
             return true;
@@ -869,8 +1097,8 @@ void MainWindow::editElement(EventDialog *dialog, model::Gate *element)
         return false;
     }();
     if (formulaChanged)
-        m_undoStack->push(
-            new model::Gate::SetFormula(element, extractFormula(dialog)));
+        m_undoStack->push(new model::Gate::SetFormula(
+            element, extract<mef::Formula>(*dialog)));
 }
 
 template <class ContainerModel>
@@ -888,6 +1116,7 @@ QAbstractItemView *MainWindow::constructElementTable(model::Model *guiModel,
     table->resizeColumnsToContents();
     table->setSortingEnabled(true);
     setupSearchable(table, proxyModel);
+    setupRemovable<typename ContainerModel::ItemModel>(table);
     connect(table, &QAbstractItemView::activated,
             [this, proxyModel](const QModelIndex &index) {
                 GUI_ASSERT(index.isValid(), );
@@ -895,11 +1124,8 @@ QAbstractItemView *MainWindow::constructElementTable(model::Model *guiModel,
                 auto *item = static_cast<typename ContainerModel::ItemModel *>(
                     proxyModel->mapToSource(index).internalPointer());
                 dialog.setupData(*item);
-                if (dialog.exec() == QDialog::Accepted) {
-                    /// @todo Type change
-                    /// @todo Name change
+                if (dialog.exec() == QDialog::Accepted)
                     editElement(&dialog, item);
-                }
             });
     return table;
 }
@@ -923,6 +1149,7 @@ QAbstractItemView *MainWindow::constructElementTable<model::GateContainerModel>(
     tree->setSortingEnabled(true);
 
     setupSearchable(tree, proxyModel);
+    setupRemovable<model::Gate>(tree);
     connect(tree, &QAbstractItemView::activated,
             [this, proxyModel](const QModelIndex &index) {
                 GUI_ASSERT(index.isValid(), );

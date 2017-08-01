@@ -37,6 +37,7 @@
 #include "src/ext/find_iterator.h"
 
 #include "guiassert.h"
+#include "overload.h"
 
 namespace scram {
 namespace gui {
@@ -52,12 +53,15 @@ Event::Event(model::Element *event, QGraphicsItem *parent)
 {
     m_labelConnection = QObject::connect(event, &model::Element::labelChanged,
                                          [this] { update(); });
+    m_idConnection = QObject::connect(event, &model::Element::idChanged,
+                                      [this] { update(); });
     setFlag(QGraphicsItem::ItemIsSelectable, true);
 }
 
 Event::~Event() noexcept
 {
     QObject::disconnect(m_labelConnection);
+    QObject::disconnect(m_idConnection);
 }
 
 QSize Event::units() const
@@ -353,10 +357,16 @@ void Gate::addTransferOut()
 
 DiagramScene::DiagramScene(model::Gate *event, model::Model *model,
                            QObject *parent)
-    : QGraphicsScene(parent)
+    : QGraphicsScene(parent), m_root(event), m_model(model)
 {
-    std::unordered_map<const mef::Gate *, Gate *> transfer;
-    addItem(new Gate(event, model, &transfer));
+    redraw();
+    connect(m_model, OVERLOAD(model::Model, removed, model::Gate *), this,
+            [this](model::Gate *gate) {
+                if (gate == m_root) {
+                    clear();
+                    m_root = nullptr; ///< @todo Remove the implicit delete.
+                }
+            });
 }
 
 void DiagramScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *mouseEvent)
@@ -369,6 +379,39 @@ void DiagramScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *mouseEvent)
         GUI_ASSERT(event, );
         emit activated(event->data());
     }
+}
+
+void DiagramScene::redraw()
+{
+    if (m_root == nullptr)
+        return;
+
+    clear();
+    std::unordered_map<const mef::Gate *, Gate *> transfer;
+    addItem(new Gate(m_root, m_model, &transfer));
+
+    struct {
+        void operator()(mef::Event *) const {}
+        void operator()(mef::BasicEvent *event) const
+        {
+            auto *proxy = self->m_model->basicEvents().find(event)->get();
+            connect(proxy, &model::BasicEvent::flavorChanged, self,
+                    &DiagramScene::redraw, Qt::UniqueConnection);
+        }
+        DiagramScene *self;
+    } visitor{this};
+
+    auto link = [this, &visitor](model::Gate *gate) {
+        connect(gate, &model::Gate::formulaChanged, this,
+                &DiagramScene::redraw, Qt::UniqueConnection);
+        for (const mef::Formula::EventArg &arg : gate->args())
+            boost::apply_visitor(visitor, arg);
+    };
+
+    /// @todo Finer signal tracking.
+    link(m_root);
+    for (const auto &entry : transfer)
+        link(m_model->gates().find(entry.first)->get());
 }
 
 } // namespace diagram
