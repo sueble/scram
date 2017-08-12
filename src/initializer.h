@@ -41,6 +41,7 @@
 #include "expression.h"
 #include "expression/constant.h"
 #include "fault_tree.h"
+#include "instruction.h"
 #include "model.h"
 #include "parameter.h"
 #include "settings.h"
@@ -246,6 +247,13 @@ class Initializer : private boost::noncopyable {
   void RegisterFaultTreeData(const xmlpp::Element* ft_node,
                              const std::string& base_path,
                              Component* component);
+
+  /// Defines the model alignment from the xml element.
+  ///
+  /// @param[in] xml_node  The XML element with alignment data.
+  ///
+  /// @throws ValidationError  Invalid alignment definition.
+  void DefineAlignment(const xmlpp::Element* xml_node);
 
   /// Processes model data with definitions of events and analysis.
   ///
