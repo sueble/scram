@@ -43,7 +43,7 @@ namespace scram {
 namespace gui {
 namespace diagram {
 
-const QSize Event::m_size = {16, 11};
+const QSizeF Event::m_size = {16, 11};
 const double Event::m_baseHeight = 6.5;
 const double Event::m_idBoxLength = 10;
 const double Event::m_labelBoxHeight = 4;
@@ -66,8 +66,8 @@ Event::~Event() noexcept
 
 QSizeF Event::units() const
 {
-    QFontMetricsF font = QApplication::fontMetrics();
-    return {font.averageCharWidth(), font.height()};
+    double h = QApplication::fontMetrics().height();
+    return {h / 2, h};
 }
 
 double Event::width() const
@@ -103,7 +103,9 @@ void Event::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     QRectF rect(-labelBoxWidth / 2, 0, labelBoxWidth, m_labelBoxHeight * h);
     painter->drawRect(rect);
     painter->drawText(rect, Qt::AlignCenter | Qt::TextWordWrap,
-                      m_event->label());
+                      painter->fontMetrics().elidedText(
+                          m_event->label(), Qt::ElideRight,
+                          labelBoxWidth * (m_labelBoxHeight - 0.5)));
 
     painter->drawLine(QPointF(0, m_labelBoxHeight * h),
                       QPointF(0, (m_labelBoxHeight + 1) * h));
@@ -111,7 +113,9 @@ void Event::paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
     double idBoxWidth = m_idBoxLength * w;
     QRectF nameRect(-idBoxWidth / 2, (m_labelBoxHeight + 1) * h, idBoxWidth, h);
     painter->drawRect(nameRect);
-    painter->drawText(nameRect, Qt::AlignCenter, m_event->id());
+    painter->drawText(nameRect, Qt::AlignCenter,
+                      painter->fontMetrics().elidedText(
+                          m_event->id(), Qt::ElideRight, idBoxWidth));
 
     painter->drawLine(QPointF(0, (m_labelBoxHeight + 2) * h),
                       QPointF(0, (m_labelBoxHeight + 2.5) * h));
@@ -162,7 +166,7 @@ TransferIn::TransferIn(model::Gate *event, QGraphicsItem *parent)
         new QGraphicsPolygonItem({{{0, 0}, {-d / 2, d}, {d / 2, d}}}));
 }
 
-const QSize Gate::m_maxSize = {6, 3};
+const QSizeF Gate::m_maxSize = {6, 3};
 const double Gate::m_space = 1;
 
 Gate::Gate(model::Gate *event, model::Model *model,
