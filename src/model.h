@@ -33,6 +33,7 @@
 #include "event.h"
 #include "event_tree.h"
 #include "expression.h"
+#include "expression/extern.h"
 #include "expression/test_event.h"
 #include "fault_tree.h"
 #include "instruction.h"
@@ -95,6 +96,12 @@ class Model : public Element, private boost::noncopyable {
   const IdTable<BasicEventPtr>& basic_events() const { return basic_events_; }
   const IdTable<GatePtr>& gates() const { return gates_; }
   const IdTable<CcfGroupPtr>& ccf_groups() const { return ccf_groups_; }
+  const ElementTable<std::unique_ptr<ExternLibrary>>& libraries() const {
+    return libraries_;
+  }
+  const ElementTable<ExternFunctionPtr>& extern_functions() const {
+    return extern_functions_;
+  }
   /// @}
 
   /// Adds MEF constructs into the model container.
@@ -121,6 +128,8 @@ class Model : public Element, private boost::noncopyable {
   void Add(std::unique_ptr<Instruction> element) {
     instructions_.emplace_back(std::move(element));
   }
+  void Add(std::unique_ptr<ExternLibrary> element);
+  void Add(ExternFunctionPtr element);
   /// @}
 
   /// Convenience function to retrieve an event with its ID.
@@ -166,6 +175,8 @@ class Model : public Element, private boost::noncopyable {
   IdTable<HouseEventPtr> house_events_;
   IdTable<BasicEventPtr> basic_events_;
   IdTable<ParameterPtr> parameters_;
+  ElementTable<std::unique_ptr<ExternLibrary>> libraries_;
+  ElementTable<ExternFunctionPtr> extern_functions_;
   std::unique_ptr<MissionTime> mission_time_;
   IdTable<CcfGroupPtr> ccf_groups_;
   std::vector<std::unique_ptr<Expression>> expressions_;

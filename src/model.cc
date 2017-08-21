@@ -95,6 +95,17 @@ void Model::Add(CcfGroupPtr ccf_group) {
                                      "Redefinition of CCF group: ");
 }
 
+void Model::Add(std::unique_ptr<ExternLibrary> library) {
+  mef::AddElement<RedefinitionError>(std::move(library), &libraries_,
+                                     "Redefinition of extern library: ");
+}
+
+void Model::Add(ExternFunctionPtr extern_function) {
+  mef::AddElement<RedefinitionError>(std::move(extern_function),
+                                     &extern_functions_,
+                                     "Redefinition of extern function: ");
+}
+
 Formula::EventArg Model::GetEvent(const std::string& id) {
   if (auto it = ext::find(basic_events(), id))
     return it->get();

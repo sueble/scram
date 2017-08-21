@@ -47,8 +47,8 @@ void RiskAnalysisTest::SetUp() {
 }
 
 void RiskAnalysisTest::ProcessInputFiles(
-    const std::vector<std::string>& input_files) {
-  mef::Initializer init(input_files, settings);
+    const std::vector<std::string>& input_files, bool allow_extern) {
+  mef::Initializer init(input_files, settings, allow_extern);
   model = init.model();
   analysis = std::make_unique<RiskAnalysis>(model.get(), settings);
   result_ = Result();
@@ -632,6 +632,18 @@ TEST_F(RiskAnalysisTest, UndefinedEventsMixedRoles) {
       {"C", "Ambiguous.Private.A", "Ambiguous.Private.B"},
       {"G", "Ambiguous.Private.A", "Ambiguous.Private.B"}};
   EXPECT_EQ(mcs, products());
+}
+
+// Extern function call check.
+TEST_P(RiskAnalysisTest, ExternFunctionProbability) {
+  std::string tree_input =
+      "./share/scram/input/model/extern_full_check.xml";
+  settings.probability_analysis(true);
+  ASSERT_NO_THROW(ProcessInputFiles({tree_input}, true));
+  ASSERT_NO_THROW(analysis->Analyze());
+  std::set<std::set<std::string>> mcs = {{"e1"}};
+  EXPECT_EQ(mcs, products());
+  EXPECT_DOUBLE_EQ(0.1, p_total());
 }
 
 }  // namespace test
