@@ -36,8 +36,6 @@
 #include <QtConcurrent>
 #include <QtOpenGL>
 
-#include <libxml++/libxml++.h>
-
 #include "src/config.h"
 #include "src/env.h"
 #include "src/error.h"
@@ -279,32 +277,21 @@ void MainWindow::setConfig(const std::string &configPath,
 
 void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
 {
-    static xmlpp::RelaxNGValidator validator(Env::install_dir()
-                                             + "/share/scram/gui.rng");
+    static xml::Validator validator(Env::install_dir()
+                                    + "/share/scram/gui.rng");
 
     if (inputFiles.empty())
         return;
 
-    auto validateWithGuiSchema = [](const std::string &xmlFile) {
-        std::unique_ptr<xmlpp::DomParser> parser
-            = ConstructDomParser(xmlFile);
-        try {
-            validator.validate(parser->get_document());
-        } catch (const xmlpp::validity_error &) {
-            throw ValidationError(
-                "Document failed validation against the GUI schema:\n"
-                + xmlpp::format_xml_error());
-        }
-    };
-
     try {
         std::vector<std::string> allInput = m_inputFiles;
         allInput.insert(allInput.end(), inputFiles.begin(), inputFiles.end());
-        std::shared_ptr<mef::Model> newModel
-            = mef::Initializer(allInput, m_settings).model();
-
-        for (const std::string &inputFile : inputFiles)
-            validateWithGuiSchema(inputFile);
+        std::shared_ptr<mef::Model> newModel = [this, &allInput] {
+            mef::Initializer init(allInput, m_settings);
+            for (int i = m_inputFiles.size(); i < allInput.size(); ++i)
+                validator.validate(init.documents()[i]);
+            return init.model();
+        }();
 
         for (const mef::FaultTreePtr &faultTree : newModel->fault_trees()) {
             if (faultTree->top_events().size() != 1) {
