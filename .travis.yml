@@ -52,7 +52,7 @@ script:
     - echo "Done"
 
 after_success:
-    - cat build/cov-int/scm_log.txt
+    - cat cov-int/scm_log.txt
 
 after_failure:
-    - cat build-log.txt
+    - cat cov-int/build-log.txt
