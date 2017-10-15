@@ -29,7 +29,6 @@
 #include <QMessageBox>
 #include <QPrinter>
 #include <QProgressDialog>
-#include <QRegularExpression>
 #include <QSvgGenerator>
 #include <QTableView>
 #include <QTableWidget>
@@ -55,6 +54,7 @@
 #include "modeltree.h"
 #include "printable.h"
 #include "settingsdialog.h"
+#include "validator.h"
 
 namespace scram {
 namespace gui {
@@ -65,10 +65,7 @@ public:
     explicit NameDialog(QWidget *parent) : QDialog(parent)
     {
         setupUi(this);
-        /// @todo Provide validators from a central location.
-        static QRegularExpressionValidator nameValidator(
-            QRegularExpression(QStringLiteral(R"([[:alpha:]]\w*(-\w+)*)")));
-        nameLine->setValidator(&nameValidator);
+        nameLine->setValidator(Validator::name());
     }
 };
 
@@ -153,7 +150,6 @@ QTableWidgetItem *constructTableItem(QVariant data)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
       m_undoStack(new QUndoStack(this)),
-      m_percentValidator(QRegularExpression(QStringLiteral(R"([1-9]\d+%?)"))),
       m_zoomBox(new QComboBox)
 {
     ui->setupUi(this);
@@ -161,7 +157,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_zoomBox->setEditable(true);
     m_zoomBox->setEnabled(false);
     m_zoomBox->setInsertPolicy(QComboBox::NoInsert);
-    m_zoomBox->setValidator(&m_percentValidator);
+    m_zoomBox->setValidator(Validator::percent());
     for (QAction *action : ui->menuZoom->actions()) {
         m_zoomBox->addItem(action->text());
         connect(action, &QAction::triggered, m_zoomBox, [action, this] {
@@ -227,6 +223,7 @@ MainWindow::MainWindow(QWidget *parent)
             return;
         }
         WaitDialog progress(this);
+        //: This is a message shown during the analysis run.
         progress.setLabelText(tr("Running analysis..."));
         auto analysis
             = std::make_unique<core::RiskAnalysis>(m_model.get(), m_settings);
@@ -241,7 +238,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(this, &MainWindow::configChanged, [this] {
         m_undoStack->clear();
-        setWindowTitle(QString::fromLatin1("%1[*]").arg(
+        setWindowTitle(QStringLiteral("%1[*]").arg(
             QString::fromStdString(m_model->name())));
         ui->actionSaveAs->setEnabled(true);
         ui->actionAddElement->setEnabled(true);
@@ -297,6 +294,7 @@ void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
             if (faultTree->top_events().size() != 1) {
                 QMessageBox::critical(
                     this, tr("Initialization Error"),
+                    //: Single top/root event fault tree are expected by GUI.
                     tr("Fault tree '%1' must have a single top-gate.")
                         .arg(QString::fromStdString(faultTree->name())));
                 return;
@@ -306,7 +304,9 @@ void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
         m_model = std::move(newModel);
         m_inputFiles = std::move(allInput);
     } catch (scram::Error &err) {
-        QMessageBox::critical(this, tr("Initialization Error"),
+        QMessageBox::critical(this,
+                              //: The error upon initialization from a file.
+                              tr("Initialization Error"),
                               QString::fromUtf8(err.what()));
         return;
     }
@@ -322,6 +322,7 @@ void MainWindow::setupStatusBar()
     m_searchBar->setMaximumHeight(m_searchBar->fontMetrics().height());
     m_searchBar->setSizePolicy(QSizePolicy::MinimumExpanding,
                                QSizePolicy::Fixed);
+    //: The search bar.
     m_searchBar->setPlaceholderText(tr("Find/Filter (Perl Regex)"));
     ui->statusBar->addPermanentWidget(m_searchBar);
 }
@@ -331,6 +332,11 @@ void MainWindow::setupActions()
     connect(ui->actionAboutQt, &QAction::triggered, qApp,
             &QApplication::aboutQt);
     connect(ui->actionAboutScram, &QAction::triggered, this, [this] {
+        QString legal = QStringLiteral(
+            "This program is distributed in the hope that it will be useful, "
+            "but WITHOUT ANY WARRANTY; without even the implied warranty of "
+            "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the "
+            "GNU General Public License for more details.");
         QMessageBox::about(
             this, tr("About SCRAM"),
             tr("<h1>SCRAM %1</h1>"
@@ -339,16 +345,12 @@ void MainWindow::setupActions()
                "License: GPLv3+<br/>"
                "Homepage: <a href=\"%2\">%2</a><br/>"
                "Technical Support: <a href=\"%3\">%3</a><br/>"
-               "Bug Tracker: <a href=\"%4\">%4</a><br/><br/>"
-               "This program is distributed in the hope that it will be useful,"
-               " but WITHOUT ANY WARRANTY; without even the implied warranty of"
-               " MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the "
-               "GNU General Public License for more details.")
+               "Bug Tracker: <a href=\"%4\">%4</a><br/><br/>%5")
                 .arg(QCoreApplication::applicationVersion(),
-                     QString::fromLatin1("https://scram-pra.org"),
-                     QString::fromLatin1("scram-users@googlegroups.com"),
-                     QString::fromLatin1(
-                         "https://github.com/rakhimov/scram/issues")));
+                     QStringLiteral("https://scram-pra.org"),
+                     QStringLiteral("scram-users@googlegroups.com"),
+                     QStringLiteral("https://github.com/rakhimov/scram/issues"),
+                     legal));
     });
 
     // File menu actions.
@@ -456,7 +458,7 @@ void MainWindow::openFiles(QString directory)
 {
     QStringList filenames = QFileDialog::getOpenFileNames(
         this, tr("Open Model Files"), directory,
-        QString::fromLatin1("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
+        QStringLiteral("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
             .arg(tr("Model Exchange Format"), tr("All files")));
     if (filenames.empty())
         return;
@@ -477,7 +479,7 @@ void MainWindow::saveModelAs()
 {
     QString filename = QFileDialog::getSaveFileName(
         this, tr("Save Model As"), QDir::homePath(),
-        QString::fromLatin1("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
+        QStringLiteral("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
             .arg(tr("Model Exchange Format"), tr("All files")));
     if (filename.isNull())
         return;
@@ -491,7 +493,7 @@ void MainWindow::saveToFile(std::string destination)
     try {
         mef::Serialize(*m_model, destination);
     } catch (Error &err) {
-        QMessageBox::critical(this, tr("Save Error"),
+        QMessageBox::critical(this, tr("Save Error", "error on saving to file"),
                               QString::fromUtf8(err.what()));
         return;
     }
@@ -526,7 +528,7 @@ void MainWindow::exportReportAs()
     GUI_ASSERT(m_analysis, );
     QString filename = QFileDialog::getSaveFileName(
         this, tr("Export Report As"), QDir::homePath(),
-        QString::fromLatin1("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
+        QStringLiteral("%1 (*.mef *.opsa *.opsa-mef *.xml);;%2 (*.*)")
             .arg(tr("Model Exchange Format"), tr("All files")));
     if (filename.isNull())
         return;
@@ -559,12 +561,12 @@ void MainWindow::setupZoomableView(ZoomableView *view)
             if (event->type() == QEvent::Show) {
                 setEnabled(true);
                 m_window->m_zoomBox->setCurrentText(
-                    QString::fromLatin1("%1%").arg(m_zoomable->getZoom()));
+                    QStringLiteral("%1%").arg(m_zoomable->getZoom()));
 
                 connect(m_zoomable, &ZoomableView::zoomChanged,
                         m_window->m_zoomBox, [this](int level) {
                             m_window->m_zoomBox->setCurrentText(
-                                QString::fromLatin1("%1%").arg(level));
+                                QStringLiteral("%1%").arg(level));
                         });
                 connect(m_window->m_zoomBox, &QComboBox::currentTextChanged,
                         m_zoomable, [this](QString text) {
@@ -723,7 +725,9 @@ void MainWindow::removeEvent(model::Gate *event, mef::FaultTree *faultTree)
     QString faultTreeName = QString::fromStdString(faultTree->name());
     if (faultTree->gates().size() > 1) {
         QMessageBox::information(
-            this, tr("Dependency Container Removal"),
+            this,
+            //: The container w/ dependents still in the model.
+            tr("Dependency Container Removal"),
             tr("Fault tree '%1' with root '%2' is not removable because"
                " it has dependent non-root gates."
                " Remove the gates from the fault tree"
@@ -780,7 +784,9 @@ void MainWindow::setupRemovable(QAbstractItemView *view)
                             = m_window->m_guiModel->parents(element->data());
                         if (!parents.empty()) {
                             QMessageBox::information(
-                                m_window, tr("Dependency Event Removal"),
+                                m_window,
+                                //: The event w/ dependents in the model.
+                                tr("Dependency Event Removal"),
                                 tr("Event '%1' is not removable because"
                                    " it has dependents."
                                    " Remove the event from the dependents"
@@ -817,7 +823,7 @@ mef::FormulaPtr MainWindow::extract(const EventDialog &dialog)
     for (const std::string &arg : dialog.arguments()) {
         try {
             formula->AddArgument(m_model->GetEvent(arg));
-        } catch (UndefinedElement &) {
+        } catch (mef::UndefinedElement &) {
             auto argEvent = std::make_unique<mef::BasicEvent>(arg);
             argEvent->AddAttribute({"flavor", "undeveloped", ""});
             formula->AddArgument(argEvent.get());
@@ -893,6 +899,7 @@ void MainWindow::addElement()
         break;
     case EventDialog::Gate: {
         m_undoStack->beginMacro(
+            //: Addition of a fault by defining its root event first.
             tr("Add fault tree '%1' with gate '%2'")
                 .arg(QString::fromStdString(dialog.faultTree()),
                      dialog.name()));
@@ -1165,7 +1172,7 @@ void MainWindow::resetModelTree()
     delete oldModel;
 
     connect(m_guiModel.get(), &model::Model::modelNameChanged, this, [this] {
-        setWindowTitle(QString::fromLatin1("%1[*]").arg(
+        setWindowTitle(QStringLiteral("%1[*]").arg(
             QString::fromStdString(m_model->name())));
     });
 }
@@ -1178,6 +1185,7 @@ void MainWindow::activateModelTree(const QModelIndex &index)
         case ModelTree::Row::Gates: {
             auto *table = constructElementTable<model::GateContainerModel>(
                 m_guiModel.get(), this);
+            //: The tab for the table of gates.
             ui->tabWidget->addTab(table, tr("Gates"));
             ui->tabWidget->setCurrentWidget(table);
             return;
@@ -1186,6 +1194,7 @@ void MainWindow::activateModelTree(const QModelIndex &index)
             auto *table
                 = constructElementTable<model::BasicEventContainerModel>(
                     m_guiModel.get(), this);
+            //: The tab for the table of basic events.
             ui->tabWidget->addTab(table, tr("Basic Events"));
             ui->tabWidget->setCurrentWidget(table);
             return;
@@ -1194,6 +1203,7 @@ void MainWindow::activateModelTree(const QModelIndex &index)
             auto *table
                 = constructElementTable<model::HouseEventContainerModel>(
                     m_guiModel.get(), this);
+            //: The tab for the table of house events.
             ui->tabWidget->addTab(table, tr("House Events"));
             ui->tabWidget->setCurrentWidget(table);
             return;
@@ -1230,6 +1240,7 @@ void MainWindow::activateFaultTreeDiagram(mef::FaultTree *faultTree)
     setupExportableView(view);
     ui->tabWidget->addTab(
         view,
+        //: The tab for a fault tree diagram.
         tr("Fault Tree: %1").arg(QString::fromStdString(faultTree->name())));
     ui->tabWidget->setCurrentWidget(view);
 
@@ -1284,6 +1295,7 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
 
         GUI_ASSERT(result.fault_tree_analysis,);
         auto *productItem = new QTreeWidgetItem(
+            //: Cut-sets or prime-implicants (depending on the settings).
             {tr("Products: %L1")
                  .arg(result.fault_tree_analysis->products().size())});
         widgetItem->addChild(productItem);
@@ -1336,6 +1348,7 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
 
         if (result.importance_analysis) {
             auto *importanceItem = new QTreeWidgetItem(
+                //: The number of important events w/ factors defined.
                 {tr("Importance Factors: %L1")
                      .arg(result.importance_analysis->importance().size())});
             widgetItem->addChild(importanceItem);

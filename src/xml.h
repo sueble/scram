@@ -42,6 +42,10 @@
 #include <string>
 #include <type_traits>
 
+#include <boost/exception/errinfo_at_line.hpp>
+#include <boost/exception/errinfo_errno.hpp>
+#include <boost/exception/errinfo_file_name.hpp>
+#include <boost/exception/errinfo_file_open_mode.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/optional.hpp>
 #include <boost/range/adaptor/filtered.hpp>
@@ -58,14 +62,6 @@ namespace scram {
 
 namespace xml {
 
-class Element;
-
-}  // namespace xml
-
-std::string GetLine(const xml::Element& xml_node);  // For error reporting.
-
-namespace xml {
-
 using string_view = boost::string_ref;  ///< Non-owning, immutable string view.
 
 namespace detail {  // Internal XML helper functions.
@@ -78,7 +74,7 @@ namespace detail {  // Internal XML helper functions.
 ///
 /// @returns The interpreted value.
 ///
-/// @throws ValidationError  Casting is unsuccessful.
+/// @throws ValidityError  Casting is unsuccessful.
 template <typename T>
 std::enable_if_t<std::is_arithmetic<T>::value, T>
 CastValue(const xml::string_view& value);
@@ -91,8 +87,8 @@ inline int CastValue<int>(const xml::string_view& value) {
   int len = end_char - value.data();
   if (len != value.size() || ret > std::numeric_limits<int>::max() ||
       ret < std::numeric_limits<int>::min())
-    throw ValidationError("Failed to interpret '" + value.to_string() +
-                          "' to 'int'.");
+    SCRAM_THROW(ValidityError("Failed to interpret '" + value.to_string() +
+                              "' to 'int'."));
   return ret;
 }
 
@@ -103,8 +99,8 @@ inline double CastValue<double>(const xml::string_view& value) {
   double ret = std::strtod(value.data(), &end_char);
   int len = end_char - value.data();
   if (len != value.size() || ret == HUGE_VAL || ret == -HUGE_VAL)
-    throw ValidationError("Failed to interpret '" + value.to_string() +
-                          "' to 'double'.");
+    SCRAM_THROW(ValidityError("Failed to interpret '" + value.to_string() +
+                              "' to 'double'."));
   return ret;
 }
 
@@ -115,8 +111,8 @@ inline bool CastValue<bool>(const xml::string_view& value) {
     return true;
   if (value == "false" || value == "0")
     return false;
-  throw ValidationError("Failed to interpret '" + value.to_string() +
-                        "' to 'bool'.");
+  SCRAM_THROW(ValidityError("Failed to interpret '" + value.to_string() +
+                            "' to 'bool'."));
 }
 
 /// Reinterprets the XML library UTF-8 string into C string.
@@ -149,14 +145,35 @@ inline const xmlChar* to_utf8(const char* c_string) noexcept {
 ///
 /// @pre The string is normalized by the XML parser.
 inline xml::string_view trim(const xml::string_view& text) noexcept {
-  auto pos_first = text.find_first_not_of(" ");
+  auto pos_first = text.find_first_not_of(' ');
   if (pos_first == xml::string_view::npos)
     return {};
 
-  auto pos_last = text.find_last_not_of(" ");
+  auto pos_last = text.find_last_not_of(' ');
   auto len = pos_last - pos_first + 1;
 
   return xml::string_view(text.data() + pos_first, len);
+}
+
+/// Gets the last XML error converted from the library error codes.
+///
+/// @tparam T  The SCRAM error type to convert XML error into.
+///
+/// @param[in] xml_error  The error to translate.
+///                       nullptr to retrieve the latest error in the library.
+///
+/// @returns The exception object to be thrown.
+template <typename T>
+T GetError(xmlErrorPtr xml_error = nullptr) {
+  if (!xml_error)
+    xml_error = xmlGetLastError();
+  assert(xml_error && "No XML error is available.");
+  T throw_error(xml_error->message);
+  if (xml_error->file)
+    throw_error << boost::errinfo_file_name(xml_error->file);
+  if (xml_error->line)
+    throw_error << boost::errinfo_at_line(xml_error->line);
+  return throw_error;
 }
 
 }  // namespace detail
@@ -222,26 +239,6 @@ class Element {
     ///
     /// @note O(N) complexity.
     std::size_t size() const { return std::distance(begin(), end()); }
-
-    /// Extracts the element by its position.
-    /// This is a temporary helper function to move from xmlpp::NodeSet.
-    /// Use iterators and loops instead.
-    ///
-    /// @param[in] pos  The position of the element.
-    ///
-    /// @returns The element on the position.
-    ///
-    /// @throws std::out_of_range  The position is invalid.
-    ///
-    /// @note O(N) complexity unlike xmlpp::NodeSet O(1).
-    ///
-    /// @todo Remove.
-    Element at(std::size_t pos) const {
-      auto it = std::next(begin(), pos);
-      if (it == end())
-        throw std::out_of_range("The position is out of range.");
-      return *it;
-    }
 
    private:
     /// Finds the first Element node in the list.
@@ -332,7 +329,7 @@ class Element {
   /// @returns The value of type T interpreted from attribute value.
   ///          None if the attribute doesn't exists (optional).
   ///
-  /// @throws ValidationError  Casting is unsuccessful.
+  /// @throws ValidityError  Casting is unsuccessful.
   template <typename T>
   std::enable_if_t<std::is_arithmetic<T>::value, boost::optional<T>>
   attribute(const char* name) const {
@@ -341,8 +338,10 @@ class Element {
       return {};
     try {
       return detail::CastValue<T>(value);
-    } catch (ValidationError& err) {
-      err.msg(GetLine(*this) + "Attribute '" + name + "': " + err.msg());
+    } catch (ValidityError& err) {
+      err << errinfo_element(Element::name().to_string())
+          << errinfo_attribute(name) << boost::errinfo_at_line(line())
+          << boost::errinfo_file_name(filename().to_string());
       throw;
     }
   }
@@ -355,13 +354,15 @@ class Element {
   ///
   /// @pre The text is not empty.
   ///
-  /// @throws ValidationError  Casting is unsuccessful.
+  /// @throws ValidityError  Casting is unsuccessful.
   template <typename T>
   std::enable_if_t<std::is_arithmetic<T>::value, T> text() const {
     try {
       return detail::CastValue<T>(text());
-    } catch (ValidationError& err) {
-      err.msg(GetLine(*this) + "Text element: " + err.msg());
+    } catch (ValidityError& err) {
+      err << errinfo_element(name().to_string())
+          << boost::errinfo_at_line(line())
+          << boost::errinfo_file_name(filename().to_string());
       throw;
     }
   }
@@ -439,60 +440,46 @@ class Validator {
  public:
   /// @param[in] rng_file  The path to the schema file.
   ///
-  /// @throws The library provided error for invalid XML RNG schema file.
-  ///
-  /// @todo Properly wrap the exception for invalid schema files.
-  explicit Validator(const std::string& rng_file) {
-    struct ParserCtxtDeleter {
-      void operator()(xmlRelaxNGParserCtxt* ctxt) noexcept {
-        if (ctxt)
-          xmlRelaxNGFreeParserCtxt(ctxt);
-      }
-    };
-    std::unique_ptr<xmlRelaxNGParserCtxt, ParserCtxtDeleter> parser_ctxt(
-        xmlRelaxNGNewParserCtxt(rng_file.c_str()));
-    assert(parser_ctxt);  ///< @todo Provide rng parser errors.
+  /// @throws ParseError  RNG file parsing has failed.
+  /// @throws LogicError  The XML library functions have failed internally.
+  explicit Validator(const std::string& rng_file)
+      : schema_(nullptr, &xmlRelaxNGFree),
+        valid_ctxt_(nullptr, &xmlRelaxNGFreeValidCtxt) {
+    xmlResetLastError();
+    std::unique_ptr<xmlRelaxNGParserCtxt, decltype(&xmlRelaxNGFreeParserCtxt)>
+        parser_ctxt(xmlRelaxNGNewParserCtxt(rng_file.c_str()),
+                    &xmlRelaxNGFreeParserCtxt);
+    if (!parser_ctxt)
+      SCRAM_THROW(detail::GetError<LogicError>());
+
     schema_.reset(xmlRelaxNGParse(parser_ctxt.get()));
-    assert(schema_);  ///< @todo Provide schema parsing errors.
+    if (!schema_)
+      SCRAM_THROW(detail::GetError<ParseError>());
+
     valid_ctxt_.reset(xmlRelaxNGNewValidCtxt(schema_.get()));
-    assert(valid_ctxt_);  ///< @todo Provide valid ctxt initialization error.
+    if (!valid_ctxt_)
+      SCRAM_THROW(detail::GetError<LogicError>());
   }
 
   /// Validates XML DOM documents against the schema.
   ///
   /// @param[in] doc  The initialized XML DOM document.
   ///
-  /// @throws ValidationError  The document failed schema validation.
+  /// @throws ValidityError  The document failed schema validation.
   void validate(const Document& doc) {
+    xmlResetLastError();
     int ret = xmlRelaxNGValidateDoc(valid_ctxt_.get(),
                                     const_cast<xmlDoc*>(doc.get()));
-    /// @todo Provide validation error messages.
-    if (ret > 0)
-      throw ValidationError("Document failed schema validation:\n");
-    assert(ret == 0);  ///< Handle XML internal errors.
+    if (ret != 0)
+      SCRAM_THROW(detail::GetError<ValidityError>());
   }
 
  private:
-  /// Deleter of the schema.
-  struct SchemaDeleter {
-    /// Frees schema with the library call.
-    void operator()(xmlRelaxNG* schema) noexcept {
-      if (schema)
-        xmlRelaxNGFree(schema);
-    }
-  };
-  /// Deleter of the validation context.
-  struct ValidCtxtDeleter {
-    /// Frees validation context with the library call.
-    void operator()(xmlRelaxNGValidCtxt* ctxt) noexcept {
-      if (ctxt)
-        xmlRelaxNGFreeValidCtxt(ctxt);
-    }
-  };
   /// The schema used by the validation context.
-  std::unique_ptr<xmlRelaxNG, SchemaDeleter> schema_;
+  std::unique_ptr<xmlRelaxNG, decltype(&xmlRelaxNGFree)> schema_;
   /// The validation context.
-  std::unique_ptr<xmlRelaxNGValidCtxt, ValidCtxtDeleter> valid_ctxt_;
+  std::unique_ptr<xmlRelaxNGValidCtxt, decltype(&xmlRelaxNGFreeValidCtxt)>
+      valid_ctxt_;
 };
 
 /// The parser options passed to the library parser.
@@ -508,43 +495,33 @@ const int kParserOptions = XML_PARSE_XINCLUDE | XML_PARSE_NOBASEFIX |
 ///
 /// @returns The initialized document.
 ///
-/// @throws ValidationError  There are problems loading the XML file.
-///
-/// @todo Provide proper validation error messages.
+/// @throws IOError  The file is not available.
+/// @throws ParseError  There are XML parsing failures.
+/// @throws XIncludeError  XInclude resolution has failed.
+/// @throws ValidityError  The XML file is not valid.
 inline Document Parse(const std::string& file_path,
                       Validator* validator = nullptr) {
+  xmlResetLastError();
   xmlDoc* doc = xmlReadFile(file_path.c_str(), nullptr, kParserOptions);
-  if (!doc)
-      throw ValidationError("XML file is invalid:\n");
-  if (xmlXIncludeProcessFlags(doc, kParserOptions) < 0)
-    throw ValidationError("XML Xinclude substitutions are failed.");
+  if (!doc) {
+    xmlErrorPtr xml_error = xmlGetLastError();
+    if (xml_error->domain == xmlErrorDomain::XML_FROM_IO) {
+      SCRAM_THROW(IOError(xml_error->message))
+          << boost::errinfo_file_name(file_path) << boost::errinfo_errno(errno)
+          << boost::errinfo_file_open_mode("r");
+    }
+    SCRAM_THROW(detail::GetError<ParseError>(xml_error));
+  }
+  assert(!xmlGetLastError());
   Document manager(doc);
-  if (validator)
-    validator->validate(manager);
-  return manager;
-}
-
-/// Convenience overload to parse the XML in memory.
-inline Document ParseMemory(const std::string& raw,
-                            Validator* validator = nullptr) {
-  xmlDoc* doc =
-      xmlReadMemory(raw.c_str(), raw.size() + 1, "", nullptr, kParserOptions);
-  if (!doc)
-    throw ValidationError("XML in memory is invalid.");
-  if (xmlXIncludeProcessFlags(doc, kParserOptions) < 0)
-    throw ValidationError("XML Xinclude substitutions are failed.");
-  Document manager(doc);
+  if (xmlXIncludeProcessFlags(doc, kParserOptions) < 0 || xmlGetLastError())
+    SCRAM_THROW(detail::GetError<XIncludeError>());
   if (validator)
     validator->validate(manager);
   return manager;
 }
 
 }  // namespace xml
-
-/// Returns XML line number message.
-inline std::string GetLine(const xml::Element& xml_node) {
-  return "Line " + std::to_string(xml_node.line()) + ":\n";
-}
 
 }  // namespace scram
 

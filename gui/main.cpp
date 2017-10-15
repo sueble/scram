@@ -31,6 +31,7 @@
 #include <QMessageBox>
 #include <QString>
 
+#include <boost/exception/diagnostic_information.hpp>
 #include <boost/program_options.hpp>
 
 #include "mainwindow.h"
@@ -98,17 +99,21 @@ public:
         try {
             return QApplication::notify(receiver, event);
         } catch (const scram::Error &err) {
-            qCritical("%s", err.what());
-            QMessageBox::critical(nullptr, tr("Internal SCRAM Error"),
-                                  QString::fromUtf8(err.what()));
+            std::string message = boost::diagnostic_information(err);
+            qCritical("%s", message.c_str());
+            QMessageBox::critical(nullptr,
+                                  QStringLiteral("Internal SCRAM Error"),
+                                  QString::fromStdString(message));
         } catch (const std::exception &err) {
             qCritical("%s", err.what());
-            QMessageBox::critical(nullptr, tr("Internal Exception Error"),
+            QMessageBox::critical(nullptr,
+                                  QStringLiteral("Internal Exception Error"),
                                   QString::fromUtf8(err.what()));
         } catch (...) {
             qCritical("Unknown exception type.");
-            QMessageBox::critical(nullptr, tr("Internal Exception Error"),
-                                  tr("Unknown exception type."));
+            QMessageBox::critical(nullptr,
+                                  QStringLiteral("Internal Exception Error"),
+                                  QStringLiteral("Unknown exception type."));
         }
         return false;
     }
@@ -120,7 +125,7 @@ public:
 void crashDialog(const QString &text) noexcept
 {
     QMessageBox message(QMessageBox::Critical,
-                        QObject::tr("Unrecoverable Internal Error"), text,
+                        QStringLiteral("Unrecoverable Internal Error"), text,
                         QMessageBox::Ok);
     message.setWindowModality(Qt::WindowModal);
     message.exec();
@@ -131,16 +136,19 @@ void crashHandler(int signum) noexcept
 {
     switch (signum) {
     case SIGSEGV:
-        crashDialog(QObject::tr("SIGSEGV: Invalid memory access."));
+        crashDialog(QStringLiteral("SIGSEGV: Invalid memory access."));
         break;
     case SIGFPE:
-        crashDialog(QObject::tr("SIGFPE: Erroneous arithmetic operation."));
+        crashDialog(QStringLiteral("SIGFPE: Erroneous arithmetic operation."));
         break;
     case SIGILL:
-        crashDialog(QObject::tr("SIGILL: Illegal instruction."));
+        crashDialog(QStringLiteral("SIGILL: Illegal instruction."));
         break;
     }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
     std::signal(signum, SIG_DFL);
+#pragma GCC diagnostic pop
     std::raise(signum);
 }
 
@@ -155,26 +163,28 @@ void terminateHandler() noexcept
     try {
         std::rethrow_exception(std::current_exception());
     } catch (const scram::Error &err) {
-        error = QObject::tr("SCRAM exception: %1")
-                    .arg(QString::fromUtf8(err.what()));
+        std::string message = boost::diagnostic_information(err);
+        qCritical("%s", message.c_str());
+        error = QStringLiteral("SCRAM exception:\n%1")
+                    .arg(QString::fromStdString(message));
     } catch (const std::exception &err) {
-        error = QObject::tr("Standard exception: %1")
+        error = QStringLiteral("Standard exception:\n%1")
                     .arg(QString::fromUtf8(err.what()));
     } catch (...) {
-        error = QObject::tr("Exception of unknown type: no message available.");
+        error = QStringLiteral("Exception of unknown type without a message.");
     }
-    crashDialog(
-        QObject::tr("Exception no-throw contract violation:\n\n%1").arg(error));
+    crashDialog(QStringLiteral("Exception no-throw contract violation:\n\n%1")
+                    .arg(error));
     gDefaultTerminateHandler();
 }
 
 /// Installs crash handlers for system signals.
 void installCrashHandlers() noexcept
 {
-    std::signal(SIGSEGV, crashHandler);
-    std::signal(SIGFPE, crashHandler);
-    std::signal(SIGILL, crashHandler);
-    std::set_terminate(terminateHandler);
+    std::signal(SIGSEGV, &crashHandler);
+    std::signal(SIGFPE, &crashHandler);
+    std::signal(SIGILL, &crashHandler);
+    std::set_terminate(&terminateHandler);
 }
 
 } // namespace
@@ -187,14 +197,13 @@ int main(int argc, char *argv[])
     // However, the most distributions are expected to be shared builds,
     // so the explicit load should not be used, but it is kept for debugging.
     /* Q_INIT_RESOURCE(res); */
-    GuardedApplication a(argc, argv);
+    GuardedApplication app(argc, argv);
 
     installCrashHandlers();
 
-    QCoreApplication::setOrganizationName(QString::fromLatin1("scram"));
-    QCoreApplication::setOrganizationDomain(
-        QString::fromLatin1("scram-pra.org"));
-    QCoreApplication::setApplicationName(QString::fromLatin1("scram"));
+    QCoreApplication::setOrganizationName(QStringLiteral("scram"));
+    QCoreApplication::setOrganizationDomain(QStringLiteral("scram-pra.org"));
+    QCoreApplication::setApplicationName(QStringLiteral("scram"));
     QCoreApplication::setApplicationVersion(
         QString::fromLatin1(scram::version::core()));
 
@@ -222,5 +231,5 @@ int main(int argc, char *argv[])
             }
         } catch (boost::exception &) { assert(false); }
     }
-    return a.exec();
+    return app.exec();
 }

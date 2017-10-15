@@ -24,6 +24,8 @@
 
 #include <memory>
 
+#include <boost/exception/errinfo_at_line.hpp>
+#include <boost/exception/errinfo_file_name.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/predef.h>
 #include <boost/range/algorithm.hpp>
@@ -53,8 +55,10 @@ std::string normalize(const std::string& file_path, const fs::path& base_path) {
 Config::Config(const std::string& config_file) {
   static xml::Validator validator(Env::config_schema());
 
-  if (fs::exists(config_file) == false)
-    throw IOError("The file '" + config_file + "' could not be loaded.");
+  if (fs::exists(config_file) == false) {
+    SCRAM_THROW(IOError("The configuration file does not exist."))
+        << boost::errinfo_file_name(config_file);
+  }
 
   xml::Document document = xml::Parse(config_file, &validator);
   xml::Element root = document.root();
@@ -69,7 +73,7 @@ Config::Config(const std::string& config_file) {
   try {
     GatherOptions(root);
   } catch (Error& err) {
-    err.msg("In file '" + config_file + "', " + err.msg());
+    err << boost::errinfo_file_name(config_file);
     throw;
   }
 }
@@ -107,8 +111,8 @@ void Config::GatherOptions(const xml::Element& root) {
       } else if (name == "limits") {
         SetLimits(option_group);
       }
-    } catch (InvalidArgument& err) {
-      err.msg(GetLine(option_group) + err.msg());
+    } catch (SettingsError& err) {
+      err << boost::errinfo_at_line(option_group.line());
       throw;
     }
   }
@@ -116,8 +120,8 @@ void Config::GatherOptions(const xml::Element& root) {
           options_element->child("analysis")) {
     try {
       SetAnalysis(*analysis_group);
-    } catch (InvalidArgument& err) {
-      err.msg(GetLine(*analysis_group) + err.msg());
+    } catch (SettingsError& err) {
+      err << boost::errinfo_at_line(analysis_group->line());
       throw;
     }
   }

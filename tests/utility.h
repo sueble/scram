@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2016 Olzhas Rakhimov
+ * Copyright (C) 2017 Olzhas Rakhimov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,19 +15,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file error.cc
-/// Implementation of the exceptions for use in SCRAM.
+/// @file utility.h
+/// Test helper functions.
 
-#include "error.h"
+#ifndef SCRAM_TESTS_UTILITY_H_
+#define SCRAM_TESTS_UTILITY_H_
+
+#include <string>
+
+#include <boost/filesystem.hpp>
+
+namespace fs = boost::filesystem;
 
 namespace scram {
+namespace utility {
 
-const char Error::kPrefix_[] = "scram error: ";
+/// Generate unique file path for temporary files.
+inline fs::path GenerateFilePath(const std::string& prefix = "scram_test") {
+  fs::path unique_name = prefix + "-" + fs::unique_path().string();
+  return fs::temp_directory_path() / unique_name;
+}
 
-Error::Error(std::string msg)
-    : msg_(std::move(msg)),
-      thrown_(kPrefix_ + msg_) {}
-
-const char* Error::what() const noexcept { return thrown_.c_str(); }
-
+}  // namespace utility
 }  // namespace scram
+
+#endif  // SCRAM_TESTS_UTILITY_H_
