@@ -21,6 +21,7 @@
 #include "ui_startpage.h"
 
 #include <algorithm>
+#include <sstream>
 #include <type_traits>
 
 #include <QApplication>
@@ -34,6 +35,8 @@
 #include <QTableWidget>
 #include <QtConcurrent>
 #include <QtOpenGL>
+
+#include <boost/exception/get_error_info.hpp>
 
 #include "src/config.h"
 #include "src/env.h"
@@ -52,6 +55,7 @@
 #include "diagram.h"
 #include "guiassert.h"
 #include "modeltree.h"
+#include "preferencesdialog.h"
 #include "printable.h"
 #include "settingsdialog.h"
 #include "validator.h"
@@ -150,7 +154,8 @@ QTableWidgetItem *constructTableItem(QVariant data)
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
       m_undoStack(new QUndoStack(this)),
-      m_zoomBox(new QComboBox)
+      m_zoomBox(new QComboBox),  // Will be owned by the tool bar later.
+      m_autoSaveTimer(new QTimer(this))
 {
     ui->setupUi(this);
 
@@ -169,19 +174,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupStatusBar();
     setupActions();
-
-    auto *startPage = new StartPage;
-    connect(startPage->newModelButton, &QAbstractButton::clicked,
-            ui->actionNewModel, &QAction::trigger);
-    connect(startPage->openModelButton, &QAbstractButton::clicked,
-            ui->actionOpenFiles, &QAction::trigger);
-    connect(startPage->exampleModelsButton, &QAbstractButton::clicked, this,
-            [this]() {
-                openFiles(QString::fromStdString(Env::install_dir()
-                                                 + "/share/scram/input"));
-            });
-    ui->tabWidget->addTab(startPage, startPage->windowIcon(),
-                          startPage->windowTitle());
 
     connect(ui->modelTree, &QTreeView::activated, this,
             &MainWindow::activateModelTree);
@@ -238,8 +230,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(this, &MainWindow::configChanged, [this] {
         m_undoStack->clear();
-        setWindowTitle(QStringLiteral("%1[*]").arg(
-            QString::fromStdString(m_model->name())));
+        setWindowTitle(QStringLiteral("%1[*]").arg(getModelNameForTitle()));
         ui->actionSaveAs->setEnabled(true);
         ui->actionAddElement->setEnabled(true);
         ui->actionRenameModel->setEnabled(true);
@@ -252,11 +243,86 @@ MainWindow::MainWindow(QWidget *parent)
                 if (m_analysis)
                     resetReportWidget(nullptr);
             });
+    connect(m_autoSaveTimer, &QTimer::timeout, this,
+            &MainWindow::autoSaveModel);
+
+    loadPreferences();
+    setupStartPage();
 }
 
 MainWindow::~MainWindow() = default;
 
-void MainWindow::setConfig(const std::string &configPath,
+namespace { // Error message dialog for SCRAM exceptions.
+
+void displayError(const scram::IOError &err, const QString &text,
+                  QWidget *parent = nullptr)
+{
+    QMessageBox message(QMessageBox::Critical, QObject::tr("IO Error"), text,
+                        QMessageBox::Ok, parent);
+
+    const std::string *filename
+        = boost::get_error_info<boost::errinfo_file_name>(err);
+    GUI_ASSERT(filename, );
+    message.setInformativeText(
+        QObject::tr("File: %1").arg(QString::fromStdString(*filename)));
+
+    std::stringstream detail;
+    if (const std::string *mode
+            = boost::get_error_info<boost::errinfo_file_open_mode>(err)) {
+        detail << "Open mode: " << *mode << "\n";
+    }
+    if (const int *errnum = boost::get_error_info<boost::errinfo_errno>(err)) {
+        detail << "Error code: " << *errnum << "\n";
+        detail << "Error string: " << std::strerror(*errnum) << "\n";
+    }
+    detail << "\n" << err.what() << std::endl;
+    message.setDetailedText(QString::fromStdString(detail.str()));
+
+    message.exec();
+}
+
+void displayError(const scram::Error &err, const QString &title,
+                  const QString &text, QWidget *parent = nullptr)
+{
+    QMessageBox message(QMessageBox::Critical, title, text, QMessageBox::Ok,
+                        parent);
+    QString info;
+    if (const std::string *filename
+            = boost::get_error_info<boost::errinfo_file_name>(err)) {
+        info.append(
+            QObject::tr("File: %1\n").arg(QString::fromStdString(*filename)));
+        if (const int *line
+                = boost::get_error_info<boost::errinfo_at_line>(err))
+            info.append(QObject::tr("Line: %1\n").arg(*line));
+    }
+    if (const std::string *container
+            = boost::get_error_info<scram::mef::errinfo_container>(err)) {
+        info.append(QObject::tr("MEF Container: %1\n")
+                        .arg(QString::fromStdString(*container)));
+    }
+    if (const std::string *xml_element
+            = boost::get_error_info<scram::xml::errinfo_element>(err)) {
+        info.append(QObject::tr("XML element: %1\n")
+                        .arg(QString::fromStdString(*xml_element)));
+    }
+    if (const std::string *xml_attribute
+        = boost::get_error_info<scram::xml::errinfo_attribute>(err)) {
+        info.append(QObject::tr("XML attribute: %1\n")
+                        .arg(QString::fromStdString(*xml_attribute)));
+    }
+    message.setInformativeText(info);
+
+    std::stringstream detail;
+    detail << boost::core::demangled_name(typeid(err)) << "\n\n";
+    detail << err.what() << std::endl;
+    message.setDetailedText(QString::fromStdString(detail.str()));
+
+    message.exec();
+}
+
+} // namespace
+
+bool MainWindow::setConfig(const std::string &configPath,
                            std::vector<std::string> inputFiles)
 {
     try {
@@ -264,21 +330,31 @@ void MainWindow::setConfig(const std::string &configPath,
         inputFiles.insert(inputFiles.begin(), config.input_files().begin(),
                           config.input_files().end());
         mef::Initializer(inputFiles, config.settings());
-        addInputFiles(inputFiles);
+        if (!addInputFiles(inputFiles))
+            return false;
         m_settings = config.settings();
-    } catch (scram::Error &err) {
-        QMessageBox::critical(this, tr("Configuration Error"),
-                              QString::fromUtf8(err.what()));
+    } catch (const scram::IOError &err) {
+        displayError(err, tr("Configuration file error"), this);
+        return false;
+    } catch (const scram::xml::Error &err) {
+        displayError(err, tr("XML Validity Error"),
+                     tr("Invalid configuration file"), this);
+        return false;
+    } catch (const scram::SettingsError &err) {
+        displayError(err, tr("Configuration Error"),
+                     tr("Invalid configurations"), this);
+        return false;
     }
+    return true;
 }
 
-void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
+bool MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
 {
     static xml::Validator validator(Env::install_dir()
                                     + "/share/scram/gui.rng");
 
     if (inputFiles.empty())
-        return;
+        return true;
 
     try {
         std::vector<std::string> allInput = m_inputFiles;
@@ -297,21 +373,29 @@ void MainWindow::addInputFiles(const std::vector<std::string> &inputFiles)
                     //: Single top/root event fault tree are expected by GUI.
                     tr("Fault tree '%1' must have a single top-gate.")
                         .arg(QString::fromStdString(faultTree->name())));
-                return;
+                return false;
             }
         }
 
         m_model = std::move(newModel);
         m_inputFiles = std::move(allInput);
-    } catch (scram::Error &err) {
-        QMessageBox::critical(this,
-                              //: The error upon initialization from a file.
-                              tr("Initialization Error"),
-                              QString::fromUtf8(err.what()));
-        return;
+    } catch (const scram::IOError &err) {
+        displayError(err, tr("Input file error"), this);
+        return false;
+    } catch (const scram::xml::Error &err) {
+        displayError(err, tr("XML Validity Error"), tr("Invalid input file"),
+                     this);
+        return false;
+    } catch (const scram::mef::ValidityError &err) {
+        displayError(err,
+                     //: The error upon initialization from a file.
+                     tr("Initialization Error"),
+                     tr("Invalid input model"), this);
+        return false;
     }
 
     emit configChanged();
+    return true;
 }
 
 void MainWindow::setupStatusBar()
@@ -362,7 +446,7 @@ void MainWindow::setupActions()
 
     ui->actionOpenFiles->setShortcut(QKeySequence::Open);
     connect(ui->actionOpenFiles, &QAction::triggered, this,
-            [this]() { openFiles(); });
+            [this] { openFiles(); });
 
     ui->actionSave->setShortcut(QKeySequence::Save);
     connect(ui->actionSave, &QAction::triggered, this, &MainWindow::saveModel);
@@ -375,6 +459,21 @@ void MainWindow::setupActions()
 
     connect(ui->actionExportReportAs, &QAction::triggered, this,
             &MainWindow::exportReportAs);
+
+    QAction *menuRecentFilesStart = ui->menuRecentFiles->actions().front();
+    for (QAction *&fileAction : m_recentFileActions) {
+        fileAction = new QAction(this);
+        fileAction->setVisible(false);
+        ui->menuRecentFiles->insertAction(menuRecentFilesStart, fileAction);
+        connect(fileAction, &QAction::triggered, this, [this, fileAction] {
+            auto filePath = fileAction->text();
+            GUI_ASSERT(!filePath.isEmpty(), );
+            if (addInputFiles({filePath.toStdString()}))
+                updateRecentFiles({filePath});
+        });
+    }
+    connect(ui->actionClearList, &QAction::triggered, this,
+            [this] { updateRecentFiles({}); });
 
     // View menu actions.
     ui->actionZoomIn->setShortcut(QKeySequence::ZoomIn);
@@ -395,6 +494,11 @@ void MainWindow::setupActions()
                                                             m_guiModel.get()));
             }
         }
+    });
+    connect(ui->actionPreferences, &QAction::triggered, this, [this] {
+        PreferencesDialog dialog(&m_preferences, m_undoStack, m_autoSaveTimer,
+                                 this);
+        dialog.exec();
     });
 
     // Undo/Redo actions
@@ -429,13 +533,85 @@ void MainWindow::setupActions()
     });
 }
 
+void MainWindow::loadPreferences()
+{
+    m_preferences.beginGroup(QStringLiteral("MainWindow"));
+    restoreGeometry(
+        m_preferences.value(QStringLiteral("geometry")).toByteArray());
+    restoreState(m_preferences.value(QStringLiteral("state")).toByteArray(),
+                 LAYOUT_VERSION);
+    m_preferences.endGroup();
+
+    m_undoStack->setUndoLimit(
+        m_preferences.value(QStringLiteral("undoLimit"), 0).toInt());
+
+    GUI_ASSERT(m_autoSaveTimer->isActive() == false, );
+    int interval = m_preferences.value(QStringLiteral("autoSave")).toInt();
+    if (interval)
+        m_autoSaveTimer->start(interval);
+
+    updateRecentFiles(
+        m_preferences.value(QStringLiteral("recentFiles")).toStringList());
+}
+
+void MainWindow::savePreferences()
+{
+    m_preferences.beginGroup(QStringLiteral("MainWindow"));
+    m_preferences.setValue(QStringLiteral("geometry"), saveGeometry());
+    m_preferences.setValue(QStringLiteral("state"), saveState(LAYOUT_VERSION));
+    m_preferences.endGroup();
+
+    QStringList fileList;
+    for (QAction* fileAction : m_recentFileActions) {
+        if (!fileAction->isVisible())
+            break;
+        fileList.push_back(fileAction->text());
+    }
+    m_preferences.setValue(QStringLiteral("recentFiles"), fileList);
+}
+
+void MainWindow::setupStartPage()
+{
+    auto *startPage = new StartPage(this);
+    QString examplesDir
+        = QString::fromStdString(Env::install_dir() + "/share/scram/input");
+    startPage->exampleModelsButton->setEnabled(QDir(examplesDir).exists());
+    connect(startPage->newModelButton, &QAbstractButton::clicked,
+            ui->actionNewModel, &QAction::trigger);
+    connect(startPage->openModelButton, &QAbstractButton::clicked,
+            ui->actionOpenFiles, &QAction::trigger);
+    connect(startPage->exampleModelsButton, &QAbstractButton::clicked, this,
+            [this, examplesDir] { openFiles(examplesDir); });
+    ui->tabWidget->addTab(startPage, startPage->windowIcon(),
+                          startPage->windowTitle());
+
+    startPage->recentFilesBox->setVisible(
+        m_recentFileActions.front()->isVisible());
+    for (QAction *fileAction : m_recentFileActions) {
+        if (!fileAction->isVisible())
+            break;
+        auto *button
+            = new QCommandLinkButton(QFileInfo(fileAction->text()).fileName());
+        button->setToolTip(fileAction->text());
+        startPage->recentFilesBox->layout()->addWidget(button);
+        connect(button, &QAbstractButton::clicked, fileAction,
+                &QAction::trigger);
+    }
+}
+
+QString MainWindow::getModelNameForTitle()
+{
+    return m_model->HasDefaultName() ? tr("Unnamed Model")
+                                     : QString::fromStdString(m_model->name());
+}
+
 void MainWindow::createNewModel()
 {
     if (isWindowModified()) {
         QMessageBox::StandardButton answer = QMessageBox::question(
             this, tr("Save Model?"),
             tr("Save changes to model '%1' before closing?")
-                .arg(QString::fromStdString(m_model->name())),
+                .arg(getModelNameForTitle()),
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
             QMessageBox::Save);
 
@@ -465,7 +641,15 @@ void MainWindow::openFiles(QString directory)
     std::vector<std::string> inputFiles;
     for (const auto &filename : filenames)
         inputFiles.push_back(filename.toStdString());
-    addInputFiles(inputFiles);
+    if (addInputFiles(inputFiles))
+        updateRecentFiles(filenames);
+}
+
+void MainWindow::autoSaveModel()
+{
+    if (!isWindowModified() || m_inputFiles.empty() || m_inputFiles.size() > 1)
+        return;
+    saveToFile(m_inputFiles.front());
 }
 
 void MainWindow::saveModel()
@@ -492,9 +676,8 @@ void MainWindow::saveToFile(std::string destination)
     GUI_ASSERT(m_model, );
     try {
         mef::Serialize(*m_model, destination);
-    } catch (Error &err) {
-        QMessageBox::critical(this, tr("Save Error", "error on saving to file"),
-                              QString::fromUtf8(err.what()));
+    } catch (const IOError &err) {
+        displayError(err, tr("Save error", "error on saving to file"), this);
         return;
     }
     m_undoStack->setClean();
@@ -502,15 +685,50 @@ void MainWindow::saveToFile(std::string destination)
     m_inputFiles.push_back(std::move(destination));
 }
 
+void MainWindow::updateRecentFiles(QStringList filePaths)
+{
+    ui->menuRecentFiles->setEnabled(!filePaths.empty());
+    if (filePaths.empty()) {
+        for (QAction *fileAction : m_recentFileActions)
+            fileAction->setVisible(false);
+        return;
+    }
+
+    int remainingCapacity = m_recentFileActions.size() - filePaths.size();
+    for (QAction *fileAction : m_recentFileActions) {
+        if (remainingCapacity <= 0)
+            break;
+        if (!fileAction->isVisible())
+            break;
+        if (filePaths.contains(fileAction->text()))
+            continue;
+        filePaths.push_back(fileAction->text());
+        --remainingCapacity;
+    }
+    auto it = m_recentFileActions.begin();
+    const auto &constFilePaths = filePaths; // Detach prevention w/ for-each.
+    for (const QString &filePath : constFilePaths) {
+        if (it == m_recentFileActions.end())
+            break;
+        (*it)->setText(filePath);
+        (*it)->setVisible(true);
+        ++it;
+    }
+    for (; it != m_recentFileActions.end(); ++it)
+        (*it)->setVisible(false);
+}
+
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    savePreferences();
+
     if (!isWindowModified())
         return event->accept();
 
     QMessageBox::StandardButton answer = QMessageBox::question(
         this, tr("Save Model?"),
         tr("Save changes to model '%1' before closing?")
-            .arg(QString::fromStdString(m_model->name())),
+            .arg(getModelNameForTitle()),
         QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
         QMessageBox::Save);
 
@@ -534,9 +752,8 @@ void MainWindow::exportReportAs()
         return;
     try {
         Reporter().Report(*m_analysis, filename.toStdString());
-    } catch (Error &err) {
-        QMessageBox::critical(this, tr("Reporting Error"),
-                              QString::fromUtf8(err.what()));
+    } catch (const IOError &err) {
+        displayError(err, tr("Reporting error"), this);
     }
 }
 
@@ -823,7 +1040,7 @@ mef::FormulaPtr MainWindow::extract(const EventDialog &dialog)
     for (const std::string &arg : dialog.arguments()) {
         try {
             formula->AddArgument(m_model->GetEvent(arg));
-        } catch (mef::UndefinedElement &) {
+        } catch (const mef::UndefinedElement &) {
             auto argEvent = std::make_unique<mef::BasicEvent>(arg);
             argEvent->AddAttribute({"flavor", "undeveloped", ""});
             formula->AddArgument(argEvent.get());
@@ -1172,8 +1389,7 @@ void MainWindow::resetModelTree()
     delete oldModel;
 
     connect(m_guiModel.get(), &model::Model::modelNameChanged, this, [this] {
-        setWindowTitle(QStringLiteral("%1[*]").arg(
-            QString::fromStdString(m_model->name())));
+        setWindowTitle(QStringLiteral("%1[*]").arg(getModelNameForTitle()));
     });
 }
 
@@ -1296,7 +1512,7 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
         GUI_ASSERT(result.fault_tree_analysis,);
         auto *productItem = new QTreeWidgetItem(
             //: Cut-sets or prime-implicants (depending on the settings).
-            {tr("Products: %L1")
+            {tr("Products (%L1)")
                  .arg(result.fault_tree_analysis->products().size())});
         widgetItem->addChild(productItem);
         m_reportActions.emplace(productItem, [this, &result, name] {
@@ -1342,14 +1558,14 @@ void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
 
         if (result.probability_analysis) {
             widgetItem->addChild(new QTreeWidgetItem(
-                {tr("Probability: %1")
+                {tr("Probability (%1)")
                      .arg(result.probability_analysis->p_total())}));
         }
 
         if (result.importance_analysis) {
             auto *importanceItem = new QTreeWidgetItem(
                 //: The number of important events w/ factors defined.
-                {tr("Importance Factors: %L1")
+                {tr("Importance Factors (%L1)")
                      .arg(result.importance_analysis->importance().size())});
             widgetItem->addChild(importanceItem);
             m_reportActions.emplace(importanceItem, [this, &result, name] {

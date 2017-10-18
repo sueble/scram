@@ -28,14 +28,19 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
+#include <QLibraryInfo>
 #include <QMessageBox>
+#include <QSettings>
 #include <QString>
+#include <QTranslator>
 
 #include <boost/exception/diagnostic_information.hpp>
 #include <boost/program_options.hpp>
+#include <boost/range/algorithm.hpp>
 
 #include "mainwindow.h"
 
+#include "src/env.h"
 #include "src/error.h"
 #include "src/version.h"
 
@@ -64,7 +69,7 @@ int parseArguments(int argc, char *argv[], po::variables_map *vm) noexcept
              "Project configuration file");
     try {
         po::store(po::parse_command_line(argc, argv, desc), *vm);
-    } catch (std::exception &err) {
+    } catch (const std::exception &err) {
         std::cerr << "Option error: " << err.what() << "\n\n"
                   << usage << "\n\n"
                   << desc << "\n";
@@ -89,6 +94,16 @@ int parseArguments(int argc, char *argv[], po::variables_map *vm) noexcept
     return 0;
 }
 
+/// Produces critical notification dialog
+/// for errors that are not expected to crash the application.
+void notifyError(const QString &title, const QString &text,
+                 const QString &detail = {}) noexcept
+{
+    QMessageBox message(QMessageBox::Critical, title, text, QMessageBox::Ok);
+    message.setDetailedText(detail);
+    message.exec();
+}
+
 /// Guards the application from crashes on escaped internal exceptions.
 class GuardedApplication : public QApplication {
 public:
@@ -101,19 +116,18 @@ public:
         } catch (const scram::Error &err) {
             std::string message = boost::diagnostic_information(err);
             qCritical("%s", message.c_str());
-            QMessageBox::critical(nullptr,
-                                  QStringLiteral("Internal SCRAM Error"),
-                                  QString::fromStdString(message));
+            notifyError(QStringLiteral("Internal SCRAM Error"),
+                        QStringLiteral("Uncaught exception."),
+                        QString::fromStdString(message));
         } catch (const std::exception &err) {
             qCritical("%s", err.what());
-            QMessageBox::critical(nullptr,
-                                  QStringLiteral("Internal Exception Error"),
-                                  QString::fromUtf8(err.what()));
+            notifyError(QStringLiteral("Internal Exception Error"),
+                        QStringLiteral("Uncaught foreign exception."),
+                        QString::fromUtf8(err.what()));
         } catch (...) {
             qCritical("Unknown exception type.");
-            QMessageBox::critical(nullptr,
-                                  QStringLiteral("Internal Exception Error"),
-                                  QStringLiteral("Unknown exception type."));
+            notifyError(QStringLiteral("Internal Exception Error"),
+                        QStringLiteral("Unknown exception type."));
         }
         return false;
     }
@@ -122,11 +136,12 @@ public:
 /// Produces the crash dialog with a given reasoning.
 /// The dialog allows access to other windows
 /// so that users may try saving the model before the crash.
-void crashDialog(const QString &text) noexcept
+void crashDialog(const QString &text, const QString &detail = {}) noexcept
 {
     QMessageBox message(QMessageBox::Critical,
                         QStringLiteral("Unrecoverable Internal Error"), text,
                         QMessageBox::Ok);
+    message.setDetailedText(detail);
     message.setWindowModality(Qt::WindowModal);
     message.exec();
 }
@@ -160,21 +175,22 @@ static const std::terminate_handler gDefaultTerminateHandler
 void terminateHandler() noexcept
 {
     QString error;
+    QString detail;
     try {
         std::rethrow_exception(std::current_exception());
     } catch (const scram::Error &err) {
         std::string message = boost::diagnostic_information(err);
         qCritical("%s", message.c_str());
-        error = QStringLiteral("SCRAM exception:\n%1")
-                    .arg(QString::fromStdString(message));
+        error = QStringLiteral("SCRAM exception.");
+        detail = QString::fromStdString(message);
     } catch (const std::exception &err) {
-        error = QStringLiteral("Standard exception:\n%1")
-                    .arg(QString::fromUtf8(err.what()));
+        error = QStringLiteral("Standard exception.");
+        detail = QString::fromUtf8(err.what());
     } catch (...) {
         error = QStringLiteral("Exception of unknown type without a message.");
     }
-    crashDialog(QStringLiteral("Exception no-throw contract violation:\n\n%1")
-                    .arg(error));
+    crashDialog(QStringLiteral("No-throw contract violation:\n%1").arg(error),
+                detail);
     gDefaultTerminateHandler();
 }
 
@@ -185,6 +201,23 @@ void installCrashHandlers() noexcept
     std::signal(SIGFPE, &crashHandler);
     std::signal(SIGILL, &crashHandler);
     std::set_terminate(&terminateHandler);
+}
+
+/// @returns The UI language for the translator setup.
+QString getUiLanguage()
+{
+    /// @todo Discover available translations programmatically.
+    static const char *const availableLanguages[] = {"en", "ru_RU"};
+
+    QSettings preferences;
+    QString language = preferences.value(QStringLiteral("language")).toString();
+    if (!language.isEmpty())
+        return language;
+    QString system = QLocale::system().name();
+    auto it = boost::find(availableLanguages, system.toStdString());
+    if (it != std::end(availableLanguages))
+        return system;
+    return QStringLiteral("en");
 }
 
 } // namespace
@@ -210,6 +243,16 @@ int main(int argc, char *argv[])
     if (QIcon::themeName().isEmpty())
         QIcon::setThemeName(QStringLiteral("tango"));
 
+    QSettings preferences;
+    QString language = getUiLanguage();
+    QTranslator translator;
+    translator.load(QStringLiteral("qt_%1").arg(language),
+                    QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+    translator.load(QStringLiteral("scramgui_%1").arg(language),
+                    QString::fromStdString(scram::Env::install_dir()
+                                           + "/share/scram/translations"));
+    app.installTranslator(&translator);
+
     scram::gui::MainWindow w;
     w.show();
 
@@ -229,7 +272,7 @@ int main(int argc, char *argv[])
             } else {
                 w.addInputFiles(inputFiles);
             }
-        } catch (boost::exception &) { assert(false); }
+        } catch (const boost::exception &) { assert(false); }
     }
     return app.exec();
 }

@@ -84,8 +84,22 @@
     <property name="title">
      <string>&amp;File</string>
     </property>
+    <widget class="QMenu" name="menuRecentFiles">
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+     <property name="title">
+      <string>Recent &amp;Files</string>
+     </property>
+     <property name="icon">
+      <iconset theme="document-open-recent"/>
+     </property>
+     <addaction name="separator"/>
+     <addaction name="actionClearList"/>
+    </widget>
     <addaction name="actionNewModel"/>
     <addaction name="actionOpenFiles"/>
+    <addaction name="menuRecentFiles"/>
     <addaction name="separator"/>
     <addaction name="actionSave"/>
     <addaction name="actionSaveAs"/>
@@ -154,6 +168,8 @@
     <addaction name="actionRemoveElement"/>
     <addaction name="separator"/>
     <addaction name="actionRenameModel"/>
+    <addaction name="separator"/>
+    <addaction name="actionPreferences"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -584,18 +600,12 @@
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Model</string>
    </property>
   </action>
   <action name="actionZoomToolBar">
    <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="checked">
     <bool>true</bool>
    </property>
    <property name="text">
@@ -606,9 +616,6 @@
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Analysis</string>
    </property>
@@ -617,18 +624,12 @@
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Data</string>
    </property>
   </action>
   <action name="actionReports">
    <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="checked">
     <bool>true</bool>
    </property>
    <property name="text">
@@ -675,9 +676,6 @@
    <property name="checkable">
     <bool>true</bool>
    </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
    <property name="text">
     <string>&amp;Edit</string>
    </property>
@@ -700,6 +698,19 @@
    </property>
    <property name="text">
     <string>Re&amp;name Model</string>
+   </property>
+  </action>
+  <action name="actionPreferences">
+   <property name="icon">
+    <iconset theme="preferences-system"/>
+   </property>
+   <property name="text">
+    <string>&amp;Preferences...</string>
+   </property>
+  </action>
+  <action name="actionClearList">
+   <property name="text">
+    <string>&amp;Clear List</string>
    </property>
   </action>
  </widget>
