@@ -9,7 +9,7 @@
     </message>
     <message>
       <source>Label:</source>
-      <translation>Ярлык:</translation>
+      <translation>Метка:</translation>
     </message>
     <message>
       <source>Name:</source>
@@ -37,7 +37,7 @@
     <message>
       <source>Conditional</source>
       <extracomment>Conditioning flavor for a basic event (used as a conditioning variable for conditional probabilities)</extracomment>
-      <translation>Условие</translation>
+      <translation>Событие условие</translation>
     </message>
     <message>
       <source>Gate</source>
@@ -140,7 +140,7 @@
     <message>
       <source>Exponential</source>
       <comment>probability type defined w/ negative exponential formula</comment>
-      <translation>Экспоненциальная</translation>
+      <translation>Экспоненциал</translation>
     </message>
     <message>
       <source>NULL</source>
@@ -276,16 +276,8 @@
       <translation>Запуск анализа</translation>
     </message>
     <message>
-      <source>Alt+R</source>
-      <translation type="unfinished">Alt+R</translation>
-    </message>
-    <message>
       <source>Analysis Settings</source>
-      <translation>Настройки анализа</translation>
-    </message>
-    <message>
-      <source>Alt+S</source>
-      <translation type="unfinished">Alt+S</translation>
+      <translation>Параметры анализа</translation>
     </message>
     <message>
       <source>&amp;Model</source>
@@ -313,7 +305,7 @@
     </message>
     <message>
       <source>Export &amp;Report As...</source>
-      <translation>Экспорт &amp;отчет как...</translation>
+      <translation>Экспортировать &amp;отчет...</translation>
     </message>
     <message>
       <source>Re&amp;name Model</source>
@@ -322,12 +314,24 @@
     <message>
       <source>&amp;Run</source>
       <comment>execute analysis</comment>
-      <translation>&amp;Запуск</translation>
+      <translation>&amp;Запустить</translation>
     </message>
     <message>
       <source>&amp;Settings...</source>
       <comment>analysis configuration</comment>
       <translation>&amp;Настройки...</translation>
+    </message>
+    <message>
+      <source>Recent &amp;Files</source>
+      <translation>Последние &amp;файлы</translation>
+    </message>
+    <message>
+      <source>&amp;Preferences...</source>
+      <translation>&amp; Предпочтения...</translation>
+    </message>
+    <message>
+      <source>&amp;Clear List</source>
+      <translation>&amp;Очистить список</translation>
     </message>
   </context>
   <context>
@@ -342,10 +346,34 @@
     </message>
   </context>
   <context>
+    <name>PreferencesDialog</name>
+    <message>
+      <source>Preferences</source>
+      <translation>Предпочтения</translation>
+    </message>
+    <message>
+      <source>Lanuage:</source>
+      <translation>Язык:</translation>
+    </message>
+    <message>
+      <source>Undo limit:</source>
+      <translation>Лимит отмен:</translation>
+    </message>
+    <message>
+      <source>Auto-save:</source>
+      <translation>Автосохранение:</translation>
+    </message>
+    <message>
+      <source>min</source>
+      <extracomment>Shortened time unit for &apos;minutes&apos;</extracomment>
+      <translation>мин</translation>
+    </message>
+  </context>
+  <context>
     <name>QObject</name>
     <message>
       <source>Set element &apos;%1&apos; label to &apos;%2&apos;</source>
-      <translation>Установить ярлык элемента «%1» на «%2»</translation>
+      <translation>Установить метку элемента «%1» на «%2»</translation>
     </message>
     <message>
       <source>Modify basic event &apos;%1&apos; expression</source>
@@ -395,12 +423,36 @@
       <source>Change the type of event &apos;%1&apos;</source>
       <translation>Изменить тип события «%1»</translation>
     </message>
+    <message>
+      <source>IO Error</source>
+      <translation>Ошибка ввода-вывода</translation>
+    </message>
+    <message>
+      <source>File: %1</source>
+      <translation>Файл: %1</translation>
+    </message>
+    <message>
+      <source>Line: %1</source>
+      <translation>Строка: %1</translation>
+    </message>
+    <message>
+      <source>MEF Container: %1</source>
+      <translation>ФОМ контейнер: %1</translation>
+    </message>
+    <message>
+      <source>XML element: %1</source>
+      <translation>XML-элемент: %1</translation>
+    </message>
+    <message>
+      <source>XML attribute: %1</source>
+      <translation>Атрибут XML: %1</translation>
+    </message>
   </context>
   <context>
     <name>SettingsDialog</name>
     <message>
       <source>Analysis Settings</source>
-      <translation>Параметры анализа</translation>
+      <translation>Настройки анализа</translation>
     </message>
     <message>
       <source>Approximations</source>
@@ -460,6 +512,10 @@
     <message>
       <source>Example Models</source>
       <translation>Примеры</translation>
+    </message>
+    <message>
+      <source>Recent Files</source>
+      <translation>Последние файлы</translation>
     </message>
   </context>
   <context>
@@ -605,10 +661,6 @@
       <translation>Экспортировать отчеты</translation>
     </message>
     <message>
-      <source>Reporting Error</source>
-      <translation>Ошибка при отчете</translation>
-    </message>
-    <message>
       <source>Dependency Container Removal</source>
       <extracomment>The container w/ dependents still in the model.</extracomment>
       <translation>Удаление контейнера c иждивенцами</translation>
@@ -656,11 +708,6 @@
       <translation>Дерево отказов: %1</translation>
     </message>
     <message>
-      <source>Products: %L1</source>
-      <extracomment>Cut-sets or prime-implicants (depending on the settings).</extracomment>
-      <translation>Произведения: %L1</translation>
-    </message>
-    <message>
       <source>Product</source>
       <translation>Произведение</translation>
     </message>
@@ -679,15 +726,6 @@
     <message>
       <source>Products: %1</source>
       <translation>Произведения: %1</translation>
-    </message>
-    <message>
-      <source>Probability: %1</source>
-      <translation>Вероятность: %1</translation>
-    </message>
-    <message>
-      <source>Importance Factors: %L1</source>
-      <extracomment>The number of important events w/ factors defined.</extracomment>
-      <translation>Факторы важности: % L1</translation>
     </message>
     <message>
       <source>ID</source>
@@ -723,42 +761,103 @@
     </message>
     <message>
       <source>&lt;h1&gt;SCRAM %1&lt;/h1&gt;The GUI front-end for SCRAM,&lt;br/&gt;a command-line risk analysis multi-tool.&lt;br/&gt;&lt;br/&gt;License: GPLv3+&lt;br/&gt;Homepage: &lt;a href=&quot;%2&quot;&gt;%2&lt;/a&gt;&lt;br/&gt;Technical Support: &lt;a href=&quot;%3&quot;&gt;%3&lt;/a&gt;&lt;br/&gt;Bug Tracker: &lt;a href=&quot;%4&quot;&gt;%4&lt;/a&gt;&lt;br/&gt;&lt;br/&gt;%5</source>
-      <translation>&lt;h1&gt;SCRAM %1&lt;/h1&gt;Графический интерфейс для SCRAM,&lt;br/&gt; мулти инструмент командной строки для анализа рисков.&lt;br/&gt;&lt;br/&gt;Лицензия: GPLv3+&lt;br/&gt;Домашняя страница: &lt;a href=&quot;%2&quot;&gt;%2&lt;/a&gt;&lt;br/&gt;Техническая поддержка: &lt;a href=&quot;%3&quot;&gt;%3&lt;/a&gt;&lt;br/&gt;Баг-трекер: &lt;a href=&quot;%4&quot;&gt;%4&lt;/a&gt;&lt;br/&gt;&lt;br/&gt;%5</translation>
+      <translation>&lt;h1&gt;SCRAM %1&lt;/h1&gt;Графический интерфейс для SCRAM,&lt;br/&gt; мулти инструмент командной строки для анализа рисков.&lt;br/&gt;&lt;br/&gt;Лицензия: GPLv3+&lt;br/&gt;Домашняя страница: &lt;a href=&quot;%2&quot;&gt;%2&lt;/a&gt;&lt;br/&gt;Техподдержка: &lt;a href=&quot;%3&quot;&gt;%3&lt;/a&gt;&lt;br/&gt;Баг-трекер: &lt;a href=&quot;%4&quot;&gt;%4&lt;/a&gt;&lt;br/&gt;&lt;br/&gt;%5</translation>
     </message>
     <message>
-      <source>Save Error</source>
+      <source>Configuration file error</source>
+      <translation>Ошибка файла конфигурации</translation>
+    </message>
+    <message>
+      <source>XML Validity Error</source>
+      <translation>Ошибка XML</translation>
+    </message>
+    <message>
+      <source>Invalid configuration file</source>
+      <translation>Недопустимая конфигурация</translation>
+    </message>
+    <message>
+      <source>Invalid configurations</source>
+      <translation>Недопустимая конфигурация</translation>
+    </message>
+    <message>
+      <source>Input file error</source>
+      <translation>Ошибка входного файла</translation>
+    </message>
+    <message>
+      <source>Invalid input file</source>
+      <translation>Недопустимый входной файл</translation>
+    </message>
+    <message>
+      <source>Invalid input model</source>
+      <translation>Недопустимая модель</translation>
+    </message>
+    <message>
+      <source>Unnamed Model</source>
+      <translation>Безымянная модель</translation>
+    </message>
+    <message>
+      <source>Save error</source>
       <comment>error on saving to file</comment>
       <translation>Ошибка сохранения</translation>
+    </message>
+    <message>
+      <source>Reporting error</source>
+      <translation>Ошибка при отчете</translation>
+    </message>
+    <message>
+      <source>Products (%L1)</source>
+      <extracomment>Cut-sets or prime-implicants (depending on the settings).</extracomment>
+      <translation>Произведения (%L1)</translation>
+    </message>
+    <message>
+      <source>Probability (%1)</source>
+      <translation>Вероятность (%1)</translation>
+    </message>
+    <message>
+      <source>Importance Factors (%L1)</source>
+      <extracomment>The number of important events w/ factors defined.</extracomment>
+      <translation>Факторы важности (%L1)</translation>
     </message>
   </context>
   <context>
     <name>scram::gui::ModelTree</name>
     <message>
-      <source>Fault Trees</source>
+      <source>Fault Trees (%L1)</source>
       <extracomment>The parent item for collections of fault trees in the model.</extracomment>
-      <translation>Деревья отказов</translation>
+      <translation>Деревья отказов (%L1)</translation>
     </message>
     <message>
-      <source>Gates</source>
+      <source>Gates (%L1)</source>
       <extracomment>The table of gates.</extracomment>
-      <translation>Вентили</translation>
+      <translation>Вентили (%L1)</translation>
     </message>
     <message>
-      <source>Basic Events</source>
+      <source>Basic Events (%L1)</source>
       <extracomment>The table of basic events.</extracomment>
-      <translation>Основные события</translation>
+      <translation>Основные события (%L1)</translation>
     </message>
     <message>
-      <source>House Events</source>
+      <source>House Events (%L1)</source>
       <extracomment>The table of house events.</extracomment>
-      <translation>Постоянные события</translation>
+      <translation>Постоянные события (%L1)</translation>
+    </message>
+  </context>
+  <context>
+    <name>scram::gui::PreferencesDialog</name>
+    <message>
+      <source>Restart Required</source>
+      <translation>Требуется перезапуск</translation>
+    </message>
+    <message>
+      <source>The language change will take effect after an application restart.</source>
+      <translation>Языковые изменения вступят в силу после перезапуска приложения.</translation>
     </message>
   </context>
   <context>
     <name>scram::gui::model::BasicEvent</name>
     <message>
       <source>Set basic event &apos;%1&apos; flavor to &apos;%2&apos;</source>
-      <translation>Установить вариант основного события «%1» на «%2»</translation>
+      <translation>Установить вид основного события «%1» на «%2»</translation>
     </message>
     <message>
       <source>Basic</source>
@@ -783,7 +882,7 @@
     <message>
       <source>Flavor</source>
       <extracomment>The flavor type of a basic event.</extracomment>
-      <translation>Вариант</translation>
+      <translation>Вид</translation>
     </message>
     <message>
       <source>Probability</source>
@@ -792,7 +891,7 @@
     </message>
     <message>
       <source>Label</source>
-      <translation>Ярлык</translation>
+      <translation>Метка</translation>
     </message>
   </context>
   <context>
@@ -852,7 +951,7 @@
     </message>
     <message>
       <source>Label</source>
-      <translation>Ярлык</translation>
+      <translation>Метка</translation>
     </message>
   </context>
   <context>
@@ -868,7 +967,7 @@
     </message>
     <message>
       <source>Label</source>
-      <translation>Ярлык</translation>
+      <translation>Метка</translation>
     </message>
   </context>
 </TS>

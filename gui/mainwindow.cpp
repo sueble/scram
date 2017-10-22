@@ -31,12 +31,11 @@
 #include <QPrinter>
 #include <QProgressDialog>
 #include <QSvgGenerator>
-#include <QTableView>
-#include <QTableWidget>
 #include <QtConcurrent>
 #include <QtOpenGL>
 
 #include <boost/exception/get_error_info.hpp>
+#include <boost/filesystem.hpp>
 
 #include "src/config.h"
 #include "src/env.h"
@@ -51,12 +50,16 @@
 #include "src/serialization.h"
 #include "src/xml.h"
 
-#include "elementcontainermodel.h"
 #include "diagram.h"
+#include "elementcontainermodel.h"
 #include "guiassert.h"
+#include "importancetablemodel.h"
 #include "modeltree.h"
+#include "overload.h"
 #include "preferencesdialog.h"
 #include "printable.h"
+#include "producttablemodel.h"
+#include "reporttree.h"
 #include "settingsdialog.h"
 #include "validator.h"
 
@@ -138,19 +141,6 @@ private:
     }
 };
 
-namespace {
-
-/// @returns A new table item for data tables.
-QTableWidgetItem *constructTableItem(QVariant data)
-{
-    auto *item = new QTableWidgetItem;
-    item->setData(Qt::EditRole, std::move(data));
-    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
-    return item;
-}
-
-} // namespace
-
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow),
       m_undoStack(new QUndoStack(this)),
@@ -174,78 +164,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupStatusBar();
     setupActions();
-
-    connect(ui->modelTree, &QTreeView::activated, this,
-            &MainWindow::activateModelTree);
-    connect(ui->reportTreeWidget, &QTreeWidget::itemActivated, this,
-            [this](QTreeWidgetItem *item) {
-                if (auto it = ext::find(m_reportActions, item))
-                    it->second();
-            });
-    connect(ui->tabWidget, &QTabWidget::tabCloseRequested, this,
-            [this](int index) {
-                // Ensure show/hide order.
-                if (index == ui->tabWidget->currentIndex()) {
-                    int num_tabs = ui->tabWidget->count();
-                    if (num_tabs > 1) {
-                        ui->tabWidget->setCurrentIndex(
-                            index == (num_tabs - 1) ? index - 1 : index + 1);
-                    }
-                }
-                auto *widget = ui->tabWidget->widget(index);
-                ui->tabWidget->removeTab(index);
-                delete widget;
-            });
-
-    connect(ui->actionSettings, &QAction::triggered, this, [this] {
-        SettingsDialog dialog(m_settings, this);
-        if (dialog.exec() == QDialog::Accepted)
-            m_settings = dialog.settings();
-    });
-    connect(ui->actionRun, &QAction::triggered, this, [this] {
-        GUI_ASSERT(m_model, );
-        if (m_settings.probability_analysis()
-            && ext::any_of(m_model->basic_events(),
-                           [](const mef::BasicEventPtr &basicEvent) {
-                               return !basicEvent->HasExpression();
-                           })) {
-            QMessageBox::critical(this, tr("Validation Error"),
-                                  tr("Not all basic events have expressions "
-                                     "for probability analysis."));
-            return;
-        }
-        WaitDialog progress(this);
-        //: This is a message shown during the analysis run.
-        progress.setLabelText(tr("Running analysis..."));
-        auto analysis
-            = std::make_unique<core::RiskAnalysis>(m_model.get(), m_settings);
-        QFutureWatcher<void> futureWatcher;
-        connect(&futureWatcher, SIGNAL(finished()), &progress, SLOT(reset()));
-        futureWatcher.setFuture(
-            QtConcurrent::run([&analysis] { analysis->Analyze(); }));
-        progress.exec();
-        futureWatcher.waitForFinished();
-        resetReportWidget(std::move(analysis));
-    });
-
-    connect(this, &MainWindow::configChanged, [this] {
-        m_undoStack->clear();
-        setWindowTitle(QStringLiteral("%1[*]").arg(getModelNameForTitle()));
-        ui->actionSaveAs->setEnabled(true);
-        ui->actionAddElement->setEnabled(true);
-        ui->actionRenameModel->setEnabled(true);
-        ui->actionRun->setEnabled(true);
-        resetModelTree();
-        resetReportWidget(nullptr);
-    });
-    connect(m_undoStack, &QUndoStack::indexChanged, ui->reportTreeWidget,
-            [this] {
-                if (m_analysis)
-                    resetReportWidget(nullptr);
-            });
-    connect(m_autoSaveTimer, &QTimer::timeout, this,
-            &MainWindow::autoSaveModel);
-
+    setupConnections();
     loadPreferences();
     setupStartPage();
 }
@@ -287,28 +206,36 @@ void displayError(const scram::Error &err, const QString &title,
     QMessageBox message(QMessageBox::Critical, title, text, QMessageBox::Ok,
                         parent);
     QString info;
+    auto newLine = [&info] { info.append(QStringLiteral("\n")); };
+
     if (const std::string *filename
             = boost::get_error_info<boost::errinfo_file_name>(err)) {
         info.append(
-            QObject::tr("File: %1\n").arg(QString::fromStdString(*filename)));
+            QObject::tr("File: %1").arg(QString::fromStdString(*filename)));
+        newLine();
         if (const int *line
-                = boost::get_error_info<boost::errinfo_at_line>(err))
-            info.append(QObject::tr("Line: %1\n").arg(*line));
+                = boost::get_error_info<boost::errinfo_at_line>(err)) {
+            info.append(QObject::tr("Line: %1").arg(*line));
+            newLine();
+        }
     }
     if (const std::string *container
             = boost::get_error_info<scram::mef::errinfo_container>(err)) {
-        info.append(QObject::tr("MEF Container: %1\n")
+        info.append(QObject::tr("MEF Container: %1")
                         .arg(QString::fromStdString(*container)));
+        newLine();
     }
     if (const std::string *xml_element
             = boost::get_error_info<scram::xml::errinfo_element>(err)) {
-        info.append(QObject::tr("XML element: %1\n")
+        info.append(QObject::tr("XML element: %1")
                         .arg(QString::fromStdString(*xml_element)));
+        newLine();
     }
     if (const std::string *xml_attribute
         = boost::get_error_info<scram::xml::errinfo_attribute>(err)) {
-        info.append(QObject::tr("XML attribute: %1\n")
+        info.append(QObject::tr("XML attribute: %1")
                         .arg(QString::fromStdString(*xml_attribute)));
+        newLine();
     }
     message.setInformativeText(info);
 
@@ -531,6 +458,78 @@ void MainWindow::setupActions()
         m_searchBar->setFocus();
         m_searchBar->selectAll();
     });
+
+    // Providing shortcuts for the tab widget manipulations.
+    auto *closeCurrentTab = new QAction(this);
+    auto *nextTab = new QAction(this);
+    auto *prevTab = new QAction(this);
+
+    closeCurrentTab->setShortcut(QKeySequence::Close);
+    nextTab->setShortcut(QKeySequence::NextChild);
+    // QTBUG-15746: QKeySequence::PreviousChild does not work.
+    prevTab->setShortcut(Qt::CTRL | Qt::Key_Backtab);
+
+    ui->tabWidget->addAction(closeCurrentTab);
+    ui->tabWidget->addAction(nextTab);
+    ui->tabWidget->addAction(prevTab);
+
+    auto switchTab = [this](bool toNext) {
+        int numTabs = ui->tabWidget->count();
+        if (!numTabs)
+            return;
+        int currentIndex = ui->tabWidget->currentIndex();
+        int nextIndex = [currentIndex, numTabs, toNext] {
+            int ret = currentIndex + (toNext ? 1 : -1);
+            if (ret < 0)
+                return numTabs - 1;
+            if (ret >= numTabs)
+                return 0;
+            return ret;
+        }();
+        ui->tabWidget->setCurrentIndex(nextIndex);
+    };
+
+    connect(closeCurrentTab, &QAction::triggered, ui->tabWidget,
+            [this] { MainWindow::closeTab(ui->tabWidget->currentIndex()); });
+    connect(nextTab, &QAction::triggered, ui->tabWidget,
+            [switchTab] { switchTab(true); });
+    connect(prevTab, &QAction::triggered, ui->tabWidget,
+            [switchTab] { switchTab(false); });
+}
+
+void MainWindow::setupConnections()
+{
+    connect(ui->modelTree, &QTreeView::activated, this,
+            &MainWindow::activateModelTree);
+    connect(ui->reportTree, &QTreeView::activated, this,
+            &MainWindow::activateReportTree);
+    connect(ui->tabWidget, &QTabWidget::tabCloseRequested, this,
+            &MainWindow::closeTab);
+
+    connect(ui->actionSettings, &QAction::triggered, this, [this] {
+        SettingsDialog dialog(m_settings, this);
+        if (dialog.exec() == QDialog::Accepted)
+            m_settings = dialog.settings();
+    });
+    connect(ui->actionRun, &QAction::triggered, this, &MainWindow::runAnalysis);
+
+    connect(this, &MainWindow::configChanged, [this] {
+        m_undoStack->clear();
+        setWindowTitle(QStringLiteral("%1[*]").arg(getModelNameForTitle()));
+        ui->actionSaveAs->setEnabled(true);
+        ui->actionAddElement->setEnabled(true);
+        ui->actionRenameModel->setEnabled(true);
+        ui->actionRun->setEnabled(true);
+        resetModelTree();
+        resetReportTree(nullptr);
+    });
+    connect(m_undoStack, &QUndoStack::indexChanged, ui->reportTree,
+            [this] {
+                if (m_analysis)
+                    resetReportTree(nullptr);
+            });
+    connect(m_autoSaveTimer, &QTimer::timeout, this,
+            &MainWindow::autoSaveModel);
 }
 
 void MainWindow::loadPreferences()
@@ -546,7 +545,8 @@ void MainWindow::loadPreferences()
         m_preferences.value(QStringLiteral("undoLimit"), 0).toInt());
 
     GUI_ASSERT(m_autoSaveTimer->isActive() == false, );
-    int interval = m_preferences.value(QStringLiteral("autoSave")).toInt();
+    int interval
+        = m_preferences.value(QStringLiteral("autoSave"), 300000).toInt();
     if (interval)
         m_autoSaveTimer->start(interval);
 
@@ -674,8 +674,19 @@ void MainWindow::saveToFile(std::string destination)
 {
     GUI_ASSERT(!destination.empty(), );
     GUI_ASSERT(m_model, );
+
+    namespace fs = boost::filesystem;
+    fs::path temp_file = destination + "." + fs::unique_path().string();
+
     try {
-        mef::Serialize(*m_model, destination);
+        mef::Serialize(*m_model, temp_file.string());
+        try {
+            fs::rename(temp_file, destination);
+        } catch (const fs::filesystem_error& err) {
+            SCRAM_THROW(IOError(err.what()))
+                << boost::errinfo_file_name(destination)
+                << boost::errinfo_errno(err.code().value());
+        }
     } catch (const IOError &err) {
         displayError(err, tr("Save error", "error on saving to file"), this);
         return;
@@ -739,6 +750,50 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     saveModel();
     return isWindowModified() ? event->ignore() : event->accept();
+}
+
+void MainWindow::closeTab(int index)
+{
+    if (index < 0)
+        return;
+    // Ensure show/hide order.
+    if (index == ui->tabWidget->currentIndex()) {
+        int num_tabs = ui->tabWidget->count();
+        if (num_tabs > 1) {
+            ui->tabWidget->setCurrentIndex(index == (num_tabs - 1) ? index - 1
+                                                                   : index + 1);
+        }
+    }
+    auto *widget = ui->tabWidget->widget(index);
+    ui->tabWidget->removeTab(index);
+    delete widget;
+}
+
+void MainWindow::runAnalysis()
+{
+    GUI_ASSERT(m_model, );
+    if (m_settings.probability_analysis()
+        && ext::any_of(m_model->basic_events(),
+                       [](const mef::BasicEventPtr &basicEvent) {
+                           return !basicEvent->HasExpression();
+                       })) {
+        QMessageBox::critical(this, tr("Validation Error"),
+                              tr("Not all basic events have expressions "
+                                 "for probability analysis."));
+        return;
+    }
+    WaitDialog progress(this);
+    //: This is a message shown during the analysis run.
+    progress.setLabelText(tr("Running analysis..."));
+    auto analysis
+        = std::make_unique<core::RiskAnalysis>(m_model.get(), m_settings);
+    QFutureWatcher<void> futureWatcher;
+    connect(&futureWatcher, SIGNAL(finished()), &progress, SLOT(reset()));
+    futureWatcher.setFuture(
+        QtConcurrent::run([&analysis] { analysis->Analyze(); }));
+    progress.exec();
+    futureWatcher.waitForFinished();
+    resetReportTree(std::move(analysis));
 }
 
 void MainWindow::exportReportAs()
@@ -992,10 +1047,8 @@ void MainWindow::setupRemovable(QAbstractItemView *view)
                         GUI_ASSERT(currentIndexes.empty() == false, );
                         auto index = currentIndexes.front();
                         GUI_ASSERT(index.parent().isValid() == false, );
-                        auto *proxyModel = static_cast<QSortFilterProxyModel *>(
-                            m_removable->model());
                         auto *element = static_cast<T *>(
-                            proxyModel->mapToSource(index).internalPointer());
+                            index.data(Qt::UserRole).value<void *>());
                         GUI_ASSERT(element, );
                         auto parents
                             = m_window->m_guiModel->parents(element->data());
@@ -1003,11 +1056,12 @@ void MainWindow::setupRemovable(QAbstractItemView *view)
                             QMessageBox::information(
                                 m_window,
                                 //: The event w/ dependents in the model.
-                                tr("Dependency Event Removal"),
-                                tr("Event '%1' is not removable because"
-                                   " it has dependents."
-                                   " Remove the event from the dependents"
-                                   " before this operation.")
+                                MainWindow::tr("Dependency Event Removal"),
+                                MainWindow::tr(
+                                    "Event '%1' is not removable because"
+                                    " it has dependents."
+                                    " Remove the event from the dependents"
+                                    " before this operation.")
                                     .arg(element->id()));
                             return;
                         }
@@ -1312,28 +1366,38 @@ void MainWindow::editElement(EventDialog *dialog, model::Gate *element)
             element, extract<mef::Formula>(*dialog)));
 }
 
+template <class ContainerModel, typename... Ts>
+QTableView *MainWindow::constructTableView(QWidget *parent, Ts&&... modelArgs)
+{
+    auto *table = new QTableView(parent);
+    auto *tableModel
+        = new ContainerModel(std::forward<Ts>(modelArgs)..., table);
+    auto *proxyModel = new model::SortFilterProxyModel(table);
+    proxyModel->setSourceModel(tableModel);
+    table->setModel(proxyModel);
+    table->setWordWrap(false);
+    table->horizontalHeader()->setSortIndicatorShown(true);
+    table->resizeColumnsToContents();
+    table->setSortingEnabled(true);
+    setupSearchable(table, proxyModel);
+    return table;
+}
+
 template <class ContainerModel>
 QAbstractItemView *MainWindow::constructElementTable(model::Model *guiModel,
                                                      QWidget *parent)
 {
-    auto *table = new QTableView(parent);
-    auto *tableModel = new ContainerModel(guiModel, table);
-    auto *proxyModel = new model::SortFilterProxyModel(table);
-    proxyModel->setSourceModel(tableModel);
-    table->setModel(proxyModel);
+    QTableView *table = constructTableView<ContainerModel>(parent, guiModel);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::SingleSelection);
-    table->setWordWrap(false);
-    table->resizeColumnsToContents();
-    table->setSortingEnabled(true);
-    setupSearchable(table, proxyModel);
     setupRemovable<typename ContainerModel::ItemModel>(table);
-    connect(table, &QAbstractItemView::activated,
-            [this, proxyModel](const QModelIndex &index) {
+    connect(table, &QAbstractItemView::activated, this,
+            [this](const QModelIndex &index) {
                 GUI_ASSERT(index.isValid(), );
                 EventDialog dialog(m_model.get(), this);
                 auto *item = static_cast<typename ContainerModel::ItemModel *>(
-                    proxyModel->mapToSource(index).internalPointer());
+                    index.data(Qt::UserRole).value<void *>());
+                GUI_ASSERT(item, );
                 dialog.setupData(*item);
                 if (dialog.exec() == QDialog::Accepted)
                     editElement(&dialog, item);
@@ -1354,6 +1418,8 @@ QAbstractItemView *MainWindow::constructElementTable<model::GateContainerModel>(
     tree->setSelectionBehavior(QAbstractItemView::SelectRows);
     tree->setSelectionMode(QAbstractItemView::SingleSelection);
     tree->setWordWrap(false);
+    tree->header()->setSortIndicatorShown(true);
+    tree->header()->setDefaultAlignment(Qt::AlignCenter);
     tree->resizeColumnToContents(0);
     tree->setColumnWidth(0, 2 * tree->columnWidth(0));
     tree->setAlternatingRowColors(true);
@@ -1361,14 +1427,15 @@ QAbstractItemView *MainWindow::constructElementTable<model::GateContainerModel>(
 
     setupSearchable(tree, proxyModel);
     setupRemovable<model::Gate>(tree);
-    connect(tree, &QAbstractItemView::activated,
-            [this, proxyModel](const QModelIndex &index) {
+    connect(tree, &QAbstractItemView::activated, this,
+            [this](const QModelIndex &index) {
                 GUI_ASSERT(index.isValid(), );
                 if (index.parent().isValid())
                     return;
                 EventDialog dialog(m_model.get(), this);
                 auto *item = static_cast<model::Gate *>(
-                    proxyModel->mapToSource(index).internalPointer());
+                    index.data(Qt::UserRole).value<void *>());
+                GUI_ASSERT(item, );
                 dialog.setupData(*item);
                 if (dialog.exec() == QDialog::Accepted)
                     editElement(&dialog, item);
@@ -1432,9 +1499,56 @@ void MainWindow::activateModelTree(const QModelIndex &index)
     GUI_ASSERT(index.parent().parent().isValid() == false, );
     GUI_ASSERT(index.parent().row()
                    == static_cast<int>(ModelTree::Row::FaultTrees), );
-    auto faultTree = static_cast<mef::FaultTree *>(index.internalPointer());
+    auto faultTree = static_cast<mef::FaultTree *>(
+        index.data(Qt::UserRole).value<void *>());
     GUI_ASSERT(faultTree, );
     activateFaultTreeDiagram(faultTree);
+}
+
+void MainWindow::activateReportTree(const QModelIndex &index)
+{
+    GUI_ASSERT(m_analysis, );
+    GUI_ASSERT(index.isValid(), );
+    QModelIndex parentIndex = index.parent();
+    if (!parentIndex.isValid())
+        return;
+    GUI_ASSERT(parentIndex.parent().isValid() == false, );
+    QString name = parentIndex.data(Qt::DisplayRole).toString();
+    GUI_ASSERT(parentIndex.row() < m_analysis->results().size(), );
+    const core::RiskAnalysis::Result &result
+        = m_analysis->results()[parentIndex.row()];
+
+    QWidget *widget = nullptr;
+    switch (static_cast<ReportTree::Row>(index.row())) {
+    case ReportTree::Row::Products: {
+        bool withProbability = result.probability_analysis != nullptr;
+        auto *table = constructTableView<model::ProductTableModel>(
+            this, result.fault_tree_analysis->products(), withProbability);
+        ui->tabWidget->addTab(table, tr("Products: %1").arg(name));
+        table->sortByColumn(withProbability ? 2 : 1, withProbability
+                                                         ? Qt::DescendingOrder
+                                                         : Qt::AscendingOrder);
+        table->setSortingEnabled(true);
+        widget = table;
+        break;
+    }
+    case ReportTree::Row::Probability:
+        break;
+    case ReportTree::Row::Importance: {
+        widget = constructTableView<model::ImportanceTableModel>(
+            this, &result.importance_analysis->importance());
+        ui->tabWidget->addTab(widget, tr("Importance: %1").arg(name));
+        break;
+    }
+    default:
+        GUI_ASSERT(false && "Unexpected analysis report data", );
+    }
+
+    if (!widget)
+        return;
+    ui->tabWidget->setCurrentWidget(widget);
+    connect(ui->reportTree->model(), &QObject::destroyed, widget,
+            [this, widget] { closeTab(ui->tabWidget->indexOf(widget)); });
 }
 
 void MainWindow::activateFaultTreeDiagram(mef::FaultTree *faultTree)
@@ -1480,132 +1594,22 @@ void MainWindow::activateFaultTreeDiagram(mef::FaultTree *faultTree)
                     action(house);
                 }
             });
+    connect(m_guiModel.get(), OVERLOAD(model::Model, removed, mef::FaultTree *),
+            view, [this, faultTree, view](mef::FaultTree *removedTree) {
+                if (removedTree == faultTree)
+                    closeTab(ui->tabWidget->indexOf(view));
+            });
 }
 
-void MainWindow::resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis)
+void MainWindow::resetReportTree(std::unique_ptr<core::RiskAnalysis> analysis)
 {
-    ui->reportTreeWidget->clear();
-    m_reportActions.clear();
     m_analysis = std::move(analysis);
     ui->actionExportReportAs->setEnabled(static_cast<bool>(m_analysis));
-    if (!m_analysis)
-        return;
 
-    struct {
-        QString operator()(const mef::Gate *gate)
-        {
-            return QString::fromStdString(gate->id());
-        }
-
-        QString operator()(const std::pair<const mef::InitiatingEvent &,
-                                           const mef::Sequence &> &)
-        {
-            GUI_ASSERT(false && "unexpected analysis target", {});
-            return {};
-        }
-    } nameExtractor;
-    for (const core::RiskAnalysis::Result &result : m_analysis->results()) {
-        QString name = boost::apply_visitor(nameExtractor, result.id.target);
-        auto *widgetItem = new QTreeWidgetItem({name});
-        ui->reportTreeWidget->addTopLevelItem(widgetItem);
-
-        GUI_ASSERT(result.fault_tree_analysis,);
-        auto *productItem = new QTreeWidgetItem(
-            //: Cut-sets or prime-implicants (depending on the settings).
-            {tr("Products (%L1)")
-                 .arg(result.fault_tree_analysis->products().size())});
-        widgetItem->addChild(productItem);
-        m_reportActions.emplace(productItem, [this, &result, name] {
-            auto *table = new QTableWidget(nullptr);
-            const auto &products = result.fault_tree_analysis->products();
-            double sum = 0;
-            if (result.probability_analysis) {
-                table->setColumnCount(4);
-                table->setHorizontalHeaderLabels({tr("Product"), tr("Order"),
-                                                  tr("Probability"),
-                                                  tr("Contribution")});
-                for (const core::Product& product : products)
-                    sum += product.p();
-            } else {
-                table->setColumnCount(2);
-                table->setHorizontalHeaderLabels({tr("Product"), tr("Order")});
-            }
-            table->setRowCount(products.size());
-            int row = 0;
-            for (const core::Product &product : products) {
-                QStringList members;
-                for (const core::Literal &literal : product) {
-                    members.push_back(QString::fromStdString(
-                        (literal.complement ? "\u00AC" : "")
-                        + literal.event.id()));
-                }
-                table->setItem(row, 0, constructTableItem(members.join(
-                                           QStringLiteral(" \u22C5 "))));
-                table->setItem(row, 1, constructTableItem(product.order()));
-                if (result.probability_analysis) {
-                    table->setItem(row, 2, constructTableItem(product.p()));
-                    table->setItem(row, 3,
-                                   constructTableItem(product.p() / sum));
-                }
-                ++row;
-            }
-            table->setWordWrap(false);
-            table->resizeColumnsToContents();
-            table->setSortingEnabled(true);
-            ui->tabWidget->addTab(table, tr("Products: %1").arg(name));
-            ui->tabWidget->setCurrentWidget(table);
-        });
-
-        if (result.probability_analysis) {
-            widgetItem->addChild(new QTreeWidgetItem(
-                {tr("Probability (%1)")
-                     .arg(result.probability_analysis->p_total())}));
-        }
-
-        if (result.importance_analysis) {
-            auto *importanceItem = new QTreeWidgetItem(
-                //: The number of important events w/ factors defined.
-                {tr("Importance Factors (%L1)")
-                     .arg(result.importance_analysis->importance().size())});
-            widgetItem->addChild(importanceItem);
-            m_reportActions.emplace(importanceItem, [this, &result, name] {
-                auto *table = new QTableWidget(nullptr);
-                table->setColumnCount(8);
-                table->setHorizontalHeaderLabels(
-                    {tr("ID"), tr("Occurrence"), tr("Probability"), tr("MIF"),
-                     tr("CIF"), tr("DIF"), tr("RAW"), tr("RRW")});
-                auto &records = result.importance_analysis->importance();
-                table->setRowCount(records.size());
-                int row = 0;
-                for (const core::ImportanceRecord &record : records) {
-                    table->setItem(
-                        row, 0, constructTableItem(
-                                    QString::fromStdString(record.event.id())));
-                    table->setItem(
-                        row, 1, constructTableItem(record.factors.occurrence));
-                    table->setItem(row, 2,
-                                   constructTableItem(record.event.p()));
-                    table->setItem(row, 3,
-                                   constructTableItem(record.factors.mif));
-                    table->setItem(row, 4,
-                                   constructTableItem(record.factors.cif));
-                    table->setItem(row, 5,
-                                   constructTableItem(record.factors.dif));
-                    table->setItem(row, 6,
-                                   constructTableItem(record.factors.raw));
-                    table->setItem(row, 7,
-                                   constructTableItem(record.factors.rrw));
-                    ++row;
-                }
-
-                table->setWordWrap(false);
-                table->resizeColumnsToContents();
-                table->setSortingEnabled(true);
-                ui->tabWidget->addTab(table, tr("Importance: %1").arg(name));
-                ui->tabWidget->setCurrentWidget(table);
-            });
-        }
-    }
+    auto *oldModel = ui->reportTree->model();
+    ui->reportTree->setModel(
+        m_analysis ? new ReportTree(&m_analysis->results(), this) : nullptr);
+    delete oldModel;
 }
 
 } // namespace gui

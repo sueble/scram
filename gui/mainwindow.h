@@ -22,7 +22,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <QAbstractItemView>
@@ -32,8 +31,8 @@
 #include <QLineEdit>
 #include <QMainWindow>
 #include <QSettings>
+#include <QTableView>
 #include <QTimer>
-#include <QTreeWidgetItem>
 #include <QUndoStack>
 
 #include "src/model.h"
@@ -129,11 +128,12 @@ private slots:
 private:
     static const int LAYOUT_VERSION = 0; ///< Layout compatibility version.
 
-    void setupStatusBar(); ///< Setup widgets in the status bar.
-    void setupActions(); ///< Setup all the actions with connections.
-    void loadPreferences(); ///< Loads the persistent application preferences.
-    void savePreferences(); ///< Writes the 'unsaved' application preferences.
-    void setupStartPage();  ///< Sets up a new start page.
+    void setupStatusBar();   ///< Sets up widgets in the status bar.
+    void setupActions();     ///< Sets up all the actions with connections.
+    void setupConnections(); ///< Sets up all the remaining connections.
+    void loadPreferences();  ///< Loads the persistent application preferences.
+    void savePreferences();  ///< Writes the 'unsaved' application preferences.
+    void setupStartPage();   ///< Sets up a new start page.
 
     /// @returns The model name to be used for a title (e.g., main window).
     QString getModelNameForTitle();
@@ -178,6 +178,16 @@ private:
     template <class T>
     void removeEvent(T *event, mef::FaultTree *faultTree);
 
+    /// @tparam ContainerModel  The container model type.
+    /// @tparam Ts  The argument types for the container model.
+    ///
+    /// @param[in,out] parent  The parent to own the table view.
+    /// @param[in] modelArgs  The arguments for container model constructor.
+    ///
+    /// @returns Table view ready for inclusion to tabs.
+    template <class ContainerModel, typename... Ts>
+    QTableView *constructTableView(QWidget *parent, Ts&&... modelArgs);
+
     template <class ContainerModel>
     QAbstractItemView *constructElementTable(model::Model *guiModel,
                                              QWidget *parent);
@@ -203,6 +213,8 @@ private:
     void activateModelTree(const QModelIndex &index);
     /// Activates the fault tree view.
     void activateFaultTreeDiagram(mef::FaultTree *faultTree);
+    /// Activates the report tree elements.
+    void activateReportTree(const QModelIndex &index);
 
     /**
      * @brief Resets the report view.
@@ -210,7 +222,7 @@ private:
      * @param analysis  The analysis with results.
      *                  nullptr to clear the report widget.
      */
-    void resetReportWidget(std::unique_ptr<core::RiskAnalysis> analysis);
+    void resetReportTree(std::unique_ptr<core::RiskAnalysis> analysis);
 
     /**
      * Saves the model and sets the model file.
@@ -234,6 +246,17 @@ private:
     /// Override to save the model before closing the application.
     void closeEvent(QCloseEvent *event) override;
 
+    /// Safely closes the tab with the given index in the widget.
+    ///
+    /// @param[in] index  The index of the tab to be removed.
+    ///
+    /// @post Show/hide order is respected for safe delete.
+    /// @post The closed tab is deleted.
+    void closeTab(int index);
+
+    /// Runs the analysis with the current model.
+    void runAnalysis();
+
     std::unique_ptr<Ui::MainWindow> ui;
     QAction *m_undoAction;
     QAction *m_redoAction;
@@ -249,8 +272,6 @@ private:
     std::shared_ptr<mef::Model> m_model; ///< The analysis model.
     std::unique_ptr<model::Model> m_guiModel;  ///< The GUI Model wrapper.
     std::unique_ptr<core::RiskAnalysis> m_analysis; ///< Report container.
-    std::unordered_map<QTreeWidgetItem *, std::function<void()>>
-        m_reportActions; ///< Actions on elements of the report tree widget.
 };
 
 } // namespace gui

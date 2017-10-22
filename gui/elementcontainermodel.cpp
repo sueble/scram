@@ -133,6 +133,8 @@ QVariant BasicEventContainerModel::headerData(int section,
                                               Qt::Orientation orientation,
                                               int role) const
 {
+    if (role == Qt::InitialSortOrderRole && section == 2)
+        return Qt::DescendingOrder;
     if (role != Qt::DisplayRole || orientation != Qt::Horizontal)
         return ElementContainerModel::headerData(section, orientation, role);
 
@@ -154,8 +156,15 @@ QVariant BasicEventContainerModel::headerData(int section,
 QVariant BasicEventContainerModel::data(const QModelIndex &index,
                                         int role) const
 {
-    if (!index.isValid() || role != Qt::DisplayRole)
+    if (!index.isValid())
         return {};
+    if (role == Qt::TextAlignmentRole && index.column() == 2)
+        return Qt::AlignRight;
+    if (role == Qt::UserRole)
+        return QVariant::fromValue(index.internalPointer());
+    if (role != Qt::DisplayRole)
+        return {};
+
     auto *basicEvent = static_cast<BasicEvent *>(index.internalPointer());
 
     switch (index.column()) {
@@ -223,8 +232,13 @@ QVariant HouseEventContainerModel::headerData(int section,
 QVariant HouseEventContainerModel::data(const QModelIndex &index,
                                         int role) const
 {
-    if (!index.isValid() || role != Qt::DisplayRole)
+    if (!index.isValid())
         return {};
+    if (role == Qt::UserRole)
+        return QVariant::fromValue(index.internalPointer());
+    if (role != Qt::DisplayRole)
+        return {};
+
     auto *houseEvent = static_cast<HouseEvent *>(index.internalPointer());
 
     switch (index.column()) {
@@ -342,9 +356,19 @@ QVariant GateContainerModel::headerData(int section,
 
 QVariant GateContainerModel::data(const QModelIndex &index, int role) const
 {
-    if (!index.isValid() || role != Qt::DisplayRole)
+    if (!index.isValid())
         return {};
+    if (role == Qt::UserRole)
+        return QVariant::fromValue(index.internalPointer());
+
     auto value = reinterpret_cast<std::uintptr_t>(index.internalPointer());
+    if (role == Qt::UserRole) {
+        return QVariant::fromValue(
+            value & m_parentMask ? nullptr : index.internalPointer());
+    }
+    if (role != Qt::DisplayRole)
+        return {};
+
     if (value & m_parentMask) {
         auto *parent = reinterpret_cast<Gate *>(value & ~m_parentMask);
         return QString::fromStdString(
