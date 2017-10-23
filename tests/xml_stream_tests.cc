@@ -26,7 +26,7 @@ namespace test {
 /// This fixture provides document stream for tests.
 class XmlStreamTest : public ::testing::Test {
  public:
-  ~XmlStreamTest() noexcept {}
+  ~XmlStreamTest() noexcept(true) {}
 
  protected:
   XmlStreamTest() : xml_stream_(stderr) {}
