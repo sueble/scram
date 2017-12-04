@@ -35,7 +35,10 @@ namespace model {
 ///
 /// @note The table does not track changes in the analysis constructs,
 ///       so the data can get out of date if the analysis input has changed.
-class ImportanceTableModel : public QAbstractTableModel {
+class ImportanceTableModel : public QAbstractTableModel
+{
+    Q_OBJECT
+
 public:
     /// @param[in] data  The results of the importance analysis.
     ///
@@ -50,7 +53,7 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
 private:
-    const std::vector<core::ImportanceRecord>& m_data;
+    const std::vector<core::ImportanceRecord> &m_data;
 };
 
 } // namespace model

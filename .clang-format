@@ -1,0 +1,12 @@
+# Default configuration for most C++ code
+Language: Cpp
+BasedOnStyle: Google
+DerivePointerAlignment: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlignTrailingComments: false
+PenaltyReturnTypeOnItsOwnLine: 80  # The default penalty (200) is too high.
+# PenaltyBreakBeforeFirstCallParameter: 20
+# AllowAllParametersOfDeclarationOnNextLine: false
+# BinPackParameters: false
+# ExperimentalAutoDetectBinPacking: true

@@ -1,19 +1,12 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.5)
 
 # In-source build prevention.
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-  message(STATUS "SCRAM requires an out-of-source build.")
-  message(STATUS "Please remove these files from ${CMAKE_BINARY_DIR} first:")
-  message(STATUS "CMakeCache.txt")
-  message(STATUS "CMakeFiles")
-  message(STATUS "Once these files are removed, create a separate directory")
-  message(STATUS "and run CMake from there.")
-  message(FATAL_ERROR "in-source build detected")
-endif()
+set(CMAKE_DISABLE_SOURCE_CHANGES ON)
+set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
 project(SCRAM)
 set(SCRAM_VERSION_MAJOR 0)  # Indicate major API change after 1.0.0
-set(SCRAM_VERSION_MINOR 15)  # New features and improvements.
+set(SCRAM_VERSION_MINOR 16)  # New features and improvements.
 set(SCRAM_VERSION_MICRO 0)  # Bug fixes.
 
 ####################### Begin Options ###################
@@ -42,19 +35,12 @@ option(PACKAGE "Package for distribution" OFF)
 
 ####################### Begin compiler configurations ###################
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)  # Needed for Clang Tooling.
+
 # Default to C++14.
-if(CMAKE_VERSION VERSION_LESS 3.1)
-  include(CheckCXXCompilerFlag)
-  CHECK_CXX_COMPILER_FLAG("-std=c++1y" COMPILER_SUPPORTS_CXX14)
-  if(NOT COMPILER_SUPPORTS_CXX14)
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support.")
-  endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
-else()
-  set(CMAKE_CXX_STANDARD 14)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 function(CHECK_COMPILER_VERSION MIN_VERSION)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS MIN_VERSION)
@@ -98,12 +84,6 @@ endif()
 
 ##################### Begin cmake configuration ###################
 
-# Set project directories.
-set(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-set(SCRAM_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src")
-set(SCRAM_GUI_DIR "${PROJECT_SOURCE_DIR}/gui")
-set(SCRAM_TEST_DIR "${PROJECT_SOURCE_DIR}/tests")
-
 # Setup build locations.
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${SCRAM_BINARY_DIR}/bin")
@@ -135,7 +115,7 @@ endif()
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Tell CMake where the modules are.
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 ######################## End cmake configuration ###################
 
@@ -147,10 +127,10 @@ if(NOT WITH_PROFILE)
   find_package(Tcmalloc)
   find_package(JeMalloc)
   if(WITH_TCMALLOC AND Tcmalloc_FOUND)
-    set(LIBS ${LIBS} ${Tcmalloc_LIBRARIES})
+    list(APPEND LIBS ${Tcmalloc_LIBRARIES})
     set(MALLOC "TCMalloc")
   elseif(WITH_JEMALLOC AND JEMALLOC_FOUND)
-    set(LIBS ${LIBS} ${JEMALLOC_LIBRARIES})
+    list(APPEND LIBS ${JEMALLOC_LIBRARIES})
     set(MALLOC "JEMalloc")
   endif()
 endif()
@@ -158,16 +138,16 @@ message(STATUS "The memory allocator: ${MALLOC}")
 
 # Find LibXML2 and dependencies.
 find_package(LibXml2 REQUIRED)
-set(LIBS ${LIBS} ${LIBXML2_LIBRARIES})
+list(APPEND LIBS ${LIBXML2_LIBRARIES})
 
-message(STATUS ${LIBS})
+message(STATUS "${LIBS}")
 
 # Include the boost header files and the program_options library.
 # Please be sure to use Boost rather than BOOST.
 # Capitalization matters on some platforms.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(BOOST_MIN_VERSION "1.58.0")
-  set(LIBS ${LIBS} ${CMAKE_DL_LIBS})
+  list(APPEND LIBS ${CMAKE_DL_LIBS})
 else()
   set(BOOST_MIN_VERSION "1.61.0")
 endif()
@@ -178,8 +158,6 @@ if(NOT WIN32)
   set(Boost_USE_MULTITHREADED OFF)
 endif()
 
-unset(Boost_INCLUDE_DIR CACHE)
-unset(Boost_LIBRARY_DIRS CACHE)
 find_package(Boost ${BOOST_MIN_VERSION} COMPONENTS
   program_options filesystem system date_time random
   REQUIRED)
@@ -196,13 +174,13 @@ endif()
 message(STATUS "    Boost Include directory: ${Boost_INCLUDE_DIR}")
 message(STATUS "    Boost Library directories: ${Boost_LIBRARY_DIRS}")
 
-set(LIBS ${LIBS} ${Boost_PROGRAM_OPTIONS_LIBRARY})
+list(APPEND LIBS ${Boost_PROGRAM_OPTIONS_LIBRARY})
 message(STATUS "    Boost Program Options location: ${Boost_PROGRAM_OPTIONS_LIBRARY}")
-set(LIBS ${LIBS} ${Boost_SYSTEM_LIBRARY})
+list(APPEND LIBS ${Boost_SYSTEM_LIBRARY})
 message(STATUS "    Boost System location: ${Boost_SYSTEM_LIBRARY}")
-set(LIBS ${LIBS} ${Boost_FILESYSTEM_LIBRARY})
+list(APPEND LIBS ${Boost_FILESYSTEM_LIBRARY})
 message(STATUS "    Boost Filesystem location: ${Boost_FILESYSTEM_LIBRARY}")
-set(LIBS ${LIBS} ${Boost_DATE_TIME_LIBRARY})
+list(APPEND LIBS ${Boost_DATE_TIME_LIBRARY})
 message(STATUS "    Boost Date-Time location: ${Boost_DATE_TIME_LIBRARY}")
 
 ########################## End of find libraries ########################
@@ -213,28 +191,25 @@ message(STATUS "    Boost Date-Time location: ${Boost_DATE_TIME_LIBRARY}")
 include_directories(SYSTEM "${Boost_INCLUDE_DIR}")
 include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")
 
-include_directories("${PROJECT_SOURCE_DIR}")  # Include the core headers via "src".
+include_directories("${CMAKE_SOURCE_DIR}")  # Include the core headers via "src".
 
-add_subdirectory("${SCRAM_SOURCE_DIR}")
+add_subdirectory(src)
+add_subdirectory(share)
+add_subdirectory(input)
 
 if(BUILD_GUI)
-  add_subdirectory("${SCRAM_GUI_DIR}")
+  add_subdirectory(gui)
 endif()
 
 if(BUILD_TESTS)
-  add_subdirectory("${SCRAM_TEST_DIR}")
+  add_subdirectory(tests)
 endif()
 
 ####################### End includes ####################################
 
 ###################### Begin uninstall target ###########################
 
-configure_file(
-  "${PROJECT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-  IMMEDIATE @ONLY
-  )
-
+configure_file(cmake/cmake_uninstall.cmake.in cmake_uninstall.cmake @ONLY)
 add_custom_target(uninstall
   COMMAND "${CMAKE_COMMAND}" -P "\"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake\"")
 
@@ -245,7 +220,7 @@ add_custom_target(uninstall
 if(PACKAGE)
   if(WIN32)
     set(CPACK_GENERATOR "NSIS")
-    # set(CPACK_PACKAGE_ICON "${PROJECT_SOURCE_DIR}\\\\gui\\\\images\\\\scram_logo.bmp")
+    # set(CPACK_PACKAGE_ICON "${CMAKE_SOURCE_DIR}\\\\gui\\\\images\\\\scram_logo.bmp")
     set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\scram-gui.exe")
     set(CPACK_NSIS_MODIFY_PATH ON)
     set(CPACK_NSIS_HELP_LINK "https://scram-pra.org")
@@ -278,7 +253,7 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Probabilistic risk analysis tool")
 set(CPACK_PACKAGE_VERSION_MAJOR "${SCRAM_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${SCRAM_VERSION_MINOR}")
 set(CPACK_PACKAGE_VERSION_PATCH "${SCRAM_VERSION_MICRO}")
-set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
 set(CPACK_STRIP_FILES ON)
 

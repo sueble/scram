@@ -31,7 +31,10 @@ namespace scram {
 namespace gui {
 namespace model {
 
-class ProductTableModel : public QAbstractTableModel {
+class ProductTableModel : public QAbstractTableModel
+{
+    Q_OBJECT
+
 public:
     /// @param[in] products  The analysis results.
     /// @param[in] withProbability  The analysis includes the probability data.
@@ -45,7 +48,8 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
 
 private:
-    struct Product {
+    struct Product
+    {
         QString toString;
         int order;
         double probability;

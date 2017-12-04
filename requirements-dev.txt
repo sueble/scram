@@ -1,0 +1,6 @@
+lizard
+codecov
+coverage
+cpplint
+prospector
+yapf
