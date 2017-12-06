@@ -11,13 +11,6 @@ set(SCRAM_VERSION_MICRO 0)  # Bug fixes.
 
 ####################### Begin Options ###################
 
-option(BUILD_SHARED_LIBS OFF)
-
-option(INSTALL_LIBS "Install the generated libraries" ${BUILD_SHARED_LIBS})
-
-# Linking of external libraries, such as BOOST.
-option(WITH_STATIC_LIBS "Try to link against static libraries" OFF)
-
 option(WITH_TCMALLOC "Use TCMalloc if available (#1 preference)" ON)
 option(WITH_JEMALLOC "Use JEMalloc if available (#2 preference)" ON)
 
@@ -95,8 +88,6 @@ if(NOT CMAKE_ARCHIVE_OUTPUT_DIRECTORY)
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${SCRAM_BINARY_DIR}/lib/scram")
 endif()
 
-set(SCRAM_EXECUTABLE_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-
 # Use, i.e. don't skip the full RPATH for the build tree.
 set(CMAKE_SKIP_BUILD_RPATH FALSE)
 
@@ -105,9 +96,7 @@ set(CMAKE_SKIP_BUILD_RPATH FALSE)
 # (but later on when installing).
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-if(INSTALL_LIBS)
-  set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/scram")
-endif()
+set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/scram")
 
 # Add the automatically determined parts of the RPATH,
 # which point to directories outside the build tree
@@ -151,8 +140,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
   set(BOOST_MIN_VERSION "1.61.0")
 endif()
-set(Boost_USE_STATIC_LIBS ${WITH_STATIC_LIBS})
-set(Boost_USE_STATIC_RUNTIME ${WITH_STATIC_LIBS})
 
 if(NOT WIN32)
   set(Boost_USE_MULTITHREADED OFF)
