@@ -15,6 +15,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/// @file
+/// Dialog to manage analysis settings.
+
 #ifndef SETTINGSDIALOG_H
 #define SETTINGSDIALOG_H
 
@@ -31,12 +34,14 @@ class SettingsDialog;
 namespace scram {
 namespace gui {
 
+/// The dialog to present and set analysis settings.
 class SettingsDialog : public QDialog
 {
     Q_OBJECT
 
 public:
     /// @param[in] initSettings  The initial settings to setup the dialog.
+    /// @param[in,out] parent  The optional owner of the object.
     explicit SettingsDialog(const core::Settings &initSettings,
                             QWidget *parent = nullptr);
     ~SettingsDialog();
@@ -45,10 +50,13 @@ public:
     core::Settings settings() const;
 
 private:
+    /// Initializes the dialog state with the settings data.
     void setupState(const core::Settings &initSettings);
+
+    /// Initializes the connections in the UI elements.
     void setupConnections();
 
-    std::unique_ptr<Ui::SettingsDialog> ui;
+    std::unique_ptr<Ui::SettingsDialog> ui; ///< The dialog UI.
 };
 
 } // namespace gui

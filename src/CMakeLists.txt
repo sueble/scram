@@ -5,14 +5,6 @@ configure_file(version.cc.in version.cc @ONLY)
 configure_file(env.cc.in env.cc @ONLY)
 ################### End File Configurations ####################
 
-if(WITH_COVERAGE)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
-endif()
-
-if(WITH_PROFILE)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
-endif()
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(SCRAM_CORE_SRC
@@ -56,30 +48,23 @@ set(SCRAM_CORE_SRC
   initializer.cc
   risk_analysis.cc
   )
-add_library(scramcore SHARED ${SCRAM_CORE_SRC})
-
-if(WIN32)
-  install(TARGETS scramcore RUNTIME DESTINATION bin COMPONENT scram)
-else()
-  set_target_properties(scramcore
-    PROPERTIES
-    INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib/scram"
-    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/scram"
-    )
-  install(
-    TARGETS scramcore
-    DESTINATION lib/scram
-    COMPONENT scram
-    )
-endif()
-
-target_link_libraries(scramcore ${LIBS})
-
-add_executable(scram scram.cc)
-target_link_libraries(scram scramcore ${Boost_LIBRARIES})
+add_library(scram SHARED ${SCRAM_CORE_SRC})
+target_link_libraries(scram ${LIBS})
 
 install(
   TARGETS scram
+  LIBRARY DESTINATION lib/scram
+  ARCHIVE DESTINATION lib/scram/static
+  RUNTIME DESTINATION bin
+  COMPONENT scram
+  )
+
+add_executable(scram-cli scram.cc)
+set_target_properties(scram-cli PROPERTIES OUTPUT_NAME scram)
+target_link_libraries(scram-cli scram ${Boost_LIBRARIES})
+
+install(
+  TARGETS scram-cli
   RUNTIME DESTINATION bin
   COMPONENT scram
   )

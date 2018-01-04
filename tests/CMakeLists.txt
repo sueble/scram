@@ -54,7 +54,7 @@ configure_file(scram_unit_test_driver.cc.in scram_unit_test_driver.cc @ONLY)
 
 add_executable(scram_tests ${CMAKE_CURRENT_BINARY_DIR}/scram_unit_test_driver.cc ${SCRAM_CORE_TEST_SOURCE})
 
-target_link_libraries(scram_tests ${LIBS} scramcore gtest)
+target_link_libraries(scram_tests ${LIBS} scram gtest)
 
 install(
   TARGETS scram_tests
@@ -62,20 +62,15 @@ install(
   COMPONENT testing
   )
 
-# Copy test input files into the shared directory for testing.
-install(DIRECTORY
-  input
-  DESTINATION share/scram
-  COMPONENT testing
-  )
-
 # Create dummy library to test dynamic loading and extern function.
 add_library(scram_dummy_extern SHARED scram_dummy_extern.cc)
 if(WIN32)
   set(CMAKE_SHARED_LIBRARY_PREFIX "")
-endif()
 install(
   TARGETS scram_dummy_extern
-  DESTINATION lib/scram/test
+  LIBRARY DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
+  ARCHIVE DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/static"
+  RUNTIME DESTINATION "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
   COMPONENT testing
   )
+endif()

@@ -15,6 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/// @file
+
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "ui_namedialog.h"
@@ -52,6 +54,7 @@
 
 #include "diagram.h"
 #include "elementcontainermodel.h"
+#include "eventdialog.h"
 #include "guiassert.h"
 #include "importancetablemodel.h"
 #include "modeltree.h"
@@ -66,9 +69,11 @@
 namespace scram {
 namespace gui {
 
+/// The dialog to set the model name.
 class NameDialog : public QDialog, public Ui::NameDialog
 {
 public:
+    /// @param[in,out] parent  The owner widget.
     explicit NameDialog(QWidget *parent) : QDialog(parent)
     {
         setupUi(this);
@@ -76,18 +81,22 @@ public:
     }
 };
 
+/// The initial start tab.
 class StartPage : public QWidget, public Ui::StartPage
 {
 public:
+    /// @param[in,out] parent  The owner widget.
     explicit StartPage(QWidget *parent = nullptr) : QWidget(parent)
     {
         setupUi(this);
     }
 };
 
+/// The dialog to block user input while waiting for a long-running process.
 class WaitDialog : public QProgressDialog
 {
 public:
+    /// @param[in,out] parent  The owner widget.
     explicit WaitDialog(QWidget *parent) : QProgressDialog(parent)
     {
         setFixedSize(size());
@@ -100,6 +109,7 @@ public:
     }
 
 private:
+    /// Intercepts disruptive keyboard presses.
     void keyPressEvent(QKeyEvent *event) override
     {
         if (event->key() == Qt::Key_Escape)
@@ -108,11 +118,13 @@ private:
     }
 };
 
+/// The default view for graphics views (e.g., fault tree diagram).
 class DiagramView : public ZoomableView, public Printable
 {
 public:
     using ZoomableView::ZoomableView;
 
+    /// Exports the image of the diagram.
     void exportAs()
     {
         QString filename = QFileDialog::getSaveFileName(
@@ -840,6 +852,15 @@ void MainWindow::setupZoomableView(ZoomableView *view)
                         });
                 connect(m_window->m_zoomBox, &QComboBox::currentTextChanged,
                         m_zoomable, [this](QString text) {
+                            // Check if the user editing the box.
+                            if (m_window->m_zoomBox->lineEdit()->isModified())
+                                return;
+                            text.remove(QLatin1Char('%'));
+                            m_zoomable->setZoom(text.toInt());
+                        });
+                connect(m_window->m_zoomBox->lineEdit(),
+                        &QLineEdit::editingFinished, m_zoomable, [this] {
+                            QString text = m_window->m_zoomBox->currentText();
                             text.remove(QLatin1Char('%'));
                             m_zoomable->setZoom(text.toInt());
                         });
@@ -851,6 +872,7 @@ void MainWindow::setupZoomableView(ZoomableView *view)
                         m_zoomable, &ZoomableView::zoomBestFit);
             } else if (event->type() == QEvent::Hide) {
                 setEnabled(false);
+                disconnect(m_window->m_zoomBox->lineEdit(), 0, m_zoomable, 0);
                 disconnect(m_zoomable, 0, m_window->m_zoomBox, 0);
                 disconnect(m_window->m_zoomBox, 0, m_zoomable, 0);
                 disconnect(m_window->ui->actionZoomIn, 0, m_zoomable, 0);
@@ -966,6 +988,11 @@ void MainWindow::setupSearchable(QObject *view, T *model)
     view->installEventFilter(new SearchFilter(model, this));
 }
 
+/// Specialization to find the fault tree container of a gate.
+///
+/// @param[in] gate  The gate belonging exactly to one fault tree.
+///
+/// @returns The fault tree container with the given gate.
 template <>
 mef::FaultTree *MainWindow::getFaultTree(mef::Gate *gate)
 {
@@ -985,6 +1012,7 @@ void MainWindow::removeEvent(T *event, mef::FaultTree *faultTree)
         new model::Model::RemoveEvent<T>(event, m_guiModel.get(), faultTree));
 }
 
+/// Specialization to deal with complexities of gate/fault-tree removal.
 template <>
 void MainWindow::removeEvent(model::Gate *event, mef::FaultTree *faultTree)
 {
@@ -1087,6 +1115,11 @@ void MainWindow::setupRemovable(QAbstractItemView *view)
     view->installEventFilter(new RemoveFilter(view, this));
 }
 
+/// Specialization to construct formula out of event editor data.
+///
+/// @param[in] dialog  The valid event dialog with data for a gate formula.
+///
+/// @returns A new formula with arguments from the event dialog.
 template <>
 mef::FormulaPtr MainWindow::extract(const EventDialog &dialog)
 {
@@ -1109,6 +1142,7 @@ mef::FormulaPtr MainWindow::extract(const EventDialog &dialog)
     return formula;
 }
 
+/// Specialization to construct basic event out of event editor data.
 template <>
 mef::BasicEventPtr MainWindow::extract(const EventDialog &dialog)
 {
@@ -1134,6 +1168,7 @@ mef::BasicEventPtr MainWindow::extract(const EventDialog &dialog)
     return basicEvent;
 }
 
+/// Specialization to construct house event out of event editor data.
 template <>
 mef::HouseEventPtr MainWindow::extract(const EventDialog &dialog)
 {
@@ -1145,6 +1180,7 @@ mef::HouseEventPtr MainWindow::extract(const EventDialog &dialog)
     return houseEvent;
 }
 
+/// Specialization to construct gate out of event editor data.
 template <>
 mef::GatePtr MainWindow::extract(const EventDialog &dialog)
 {

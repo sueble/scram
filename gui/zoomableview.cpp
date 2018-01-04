@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file zoomableview.cpp
+/// @file
 
 #include "zoomableview.h"
 
@@ -23,8 +23,6 @@
 
 namespace scram {
 namespace gui {
-
-const int ZoomableView::m_minZoomLevel = 10;
 
 void ZoomableView::setZoom(int level)
 {

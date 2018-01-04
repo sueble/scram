@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file printable.h
+/// @file
 /// Interface for printable objects.
 
 #ifndef PRINTABLE_H
@@ -26,6 +26,7 @@
 namespace scram {
 namespace gui {
 
+/// An abstract mixin class for printable objects.
 class Printable
 {
 public:
@@ -33,6 +34,7 @@ public:
 
     /// Prints with a print dialog.
     void print();
+
     /// Prints with a print preview dialog.
     void printPreview();
 

@@ -4,10 +4,7 @@ cmake_minimum_required(VERSION 3.5)
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
-project(SCRAM)
-set(SCRAM_VERSION_MAJOR 0)  # Indicate major API change after 1.0.0
-set(SCRAM_VERSION_MINOR 16)  # New features and improvements.
-set(SCRAM_VERSION_MICRO 0)  # Bug fixes.
+project(SCRAM VERSION 0.16.0 LANGUAGES CXX)
 
 ####################### Begin Options ###################
 
@@ -20,7 +17,7 @@ option(WITH_PROFILE "Instrument for performance profiling" OFF)
 option(HAS_TANGO "The system provides the fall-back Tango icons" OFF)
 
 option(BUILD_GUI "Build the GUI front-end" ON)
-option(BUILD_TESTS "Build the tests" ON)
+option(BUILD_TESTING "Build the tests" OFF)  # Influences CTest.
 
 option(PACKAGE "Package for distribution" OFF)
 
@@ -40,6 +37,8 @@ function(CHECK_COMPILER_VERSION MIN_VERSION)
     message(FATAL_ERROR "${CMAKE_CXX_COMPILER_ID} Compiler version too old. Required minimum version: ${MIN_VERSION}")
   endif()
 endfunction()
+
+add_definitions(-DPROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")  # Needed to print file paths.
 
 set(CMAKE_CXX_FLAGS_DEBUG
   "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wextra -Werror -Wno-sign-compare -Wnon-virtual-dtor -Wno-missing-field-initializers -Wold-style-cast")
@@ -69,6 +68,14 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -diag-disable=1125")
 endif()
 
+if(WITH_COVERAGE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
+endif()
+
+if(WITH_PROFILE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
+endif()
+
 if(WIN32)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-error")
 endif()
@@ -76,6 +83,8 @@ endif()
 ######################## End compiler configurations ####################
 
 ##################### Begin cmake configuration ###################
+
+include(CTest)
 
 # Setup build locations.
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
@@ -97,6 +106,7 @@ set(CMAKE_SKIP_BUILD_RPATH FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib/scram")
+set(CMAKE_INSTALL_NAME_DIR "${CMAKE_INSTALL_PREFIX}/lib/scram")
 
 # Add the automatically determined parts of the RPATH,
 # which point to directories outside the build tree
@@ -129,11 +139,8 @@ message(STATUS "The memory allocator: ${MALLOC}")
 find_package(LibXml2 REQUIRED)
 list(APPEND LIBS ${LIBXML2_LIBRARIES})
 
-message(STATUS "${LIBS}")
-
 # Include the boost header files and the program_options library.
 # Please be sure to use Boost rather than BOOST.
-# Capitalization matters on some platforms.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   set(BOOST_MIN_VERSION "1.58.0")
   list(APPEND LIBS ${CMAKE_DL_LIBS})
@@ -145,30 +152,14 @@ if(NOT WIN32)
   set(Boost_USE_MULTITHREADED OFF)
 endif()
 
-find_package(Boost ${BOOST_MIN_VERSION} COMPONENTS
+find_package(Boost ${BOOST_MIN_VERSION} REQUIRED COMPONENTS
   program_options filesystem system date_time random
-  REQUIRED)
+  )
+message(STATUS "Boost Include directory: ${Boost_INCLUDE_DIR}")
+message(STATUS "Boost Library directories: ${Boost_LIBRARY_DIRS}")
+list(APPEND LIBS ${Boost_LIBRARIES})
 
-if(Boost_USE_STATIC_LIBS)
-  message(STATUS "Linking against boost static libraries")
-else()
-  message(STATUS "Linking against boost dynamic libraries")
-endif()
-
-if(Boost_ROOT)
-  message(STATUS "    Boost Root: ${Boost_ROOT}")
-endif()
-message(STATUS "    Boost Include directory: ${Boost_INCLUDE_DIR}")
-message(STATUS "    Boost Library directories: ${Boost_LIBRARY_DIRS}")
-
-list(APPEND LIBS ${Boost_PROGRAM_OPTIONS_LIBRARY})
-message(STATUS "    Boost Program Options location: ${Boost_PROGRAM_OPTIONS_LIBRARY}")
-list(APPEND LIBS ${Boost_SYSTEM_LIBRARY})
-message(STATUS "    Boost System location: ${Boost_SYSTEM_LIBRARY}")
-list(APPEND LIBS ${Boost_FILESYSTEM_LIBRARY})
-message(STATUS "    Boost Filesystem location: ${Boost_FILESYSTEM_LIBRARY}")
-list(APPEND LIBS ${Boost_DATE_TIME_LIBRARY})
-message(STATUS "    Boost Date-Time location: ${Boost_DATE_TIME_LIBRARY}")
+message(STATUS "Libraries: ${LIBS}")
 
 ########################## End of find libraries ########################
 
@@ -188,7 +179,7 @@ if(BUILD_GUI)
   add_subdirectory(gui)
 endif()
 
-if(BUILD_TESTS)
+if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
@@ -237,9 +228,9 @@ endif()
 
 set(CPACK_PACKAGE_VENDOR "Olzhas Rakhimov")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Probabilistic risk analysis tool")
-set(CPACK_PACKAGE_VERSION_MAJOR "${SCRAM_VERSION_MAJOR}")
-set(CPACK_PACKAGE_VERSION_MINOR "${SCRAM_VERSION_MINOR}")
-set(CPACK_PACKAGE_VERSION_PATCH "${SCRAM_VERSION_MICRO}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
 set(CPACK_STRIP_FILES ON)

@@ -8,6 +8,13 @@ clone_depth: 50
 platform:
     - x64
 
+cache:
+    - .ccache
+
+environment:
+    CCACHE_DIR: "%APPVEYOR_BUILD_FOLDER%\\.ccache"
+    CCACHE_MAXSIZE: 1
+
 configuration:
     # - Debug
     # - Release
@@ -21,20 +28,19 @@ install:
     - pacman --noconfirm -S mingw-w64-x86_64-boost
     - pacman --noconfirm -S mingw-w64-x86_64-libxml2
     - pacman --noconfirm -S mingw-w64-x86_64-qt5
+    - pacman --noconfirm -S mingw-w64-x86_64-ccache
 
 before_build:
     - md install
     - md build
 
 build_script:
+    - ccache -s
     - cd build
-    - cmake .. -G "MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=../install -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_VERBOSE_MAKEFILE=ON
+    - cmake .. -G "MSYS Makefiles" -DCMAKE_INSTALL_PREFIX=../install -DCMAKE_BUILD_TYPE=%CONFIGURATION% -DCMAKE_CXX_FLAGS="-O3" -DBUILD_TESTING=ON -DCMAKE_VERBOSE_MAKEFILE=ON
     - make install/strip -j 2
-    - cmake .. -DPACKAGE=ON
-    - make install/strip -j 2
-    - cpack --verbose
-    - dir
     - cd ..
+    - ccache -s
 
 after_build:
     - set PATH=%PATH%;%CD%\install\bin
@@ -43,6 +49,16 @@ test_script:
     - scram_tests
     - scram --version
     - scram input\TwoTrain\two_train.xml
+    - cd build
+    - ctest --verbose
+    - cd ..
+
+after_test:
+    - cd build
+    - cmake .. -DPACKAGE=ON
+    - cpack --verbose
+    - dir
+    - cd ..
 
 on_failure:
     - type build\_CPack_Packages\win64\NSIS\NSISOutput.log

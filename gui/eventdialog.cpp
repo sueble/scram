@@ -15,6 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/// @file
+
 #include "eventdialog.h"
 
 #include <QCompleter>
@@ -230,6 +232,7 @@ mef::FaultTree *EventDialog::getFaultTree(const T *event) const
     return getFaultTree(it->get());
 }
 
+/// Finds fault tree container of the gate.
 template <>
 mef::FaultTree *EventDialog::getFaultTree(const mef::Gate *event) const
 {

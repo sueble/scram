@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file main.cpp
+/// @file
 /// The main entrance to the SCRAM GUI.
 
 #include <csignal>
@@ -36,11 +36,10 @@
 
 #include <boost/exception/diagnostic_information.hpp>
 #include <boost/program_options.hpp>
-#include <boost/range/algorithm.hpp>
 
+#include "language.h"
 #include "mainwindow.h"
 
-#include "src/env.h"
 #include "src/error.h"
 #include "src/version.h"
 
@@ -48,17 +47,15 @@ namespace po = boost::program_options;
 
 namespace {
 
-/**
- * Parses the command-line arguments.
- *
- * @param[in] argc  Count of arguments.
- * @param[in] argv  Values of arguments.
- * @param[out] vm  Variables map of program options.
- *
- * @returns 0 for success.
- * @returns 1 for errored state.
- * @returns -1 for information only state like help and version.
- */
+/// Parses the command-line arguments.
+///
+/// @param[in] argc  Count of arguments.
+/// @param[in] argv  Values of arguments.
+/// @param[out] vm  Variables map of program options.
+///
+/// @returns 0 for success.
+/// @returns 1 for errored state.
+/// @returns -1 for information only state like help and version.
 int parseArguments(int argc, char *argv[], po::variables_map *vm) noexcept
 {
     const char *usage = "Usage:    scram-gui [options] [input-files]...";
@@ -136,93 +133,6 @@ public:
     }
 };
 
-/// Produces the crash dialog with a given reasoning.
-/// The dialog allows access to other windows
-/// so that users may try saving the model before the crash.
-void crashDialog(const QString &text, const QString &detail = {}) noexcept
-{
-    QMessageBox message(QMessageBox::Critical,
-                        QStringLiteral("Unrecoverable Internal Error"), text,
-                        QMessageBox::Ok);
-    message.setDetailedText(detail);
-    message.setWindowModality(Qt::WindowModal);
-    message.exec();
-}
-
-/// Attempts to inform about imminent crash due to internal errors.
-void crashHandler(int signum) noexcept
-{
-    switch (signum) {
-    case SIGSEGV:
-        crashDialog(QStringLiteral("SIGSEGV: Invalid memory access."));
-        break;
-    case SIGFPE:
-        crashDialog(QStringLiteral("SIGFPE: Erroneous arithmetic operation."));
-        break;
-    case SIGILL:
-        crashDialog(QStringLiteral("SIGILL: Illegal instruction."));
-        break;
-    }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wold-style-cast"
-    std::signal(signum, SIG_DFL);
-#pragma GCC diagnostic pop
-    std::raise(signum);
-}
-
-/// Preserve the global default before setting a new terminate handler.
-static const std::terminate_handler gDefaultTerminateHandler =
-    std::get_terminate();
-
-/// Pulls the exception message into GUI before crash.
-void terminateHandler() noexcept
-{
-    QString error;
-    QString detail;
-    try {
-        std::rethrow_exception(std::current_exception());
-    } catch (const scram::Error &err) {
-        std::string message = boost::diagnostic_information(err);
-        qCritical("%s", message.c_str());
-        error = QStringLiteral("SCRAM exception.");
-        detail = QString::fromStdString(message);
-    } catch (const std::exception &err) {
-        error = QStringLiteral("Standard exception.");
-        detail = QString::fromUtf8(err.what());
-    } catch (...) {
-        error = QStringLiteral("Exception of unknown type without a message.");
-    }
-    crashDialog(QStringLiteral("No-throw contract violation:\n%1").arg(error),
-                detail);
-    gDefaultTerminateHandler();
-}
-
-/// Installs crash handlers for system signals.
-void installCrashHandlers() noexcept
-{
-    std::signal(SIGSEGV, &crashHandler);
-    std::signal(SIGFPE, &crashHandler);
-    std::signal(SIGILL, &crashHandler);
-    std::set_terminate(&terminateHandler);
-}
-
-/// @returns The UI language for the translator setup.
-QString getUiLanguage()
-{
-    /// @todo Discover available translations programmatically.
-    static const char *const availableLanguages[] = {"en", "ru_RU", "de_DE"};
-
-    QSettings preferences;
-    QString language = preferences.value(QStringLiteral("language")).toString();
-    if (!language.isEmpty())
-        return language;
-    QString system = QLocale::system().name();
-    auto it = boost::find(availableLanguages, system.toStdString());
-    if (it != std::end(availableLanguages))
-        return system;
-    return QStringLiteral("en");
-}
-
 /// Installs translators to the main application.
 ///
 /// @param[in,out] app  The application to register translators.
@@ -230,32 +140,49 @@ QString getUiLanguage()
 /// @pre No application window has been created.
 void installTranslators(GuardedApplication *app)
 {
-    QString language = getUiLanguage();
-    if (language == QStringLiteral("en"))
+    QString language = QSettings().value(QStringLiteral("language")).toString();
+    if (language.isEmpty())
+        language = QLocale::system().name();
+
+    if (language.startsWith(QStringLiteral("en")))
         return; // The default language.
 
-    QString qtTsPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
-    QString scramTsPath = QString::fromStdString(scram::Env::install_dir()
-                                                 + "/share/scram/translations");
-    std::pair<const char *, QString> domains[] = {
-        {"qtbase", qtTsPath}, {"qt", qtTsPath}, {"scramgui", scramTsPath}};
-
-    for (const auto &domain : domains) {
+    auto loadTs = [&app, &language](const char *domain, const QString &tsPath) {
         auto *translator = new QTranslator(app);
         if (translator->load(QStringLiteral("%1_%2").arg(
-                                 QString::fromLatin1(domain.first), language),
-                             domain.second)) {
+                                 QString::fromLatin1(domain), language),
+                             tsPath)) {
             app->installTranslator(translator);
-        } else {
-            delete translator;
-            qCritical("Missing translations: %s_%s", domain.first,
-                      language.toStdString().data());
+            return true;
         }
-    }
+        delete translator;
+        qCritical("Missing translations: %s_%s", domain,
+                  language.toStdString().data());
+        return false;
+    };
+
+    auto scramTsPath = QString::fromStdString(scram::gui::translationsPath());
+    if (!loadTs("scramgui", scramTsPath))
+        return; // The language is not available or installed.
+
+    QString qtTsPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+    loadTs("qtbase", qtTsPath);
+    loadTs("qt", qtTsPath);
 }
 
 } // namespace
 
+/// Command-line SCRAM GUI entrance.
+///
+/// @param[in] argc  Argument count.
+/// @param[in] argv  Argument vector (including Qt args).
+///
+/// @returns 0 for success.
+///
+/// @note There are implicit Qt-specific options
+///       (e.g., -style, -stylesheet, -platform, -widgetcount, -reverse).
+///       These options are not listed in the help/usage of SCRAM GUI,
+///       but they can be invoked for debugging or advanced GUI customization.
 int main(int argc, char *argv[])
 {
     // Keep the following commented code!
@@ -265,8 +192,6 @@ int main(int argc, char *argv[])
     // so the explicit load should not be used, but it is kept for debugging.
     /* Q_INIT_RESOURCE(res); */
     GuardedApplication app(argc, argv);
-
-    installCrashHandlers();
 
     QCoreApplication::setOrganizationName(QStringLiteral("scram"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("scram-pra.org"));

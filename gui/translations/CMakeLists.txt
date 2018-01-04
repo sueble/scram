@@ -20,6 +20,12 @@ message(STATUS "Found Qt5 Linguist")
 qt5_add_translation(SCRAM_GUI_QM
   scramgui_ru_RU.ts
   scramgui_de_DE.ts
+  scramgui_es_ES.ts
+  scramgui_tr_TR.ts
+  scramgui_nl_NL.ts
+  scramgui_id_ID.ts
+  scramgui_pl_PL.ts
+  scramgui_it_IT.ts
   )
 message(STATUS "GUI translations: ${SCRAM_GUI_QM}")
 add_custom_target(translations ALL DEPENDS ${SCRAM_GUI_QM})

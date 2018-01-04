@@ -15,7 +15,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// @file validator.cpp
+/// @file
 /// Definition and initialization of validators.
 
 #include "validator.h"
@@ -40,7 +40,7 @@ const QValidator *Validator::name()
 const QValidator *Validator::percent()
 {
     static const QRegularExpressionValidator percentValidator(
-        QRegularExpression(QStringLiteral(R"([1-9]\d+%?)")));
+        QRegularExpression(QStringLiteral(R"([1-9]\d*%?)")));
     return &percentValidator;
 }
 
