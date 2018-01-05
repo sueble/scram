@@ -25,13 +25,13 @@ addons:
         branch_pattern: "coverity-scan"
     apt:
         packages:
-            - gcc-4.9
-            - g++-4.9
-            - libboost-program-options1.58-dev
-            - libboost-math1.58-dev
-            - libboost-random1.58-dev
-            - libboost-filesystem1.58-dev
-            - libboost-date-time1.58-dev
+            - gcc-7
+            - g++-7
+            - libboost-program-options1.61-dev
+            - libboost-math1.61-dev
+            - libboost-random1.61-dev
+            - libboost-filesystem1.61-dev
+            - libboost-date-time1.61-dev
             - libxml2-dev
             - qtbase5-dev
             - qtbase5-dev-tools
@@ -41,11 +41,11 @@ addons:
             - libqt5opengl5-dev
         sources: &Sources
             - ubuntu-toolchain-r-test
-            - sourceline: "ppa:kzemek/boost"
+            - sourceline: "ppa:rakhimov/boost"
 
 before_install:
-    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 20
-    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.9 20
+    - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 20
+    - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-7 20
 
 before_script:
     - find src/ tests/ -type f | grep -v 'error' | xargs -n 1 sed -i 's/noexcept\([^(]\|$\)/\1/'
