@@ -26,6 +26,8 @@
 #include <QShortcut>
 #include <QStatusBar>
 
+#include <verdigris/wobjectimpl.h>
+
 #include <boost/range/algorithm.hpp>
 
 #include "src/element.h"
@@ -40,6 +42,8 @@
 #include "validator.h"
 
 namespace scram::gui {
+
+W_OBJECT_IMPL(EventDialog)
 
 QString EventDialog::redBackground(QStringLiteral("background : red;"));
 QString EventDialog::yellowBackground(QStringLiteral("background : yellow;"));

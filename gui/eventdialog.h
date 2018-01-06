@@ -29,6 +29,8 @@
 #include <QStatusBar>
 #include <QString>
 
+#include <verdigris/wobjectdefs.h>
+
 #include "ui_eventdialog.h"
 
 #include "src/event.h"
@@ -53,7 +55,7 @@ namespace scram::gui {
 /// @todo Generalize to all model element types.
 class EventDialog : public QDialog, private Ui::EventDialog
 {
-    Q_OBJECT
+    W_OBJECT(EventDialog)
 
 public:
     /// Event types as listed in the drop-down.
@@ -123,10 +125,10 @@ public:
 
 signals:
     /// @param[in] valid  True if the current changes and data are valid.
-    void validated(bool valid);
+    void validated(bool valid) W_SIGNAL(validated, valid);
 
     /// Indicates changes in the list of formula arguments.
-    void formulaArgsChanged();
+    void formulaArgsChanged() W_SIGNAL(formulaArgsChanged);
 
 public slots:
     /// Triggers validation of the current data.
