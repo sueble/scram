@@ -24,6 +24,8 @@
 
 #include <QDialog>
 
+#include <verdigris/wobjectdefs.h>
+
 #include "src/settings.h"
 
 namespace Ui {
@@ -35,7 +37,7 @@ namespace scram::gui {
 /// The dialog to present and set analysis settings.
 class SettingsDialog : public QDialog
 {
-    Q_OBJECT
+    W_OBJECT(SettingsDialog)
 
 public:
     /// @param[in] initSettings  The initial settings to setup the dialog.

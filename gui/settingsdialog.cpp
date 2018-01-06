@@ -20,11 +20,15 @@
 #include "settingsdialog.h"
 #include "ui_settingsdialog.h"
 
+#include <verdigris/wobjectimpl.h>
+
 #include "src/error.h"
 
 #include "guiassert.h"
 
 namespace scram::gui {
+
+W_OBJECT_IMPL(SettingsDialog)
 
 SettingsDialog::SettingsDialog(const core::Settings &initSettings,
                                QWidget *parent)
