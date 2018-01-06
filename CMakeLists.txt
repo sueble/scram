@@ -171,6 +171,7 @@ include_directories(SYSTEM "${Boost_INCLUDE_DIR}")
 include_directories(SYSTEM "${LIBXML2_INCLUDE_DIR}")
 
 include_directories("${CMAKE_SOURCE_DIR}")  # Include the core headers via "src".
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/deps")  # Include the external deps.
 
 add_subdirectory(src)
 add_subdirectory(share)
