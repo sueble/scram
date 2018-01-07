@@ -31,17 +31,14 @@ addons:
             - libboost-math1.61-dev
             - libboost-random1.61-dev
             - libboost-filesystem1.61-dev
-            - libboost-date-time1.61-dev
             - libxml2-dev
-            - qtbase5-dev
-            - qtbase5-dev-tools
-            - qttools5-dev
-            - qttools5-dev-tools
-            - libqt5svg5-dev
-            - libqt5opengl5-dev
+            - qt59base
+            - qt59tools
+            - qt59svg
         sources: &Sources
             - ubuntu-toolchain-r-test
             - sourceline: "ppa:rakhimov/boost"
+            - sourceline: "ppa:beineri/opt-qt593-trusty"
 
 before_install:
     - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 20
@@ -51,6 +48,7 @@ before_script:
     - find src/ tests/ -type f | grep -v 'error' | xargs -n 1 sed -i 's/noexcept\([^(]\|$\)/\1/'
     - mkdir build
     - cd build
+    - source /opt/qt59/bin/qt59-env.sh
 
 script:
     - echo "Done"
