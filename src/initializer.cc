@@ -988,36 +988,19 @@ struct Initializer::Extractor {
                                 xml::Element::Range::iterator it_end,
                                 const std::string& base_path, Initializer* init,
                                 Ts&&... expressions) {
-    assert(it != it_end && "Not enough arguments in the args container.");
-    return Extractor<T, N - 1>()(std::next(it), it_end, base_path, init,
-                                 std::forward<Ts>(expressions)...,
-                                 init->GetExpression(*it, base_path));
-  }
-};
+    static_assert(N >= 0);
 
-/// Partial specialization for terminal Extractor.
-template <class T>
-struct Initializer::Extractor<T, 0> {
-  /// Constructs the requested expression T
-  /// with all accumulated argument expressions.
-  ///
-  /// @tparam Ts  Expression types.
-  ///
-  /// @param[in] it  The iterator in the argument container.
-  /// @param[in] it_end  The end sentinel iterator of the argument container.
-  /// @param[in] expressions  All argument expressions for constructing T.
-  ///
-  /// @returns The constructed expression.
-  ///
-  /// @pre All the elements in the argument container has been processed.
-  template <class... Ts>
-  std::unique_ptr<T> operator()(xml::Element::Range::iterator it,
-                                xml::Element::Range::iterator it_end,
-                                const std::string& /*base_path*/,
-                                Initializer* /*init*/, Ts&&... expressions) {
-    static_assert(sizeof...(Ts), "Unintended use case.");
-    assert(it == it_end && "Too many arguments in the args container.");
-    return std::make_unique<T>(std::forward<Ts>(expressions)...);
+    if constexpr (N == 0) {
+      static_assert(sizeof...(Ts), "Unintended use case.");
+      assert(it == it_end && "Too many arguments in the args container.");
+      return std::make_unique<T>(std::forward<Ts>(expressions)...);
+
+    } else {
+      assert(it != it_end && "Not enough arguments in the args container.");
+      return Extractor<T, N - 1>()(std::next(it), it_end, base_path, init,
+                                   std::forward<Ts>(expressions)...,
+                                   init->GetExpression(*it, base_path));
+    }
   }
 };
 
@@ -1046,38 +1029,23 @@ namespace {  // Expression extraction helper functions.
 
 /// @returns The number of constructor arguments for Expression types.
 /// @{
-template <class T, class... As>
-constexpr int count_args(std::true_type) {
-  return sizeof...(As);
-}
-
-template <class T, class... As>
-constexpr int count_args();
-
 template <class T, class A, class... As>
-constexpr int count_args(std::false_type) {
-  return count_args<T, A, A, As...>();
-}
-
-template <class T, class... As>
 constexpr int count_args() {
-  return count_args<T, As...>(std::is_constructible<T, As...>());
-}
-
-template <class T>
-constexpr int num_args(std::false_type) {
-  return count_args<T, Expression*>();
-}
-
-template <class T>
-constexpr int num_args(std::true_type) {
-  return -1;
+  if constexpr (std::is_constructible_v<T, A, As...>) {
+    return 1 + sizeof...(As);
+  } else {
+    return count_args<T, A, A, As...>();
+  }
 }
 
 template <class T>
 constexpr std::enable_if_t<std::is_base_of_v<Expression, T>, int> num_args() {
   static_assert(!std::is_default_constructible_v<T>, "No zero args.");
-  return num_args<T>(std::is_constructible<T, std::vector<Expression*>>());
+  if constexpr (std::is_constructible_v<T, std::vector<Expression*>>) {
+    return -1;
+  } else {
+    return count_args<T, Expression*>();
+  }
 }
 /// @}
 
@@ -1499,22 +1467,19 @@ int Encode(const SinglePassRange& args) noexcept {
 }
 
 /// Encodes function parameter types at compile-time.
-/// @{
 template <typename T, typename... Ts>
 constexpr int Encode(int base_power = 1) noexcept {
-  return Encode<T>(base_power) + Encode<Ts...>(base_power * kExternTypeBase);
-}
+  if constexpr (sizeof...(Ts)) {
+    return Encode<T>(base_power) + Encode<Ts...>(base_power * kExternTypeBase);
 
-template <>
-constexpr int Encode<int>(int base_power) noexcept {
-  return base_power * static_cast<int>(ExternParamType::kInt);
-}
+  } else if constexpr (std::is_same_v<T, int>) {
+    return base_power * static_cast<int>(ExternParamType::kInt);
 
-template <>
-constexpr int Encode<double>(int base_power) noexcept {
-  return base_power * static_cast<int>(ExternParamType::kDouble);
+  } else {
+    static_assert(std::is_same_v<T, double>);
+    return base_power * static_cast<int>(ExternParamType::kDouble);
+  }
 }
-/// @}
 
 using ExternFunctionExtractor = ExternFunctionPtr (*)(std::string,
                                                       const std::string&,
@@ -1522,37 +1487,31 @@ using ExternFunctionExtractor = ExternFunctionPtr (*)(std::string,
 using ExternFunctionExtractorMap =
     std::unordered_map<int, ExternFunctionExtractor>;
 
+/// Generates all extractors for extern functions.
+///
 /// @tparam N  The number of parameters.
-template <int N>
-struct ExternFunctionGenerator;
+/// @tparam Ts  The return and parameter types of the extern function.
+///
+/// @param[in,out] function_map  The destination container for extractor.
+template <int N, typename... Ts>
+void GenerateExternFunctionExtractor(ExternFunctionExtractorMap* function_map) {
+  static_assert(N >= 0);
+  static_assert(sizeof...(Ts));
 
-template <>
-struct ExternFunctionGenerator<0> {
-  template <typename... Ts>
-  static void Generate(ExternFunctionExtractorMap* function_map) noexcept {
-    ///< @todo GCC 4.9, 5.4 segfaults on move for lambda arguments.
-    struct Extractor {  // Use instead of lambda!
-      static ExternFunctionPtr Extract(std::string name,
-                                       const std::string& symbol,
-                                       const ExternLibrary& library) {
-        return std::make_unique<ExternFunction<Ts...>>(std::move(name), symbol,
-                                                       library);
-      }
-    };
-    function_map->emplace(Encode<Ts...>(), &Extractor::Extract);
+  if constexpr (N == 0) {
+    function_map->emplace(
+        Encode<Ts...>(),
+        [](std::string name, const std::string& symbol,
+           const ExternLibrary& library) -> ExternFunctionPtr {
+          return std::make_unique<ExternFunction<Ts...>>(std::move(name),
+                                                         symbol, library);
+        });
+  } else {
+    GenerateExternFunctionExtractor<0, Ts...>(function_map);
+    GenerateExternFunctionExtractor<N - 1, Ts..., int>(function_map);
+    GenerateExternFunctionExtractor<N - 1, Ts..., double>(function_map);
   }
-};
-
-template <int N>
-struct ExternFunctionGenerator {
-  template <typename... Ts>
-  static void Generate(ExternFunctionExtractorMap* function_map) noexcept {
-    ExternFunctionGenerator<0>::template Generate<Ts...>(function_map);
-    ExternFunctionGenerator<N - 1>::template Generate<Ts..., int>(function_map);
-    ExternFunctionGenerator<N - 1>::template Generate<Ts..., double>(
-        function_map);
-  }
-};
+}
 
 }  // namespace
 
@@ -1560,8 +1519,8 @@ void Initializer::DefineExternFunction(const xml::Element& xml_element) {
   static const ExternFunctionExtractorMap function_extractors = [] {
     ExternFunctionExtractorMap function_map;
     function_map.reserve(kNumInterfaces);
-    ExternFunctionGenerator<kMaxNumParam>::Generate<int>(&function_map);
-    ExternFunctionGenerator<kMaxNumParam>::Generate<double>(&function_map);
+    GenerateExternFunctionExtractor<kMaxNumParam, int>(&function_map);
+    GenerateExternFunctionExtractor<kMaxNumParam, double>(&function_map);
     assert(function_map.size() == kNumInterfaces);
     return function_map;
   }();

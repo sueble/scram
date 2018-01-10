@@ -21,10 +21,11 @@
 #include "risk_analysis.h"
 
 #include "bdd.h"
+#include "expression/random_deviate.h"
+#include "ext/scope_guard.h"
 #include "fault_tree.h"
 #include "logger.h"
 #include "mocus.h"
-#include "random.h"
 #include "zbdd.h"
 
 namespace scram::core {
@@ -37,7 +38,7 @@ void RiskAnalysis::Analyze() noexcept {
   // Set the seed for the pseudo-random number generator if given explicitly.
   // Otherwise it defaults to the implementation dependent value.
   if (Analysis::settings().seed() >= 0)
-    Random::seed(Analysis::settings().seed());
+    mef::RandomDeviate::seed(Analysis::settings().seed());
 
   if (model_->alignments().empty()) {
     RunAnalysis();
@@ -50,21 +51,16 @@ void RiskAnalysis::Analyze() noexcept {
 }
 
 void RiskAnalysis::RunAnalysis(std::optional<Context> context) noexcept {
+  std::vector<std::pair<mef::HouseEvent*, bool>> house_events;
   /// Restores the model after application of the context.
-  struct Restorator {
-    ~Restorator() {
-      mission_time.first->value(mission_time.second);
-      settings.mission_time(mission_time.second);
+  ext::scope_guard restorator(
+      [&house_events, this, init_time = model_->mission_time().value() ] {
+        model_->mission_time().value(init_time);
+        Analysis::settings().mission_time(init_time);
 
-      for (const std::pair<mef::HouseEvent*, bool>& entry : house_events)
-        entry.first->state(entry.second);
-    }
-
-    Settings& settings;
-    std::pair<mef::MissionTime*, double> mission_time;
-    std::vector<std::pair<mef::HouseEvent*, bool>> house_events;
-  } restorator{Analysis::settings(),
-               {&model_->mission_time(), model_->mission_time().value()}};
+        for (const std::pair<mef::HouseEvent*, bool>& entry : house_events)
+          entry.first->state(entry.second);
+      });
 
   if (context) {
     double mission_time =
@@ -78,7 +74,7 @@ void RiskAnalysis::RunAnalysis(std::optional<Context> context) noexcept {
       assert(it != model_->house_events().end() && "Invalid instruction.");
       mef::HouseEvent* house_event = it->get();
       if (house_event->state() != instruction->state()) {
-        restorator.house_events.emplace_back(house_event, house_event->state());
+        house_events.emplace_back(house_event, house_event->state());
         house_event->state(instruction->state());
       }
     }
