@@ -1,0 +1,10 @@
+<map id="scram::mef::Id::id" name="scram::mef::Id::id">
+<area shape="rect" id="node2" href="$classscram_1_1mef_1_1Substitution.xhtml#a0a6da28d1514d7543d80e554e144df6f" title="Adds a source event to the substitution container. " alt="" coords="196,25,409,51"/>
+<area shape="rect" id="node7" href="$classscram_1_1core_1_1EventTreeAnalysis.xhtml#a3e3404417cbdcf92474e5653ec24f936" title="scram::core::EventTreeAnalysis\l::EventTreeAnalysis" alt="" coords="193,76,413,117"/>
+<area shape="rect" id="node8" href="$reporter_8cc.xhtml#a73f9569f4c2e2b6a3eac8d2c01b81943" title="Describes all performed analyses deduced from settings. " alt="" coords="187,141,419,183"/>
+<area shape="rect" id="node9" href="$classscram_1_1mef_1_1Id.xhtml#a846997cebdf27bbff872fa87e7f1a9e2" title="Produces unique name for the model element within the same type. " alt="" coords="198,207,407,234"/>
+<area shape="rect" id="node3" href="$classscram_1_1mef_1_1Initializer.xhtml#a969f088f20697a8a317cb7c998f034ad" title="Specializations for elements defined after registration. " alt="" coords="923,35,1081,76"/>
+<area shape="rect" id="node4" href="$classscram_1_1mef_1_1Substitution.xhtml#ad29f35247718d44ff8d6f9bd9bd41d9f" title="scram::mef::Substitution\l::declarative" alt="" coords="467,63,647,104"/>
+<area shape="rect" id="node5" href="$classscram_1_1core_1_1Pdag.xhtml#a56889d42789fd85e8083e02cf15aef28" title="Specialization for BasicEvent arguments. " alt="" coords="711,31,858,72"/>
+<area shape="rect" id="node6" href="$classscram_1_1mef_1_1Substitution.xhtml#ab1859efddac529e0827537fae2f16cbb" title="Checks if the substitution is setup correctly. " alt="" coords="695,96,875,137"/>
+</map>

@@ -1,0 +1,6 @@
+<map id="scram::gui::MainWindow::extract" name="scram::gui::MainWindow::extract">
+<area shape="rect" id="node2" href="$classscram_1_1gui_1_1EventDialog.xhtml#a3f52697e4e16187eb133aa1d59d249e8" title="scram::gui::EventDialog\l::arguments" alt="" coords="449,30,623,71"/>
+<area shape="rect" id="node4" href="$classscram_1_1gui_1_1EventDialog.xhtml#ac9d1c80c10d678aadeea36310c242444" title="scram::gui::EventDialog\l::connective" alt="" coords="228,26,401,67"/>
+<area shape="rect" id="node5" href="$classscram_1_1gui_1_1EventDialog.xhtml#ac413f5e1b3f9795c80d78a512ad7f0cf" title="scram::gui::EventDialog\l::voteNumber" alt="" coords="228,91,401,132"/>
+<area shape="rect" id="node3" href="$classscram_1_1gui_1_1EventDialog.xhtml#a0c144e53e44d5b9524d60698cb356653" title="scram::gui::EventDialog\l::name" alt="" coords="671,30,844,71"/>
+</map>
